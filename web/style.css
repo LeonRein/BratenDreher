@@ -396,6 +396,67 @@ body {
     font-weight: 600;
 }
 
+/* Variable Speed Settings */
+.variable-speed-settings {
+    border-top: 1px solid #e5e7eb;
+    padding-top: 20px;
+    margin-top: 20px;
+}
+
+.variable-speed-settings h3 {
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+    color: #374151;
+    font-weight: 600;
+}
+
+.setting-description {
+    font-size: 0.9rem;
+    color: #6b7280;
+    margin-bottom: 16px;
+    line-height: 1.4;
+}
+
+.variable-speed-controls {
+    margin-top: 16px;
+    padding: 16px;
+    background: #f9fafb;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    transition: all 0.3s ease;
+}
+
+.variable-speed-controls.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+    filter: grayscale(0.3);
+}
+
+.variable-speed-info {
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    color: #1e40af;
+    font-size: 0.8rem;
+}
+
+/* Mobile responsiveness for variable speed controls */
+@media (max-width: 600px) {
+    .variable-speed-controls {
+        padding: 12px;
+    }
+    
+    .variable-speed-settings h3 {
+        font-size: 1rem;
+    }
+    
+    .setting-description {
+        font-size: 0.8rem;
+    }
+}
+
 .settings-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;

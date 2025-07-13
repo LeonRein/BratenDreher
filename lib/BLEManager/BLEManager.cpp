@@ -246,6 +246,49 @@ void BLEManager::handleCommand(const std::string& command) {
             sendCommandResult(0, "invalid_parameter", "Time must be 0.1-60s, RPM must be 0.1-30");
         }
     }
+    else if (strcmp(type, "speed_variation_strength") == 0) {
+        float strength = doc["value"];
+        if (strength >= 0.0f && strength <= 1.0f) {
+            uint32_t commandId = stepperController->setSpeedVariation(strength);
+            if (commandId > 0) {
+                Serial.printf("Speed variation strength command queued: %.2f (ID: %u)\n", strength, commandId);
+            } else {
+                Serial.println("Failed to queue speed variation strength command");
+                sendCommandResult(0, "error", "Failed to queue speed variation strength command");
+            }
+        } else {
+            Serial.println("Invalid speed variation strength");
+            sendCommandResult(0, "invalid_parameter", "Speed variation strength must be 0.0-1.0");
+        }
+    }
+    else if (strcmp(type, "speed_variation_phase") == 0) {
+        float phase = doc["value"];
+        uint32_t commandId = stepperController->setSpeedVariationPhase(phase);
+        if (commandId > 0) {
+            Serial.printf("Speed variation phase command queued: %.2f radians (ID: %u)\n", phase, commandId);
+        } else {
+            Serial.println("Failed to queue speed variation phase command");
+            sendCommandResult(0, "error", "Failed to queue speed variation phase command");
+        }
+    }
+    else if (strcmp(type, "enable_speed_variation") == 0) {
+        uint32_t commandId = stepperController->enableSpeedVariation();
+        if (commandId > 0) {
+            Serial.printf("Enable speed variation command queued (ID: %u)\n", commandId);
+        } else {
+            Serial.println("Failed to queue enable speed variation command");
+            sendCommandResult(0, "error", "Failed to queue enable speed variation command");
+        }
+    }
+    else if (strcmp(type, "disable_speed_variation") == 0) {
+        uint32_t commandId = stepperController->disableSpeedVariation();
+        if (commandId > 0) {
+            Serial.printf("Disable speed variation command queued (ID: %u)\n", commandId);
+        } else {
+            Serial.println("Failed to queue disable speed variation command");
+            sendCommandResult(0, "error", "Failed to queue disable speed variation command");
+        }
+    }
     else {
         Serial.printf("Unknown command type: %s\n", type);
     }
@@ -272,6 +315,14 @@ void BLEManager::sendStatus() {
     statusDoc["stallDetected"] = stepperController->isStallDetected();
     statusDoc["stallCount"] = stepperController->getStallCount();
     statusDoc["timestamp"] = millis();
+    
+    // Add variable speed information
+    statusDoc["speedVariationEnabled"] = stepperController->isSpeedVariationEnabled();
+    statusDoc["speedVariationStrength"] = stepperController->getSpeedVariationStrength();
+    statusDoc["speedVariationPhase"] = stepperController->getSpeedVariationPhase();
+    if (stepperController->isSpeedVariationEnabled()) {
+        statusDoc["currentVariableSpeed"] = stepperController->getCurrentVariableSpeed();
+    }
     
     String statusString;
     size_t result = serializeJson(statusDoc, statusString);

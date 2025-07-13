@@ -18,10 +18,17 @@ class BratenDreherBLE {
         this.motorEnabled = false;
         this.current = 30;
         
+        // Variable speed state
+        this.variableSpeedEnabled = false;
+        this.variableSpeedStrength = 20; // 20%
+        this.variableSpeedPhase = 0; // 0 degrees
+        
         // Debouncing timers for sliders
         this.speedSliderTimer = null;
         this.currentSliderTimer = null;
         this.accelerationSliderTimer = null;
+        this.strengthSliderTimer = null;
+        this.phaseSliderTimer = null;
         
         // Bind the disconnect handler so we can add/remove it
         this.onDisconnectedHandler = () => {
@@ -32,6 +39,9 @@ class BratenDreherBLE {
         // UI elements
         this.initializeUIElements();
         this.bindEventListeners();
+        
+        // Initialize variable speed UI state
+        this.updateVariableSpeedUI();
         
         // Check Web Bluetooth support
         if (!navigator.bluetooth) {
@@ -67,6 +77,14 @@ class BratenDreherBLE {
         this.resetStatsBtn = document.getElementById('resetStatsBtn');
         this.resetStallBtn = document.getElementById('resetStallBtn');
         
+        // Variable speed elements
+        this.variableSpeedToggle = document.getElementById('variableSpeedToggle');
+        this.variableSpeedControls = document.getElementById('variableSpeedControls');
+        this.strengthSlider = document.getElementById('strengthSlider');
+        this.strengthValue = document.getElementById('strengthValue');
+        this.phaseSlider = document.getElementById('phaseSlider');
+        this.phaseValue = document.getElementById('phaseValue');
+        
         // Status elements
         this.motorStatus = document.getElementById('motorStatus');
         this.currentSpeed = document.getElementById('currentSpeed');
@@ -76,6 +94,11 @@ class BratenDreherBLE {
         this.stallStatus = document.getElementById('stallStatus');
         this.stallCount = document.getElementById('stallCount');
         this.lastUpdate = document.getElementById('lastUpdate');
+        
+        // Variable speed status elements
+        this.variableSpeedStatus = document.getElementById('variableSpeedStatus');
+        this.currentVariableSpeedItem = document.getElementById('currentVariableSpeedItem');
+        this.currentVariableSpeed = document.getElementById('currentVariableSpeed');
         
         // Statistics elements
         this.totalRevolutions = document.getElementById('totalRevolutions');
@@ -187,6 +210,51 @@ class BratenDreherBLE {
         this.resetStallBtn.addEventListener('click', () => {
             this.resetStallCount();
         });
+        
+        // Variable speed controls
+        this.variableSpeedToggle.addEventListener('change', (e) => {
+            this.setVariableSpeedEnabled(e.target.checked);
+        });
+        
+        this.strengthSlider.addEventListener('input', (e) => {
+            const strength = parseInt(e.target.value);
+            this.strengthValue.textContent = strength; // Update display immediately
+            
+            // Visual feedback that change is pending
+            this.strengthValue.style.opacity = '0.7';
+            
+            // Debounce the actual command sending
+            if (this.strengthSliderTimer) {
+                clearTimeout(this.strengthSliderTimer);
+            }
+            this.strengthSliderTimer = setTimeout(() => {
+                this.setVariableSpeedStrength(strength / 100.0).then(() => {
+                    // Restore full opacity when command is sent
+                    this.strengthValue.style.opacity = '1';
+                });
+            }, 300);
+        });
+        
+        this.phaseSlider.addEventListener('input', (e) => {
+            const phase = parseInt(e.target.value);
+            this.phaseValue.textContent = phase; // Update display immediately
+            
+            // Visual feedback that change is pending
+            this.phaseValue.style.opacity = '0.7';
+            
+            // Debounce the actual command sending
+            if (this.phaseSliderTimer) {
+                clearTimeout(this.phaseSliderTimer);
+            }
+            this.phaseSliderTimer = setTimeout(() => {
+                // Convert degrees to radians
+                const phaseRadians = (phase * Math.PI) / 180;
+                this.setVariableSpeedPhase(phaseRadians).then(() => {
+                    // Restore full opacity when command is sent
+                    this.phaseValue.style.opacity = '1';
+                });
+            }, 300);
+        });
     }
     
     async connect() {
@@ -256,6 +324,9 @@ class BratenDreherBLE {
             setTimeout(() => {
                 this.requestStatus();
             }, 1000);
+            
+            // Initialize variable speed UI
+            this.updateVariableSpeedUI();
             
             console.log('Successfully connected to BratenDreher');
             
@@ -507,6 +578,46 @@ class BratenDreherBLE {
         return await this.sendCommand('acceleration_time', timeSeconds, { target_rpm: 30.0 });
     }
     
+    // Variable speed commands
+    async setVariableSpeedStrength(strength) {
+        strength = Math.max(0.0, Math.min(1.0, strength)); // Clamp to valid range
+        this.variableSpeedStrength = Math.round(strength * 100); // Store as percentage
+        
+        return await this.sendCommand('speed_variation_strength', strength);
+    }
+    
+    async setVariableSpeedPhase(phaseRadians) {
+        // Normalize to 0-2π range
+        while (phaseRadians < 0) phaseRadians += 2 * Math.PI;
+        while (phaseRadians >= 2 * Math.PI) phaseRadians -= 2 * Math.PI;
+        
+        this.variableSpeedPhase = Math.round((phaseRadians * 180) / Math.PI); // Store as degrees
+        
+        return await this.sendCommand('speed_variation_phase', phaseRadians);
+    }
+    
+    async setVariableSpeedEnabled(enabled) {
+        this.variableSpeedEnabled = enabled;
+        this.variableSpeedToggle.checked = enabled;
+        
+        // Update UI controls
+        this.updateVariableSpeedUI();
+        
+        if (enabled) {
+            return await this.sendCommand('enable_speed_variation', true);
+        } else {
+            return await this.sendCommand('disable_speed_variation', true);
+        }
+    }
+    
+    updateVariableSpeedUI() {
+        if (this.variableSpeedEnabled) {
+            this.variableSpeedControls.classList.remove('disabled');
+        } else {
+            this.variableSpeedControls.classList.add('disabled');
+        }
+    }
+    
     async resetStatistics() {
         const success = await this.sendCommand('reset', true);
         if (success) {
@@ -665,6 +776,37 @@ class BratenDreherBLE {
             const presetSpeed = parseFloat(btn.dataset.speed);
             btn.classList.toggle('active', Math.abs(presetSpeed - status.speed) < 0.05);
         });
+        
+        // Update variable speed status
+        if (status.speedVariationEnabled !== undefined) {
+            this.variableSpeedEnabled = status.speedVariationEnabled;
+            this.variableSpeedToggle.checked = status.speedVariationEnabled;
+            this.updateVariableSpeedUI();
+            
+            this.variableSpeedStatus.textContent = status.speedVariationEnabled ? 'ON' : 'OFF';
+            this.variableSpeedStatus.style.color = status.speedVariationEnabled ? '#2ecc71' : '#6b7280';
+            
+            // Show/hide current variable speed display
+            if (status.speedVariationEnabled && status.currentVariableSpeed !== undefined) {
+                this.currentVariableSpeedItem.style.display = 'flex';
+                this.currentVariableSpeed.textContent = `${status.currentVariableSpeed.toFixed(1)} RPM`;
+            } else {
+                this.currentVariableSpeedItem.style.display = 'none';
+            }
+        }
+        
+        // Update variable speed strength and phase from device
+        if (status.speedVariationStrength !== undefined) {
+            this.variableSpeedStrength = Math.round(status.speedVariationStrength * 100);
+            this.strengthSlider.value = this.variableSpeedStrength;
+            this.strengthValue.textContent = this.variableSpeedStrength;
+        }
+        
+        if (status.speedVariationPhase !== undefined) {
+            this.variableSpeedPhase = Math.round((status.speedVariationPhase * 180) / Math.PI);
+            this.phaseSlider.value = this.variableSpeedPhase;
+            this.phaseValue.textContent = this.variableSpeedPhase;
+        }
     }
     
     handleCommandResult(result) {

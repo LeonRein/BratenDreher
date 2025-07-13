@@ -93,6 +93,51 @@
                 </button>
             </div>
 
+            <!-- Variable Speed Settings -->
+            <div class="control-group variable-speed-settings">
+                <h3>Variable Speed</h3>
+                <p class="setting-description">
+                    🔄 For uneven cooking compensation - create a slow zone to give pale areas more time to brown while maintaining the same average cooking time
+                </p>
+                
+                <div class="toggle-switch">
+                    <input type="checkbox" id="variableSpeedToggle" class="toggle-input">
+                    <label for="variableSpeedToggle" class="toggle-label">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text-off">OFF</span>
+                        <span class="toggle-text-on">ON</span>
+                    </label>
+                </div>
+                
+                <div class="variable-speed-controls" id="variableSpeedControls">
+                    <div class="setting-item">
+                        <label for="strengthSlider">Variation Strength: <span id="strengthValue">20</span>%</label>
+                        <input type="range" 
+                               id="strengthSlider" 
+                               class="setting-slider"
+                               min="0" 
+                               max="100" 
+                               step="5" 
+                               value="20">
+                        <small class="setting-hint">How much speed varies from fastest to slowest point</small>
+                    </div>
+                    <div class="setting-item">
+                        <label for="phaseSlider">Phase Offset: <span id="phaseValue">0</span>°</label>
+                        <input type="range" 
+                               id="phaseSlider" 
+                               class="setting-slider"
+                               min="0" 
+                               max="360" 
+                               step="15" 
+                               value="0">
+                        <small class="setting-hint">Rotate the slow zone to the desired position</small>
+                    </div>
+                    <div class="variable-speed-info">
+                        <small>💡 Position your rotisserie so the pale side is at the current position, then enable variable speed. This position will become the slowest point in the rotation cycle.</small>
+                    </div>
+                </div>
+            </div>
+
             <!-- Advanced Settings -->
             <div class="control-group advanced-settings">
                 <h3>Advanced Settings</h3>
@@ -153,6 +198,14 @@
                 <div class="status-item">
                     <span class="status-label">Stall Count:</span>
                     <span id="stallCount" class="status-value">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Variable Speed:</span>
+                    <span id="variableSpeedStatus" class="status-value">OFF</span>
+                </div>
+                <div class="status-item" id="currentVariableSpeedItem" style="display: none;">
+                    <span class="status-label">Current Speed:</span>
+                    <span id="currentVariableSpeed" class="status-value">0.0 RPM</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Last Update:</span>

@@ -960,3 +960,62 @@ float StepperController::calculateMeanRPMOverRotation() const {
     
     return sum / samples;
 }
+
+// Speed variation control (thread-safe via command queue)
+uint32_t StepperController::setSpeedVariation(float strength) {
+    if (commandQueue == nullptr) return 0;
+    
+    uint32_t commandId = nextCommandId++;
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::SET_SPEED_VARIATION;
+    cmd.floatValue = strength;
+    cmd.commandId = commandId;
+    
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
+}
+
+uint32_t StepperController::setSpeedVariationPhase(float phase) {
+    if (commandQueue == nullptr) return 0;
+    
+    uint32_t commandId = nextCommandId++;
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::SET_SPEED_VARIATION_PHASE;
+    cmd.floatValue = phase;
+    cmd.commandId = commandId;
+    
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
+}
+
+uint32_t StepperController::enableSpeedVariation() {
+    if (commandQueue == nullptr) return 0;
+    
+    uint32_t commandId = nextCommandId++;
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::ENABLE_SPEED_VARIATION;
+    cmd.commandId = commandId;
+    
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
+}
+
+uint32_t StepperController::disableSpeedVariation() {
+    if (commandQueue == nullptr) return 0;
+    
+    uint32_t commandId = nextCommandId++;
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::DISABLE_SPEED_VARIATION;
+    cmd.commandId = commandId;
+    
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
+}
