@@ -285,7 +285,12 @@ class BratenDreherBLE {
             }
             this.phaseSliderTimer = setTimeout(() => {
                 // Convert degrees to radians
-                const phaseRadians = (phase * Math.PI) / 180;
+                // Convert from -180 to 180 range to 0 to 2π range
+                let phaseForRadians = phase;
+                if (phaseForRadians < 0) {
+                    phaseForRadians += 360;
+                }
+                const phaseRadians = (phaseForRadians * Math.PI) / 180;
                 this.setVariableSpeedPhase(phaseRadians).then(() => {
                     // Restore full opacity when command is sent
                     this.phaseValue.style.opacity = '1';
@@ -626,11 +631,17 @@ class BratenDreherBLE {
     }
     
     async setVariableSpeedPhase(phaseRadians) {
-        // Normalize to 0-2π range
+        // Normalize to 0-2π range for backend compatibility
         while (phaseRadians < 0) phaseRadians += 2 * Math.PI;
         while (phaseRadians >= 2 * Math.PI) phaseRadians -= 2 * Math.PI;
         
-        this.variableSpeedPhase = Math.round((phaseRadians * 180) / Math.PI); // Store as degrees
+        // Store as degrees in -180 to 180 range for UI
+        let phaseDegrees = (phaseRadians * 180) / Math.PI;
+        // Convert from 0-360 to -180 to 180 range
+        if (phaseDegrees > 180) {
+            phaseDegrees -= 360;
+        }
+        this.variableSpeedPhase = Math.round(phaseDegrees);
         
         return await this.sendCommand('speed_variation_phase', phaseRadians);
     }
@@ -882,7 +893,13 @@ class BratenDreherBLE {
         }
         
         if (status.speedVariationPhase !== undefined) {
-            this.variableSpeedPhase = Math.round((status.speedVariationPhase * 180) / Math.PI);
+            // Convert from radians to degrees and then to -180 to 180 range
+            let phaseDegrees = Math.round((status.speedVariationPhase * 180) / Math.PI);
+            // Convert from 0-360 to -180 to 180 range
+            if (phaseDegrees > 180) {
+                phaseDegrees -= 360;
+            }
+            this.variableSpeedPhase = phaseDegrees;
             this.phaseSlider.value = this.variableSpeedPhase;
             this.phaseValue.textContent = this.variableSpeedPhase;
         }
