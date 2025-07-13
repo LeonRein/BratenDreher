@@ -123,7 +123,6 @@ private:
     
     // Helper methods for status reporting
     void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
-    bool isDriverResponding();
 
 protected:
     // Task implementation

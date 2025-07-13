@@ -277,13 +277,6 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
         return;
     }
     
-    // Check if driver is responding
-    if (!isDriverResponding()) {
-        reportResult(commandId, CommandResult::DRIVER_NOT_RESPONDING, 
-                    "TMC2209 driver not responding");
-        return;
-    }
-    
     if (!stepper) {
         reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
         return;
@@ -305,13 +298,6 @@ void StepperController::setDirectionInternal(bool clockwise, uint32_t commandId)
 }
 
 void StepperController::enableInternal(uint32_t commandId) {
-    // Check if driver is responding
-    if (!isDriverResponding()) {
-        reportResult(commandId, CommandResult::DRIVER_NOT_RESPONDING, 
-                    "TMC2209 driver not responding");
-        return;
-    }
-    
     if (!stepper) {
         reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
         return;
@@ -370,13 +356,6 @@ void StepperController::setMicroStepsInternal(int steps, uint32_t commandId) {
         return;
     }
     
-    // Check if driver is responding
-    if (!isDriverResponding()) {
-        reportResult(commandId, CommandResult::DRIVER_NOT_RESPONDING, 
-                    "TMC2209 driver not responding");
-        return;
-    }
-    
     microSteps = steps;
     
     try {
@@ -396,13 +375,6 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     if (current < 10 || current > 100) {
         reportResult(commandId, CommandResult::INVALID_PARAMETER, 
                     "Current out of range (10-100%)");
-        return;
-    }
-    
-    // Check if driver is responding
-    if (!isDriverResponding()) {
-        reportResult(commandId, CommandResult::DRIVER_NOT_RESPONDING, 
-                    "TMC2209 driver not responding");
         return;
     }
     
@@ -432,17 +404,10 @@ void StepperController::reportResult(uint32_t commandId, CommandResult result, c
     xQueueSend(resultQueue, &resultData, 0);
 }
 
-bool StepperController::isDriverResponding() {
-    // Try to read a register from the TMC2209 to check if it's responding
-    try {
-        // Read the driver version register - this should work if driver is connected
-        uint8_t version = stepperDriver.getVersion();
-        // Version should be non-zero for a responding TMC2209
-        return (version != 0);
-    } catch (...) {
-        // Any exception means driver is not responding
-        return false;
-    }
+bool StepperController::getCommandResult(CommandResultData& result) {
+    if (resultQueue == nullptr) return false;
+    
+    return xQueueReceive(resultQueue, &result, 0) == pdTRUE; // Non-blocking
 }
 
 void StepperController::saveSettings() {
@@ -591,10 +556,4 @@ uint32_t StepperController::resetCounters() {
         return commandId;
     }
     return 0;
-}
-
-bool StepperController::getCommandResult(CommandResultData& result) {
-    if (resultQueue == nullptr) return false;
-    
-    return xQueueReceive(resultQueue, &result, 0) == pdTRUE; // Non-blocking
 }
