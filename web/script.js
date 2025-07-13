@@ -237,6 +237,14 @@ class BratenDreherBLE {
         this.updateUI();
         
         console.log('Disconnected from BratenDreher');
+        
+        // Attempt automatic reconnection after a delay
+        setTimeout(() => {
+            if (!this.connected && this.device) {
+                console.log('Attempting automatic reconnection...');
+                this.handleReconnect(true); // Pass true to indicate automatic reconnection
+            }
+        }, 3000);
     }
 
     async ensureConnected() {
@@ -305,24 +313,33 @@ class BratenDreherBLE {
         }
     }
 
-    async handleReconnect() {
+    async handleReconnect(automatic = false) {
         if (!this.device) {
             // If no device, try a fresh connection
             console.log('No stored device, attempting fresh connection...');
-            await this.connect();
+            try {
+                await this.connect();
+            } catch (error) {
+                console.error('Fresh connection failed:', error);
+            }
             return;
         }
 
         try {
-            console.log('User initiated reconnection...');
+            console.log(`${automatic ? 'Automatic' : 'User initiated'} reconnection...`);
             this.updateConnectionStatus('Reconnecting...', 'Attempting to reconnect to existing device...');
             await this.reconnect();
         } catch (error) {
-            console.error('Manual reconnection failed:', error);
-            this.showError(`Reconnection failed: ${error.message}. Try connecting again.`);
-            // Clear the device if reconnection fails completely
-            this.device = null;
-            this.updateConnectionStatus('Disconnected', 'Reconnection failed - Click Connect to try again');
+            console.error('Reconnection failed:', error);
+            // Only show error for manual reconnections
+            if (!automatic) {
+                this.showError(`Reconnection failed: ${error.message}. Try connecting again.`);
+                // Clear the device if reconnection fails completely
+                this.device = null;
+                this.updateConnectionStatus('Disconnected', 'Reconnection failed - Click Connect to try again');
+            } else {
+                console.log('Automatic reconnection failed, will try again later');
+            }
         }
     }
 
@@ -341,8 +358,15 @@ class BratenDreherBLE {
     
     // Send command using JSON protocol
     async sendCommand(type, value) {
-        if (!await this.ensureConnected() || !this.commandCharacteristic) {
-            console.error('Not connected or characteristic not available');
+        // Check if we're actually connected
+        if (!this.device || !this.device.gatt || !this.device.gatt.connected) {
+            console.error(`Cannot send ${type} command: Device not connected`);
+            this.onDisconnected(); // Update state
+            return false;
+        }
+        
+        if (!this.commandCharacteristic) {
+            console.error(`Cannot send ${type} command: Characteristic not available`);
             return false;
         }
         

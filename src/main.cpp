@@ -7,11 +7,12 @@ StepperController stepperController;
 BLEManager bleManager;
 
 // Status LED
-const int STATUS_LED_PIN = 2;
+const int STATUS_LED_PIN = LED_BUILTIN;
 unsigned long lastLedToggle = 0;
 bool ledState = false;
 
 void setup() {
+    delay(1000); // Give time for serial monitor to connect
     Serial.begin(115200);
     Serial.println("=== BratenDreher Stepper Control ===");
     Serial.println("Initializing system...");

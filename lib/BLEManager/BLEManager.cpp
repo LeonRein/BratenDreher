@@ -27,6 +27,11 @@ public:
         if (bleManager->stepperController) {
             bleManager->stepperController->emergencyStop();
         }
+        
+        // Restart advertising immediately
+        delay(500); // Give time for cleanup
+        pServer->startAdvertising();
+        Serial.println("Restarted advertising after disconnect");
     }
 };
 
@@ -42,8 +47,10 @@ public:
         std::string value = pCharacteristic->getValue();
         
         if (value.length() > 0) {
-            Serial.printf("Received command: %s\n", value.c_str());
+            Serial.printf("Received command: %s (length: %d)\n", value.c_str(), value.length());
             bleManager->handleCommand(value);
+        } else {
+            Serial.println("Received empty command");
         }
     }
 };
@@ -112,7 +119,7 @@ void BLEManager::handleCommand(const std::string& command) {
     if (!stepperController) return;
     
     // Parse JSON command
-    StaticJsonDocument<200> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, command);
     
     if (error) {
@@ -174,10 +181,13 @@ void BLEManager::handleCommand(const std::string& command) {
 }
 
 void BLEManager::sendStatus() {
-    if (!commandCharacteristic || !stepperController) return;
+    if (!commandCharacteristic || !stepperController || !deviceConnected) {
+        Serial.println("Cannot send status: characteristic, controller, or connection not available");
+        return;
+    }
     
     // Create JSON status object
-    StaticJsonDocument<400> statusDoc;
+    JsonDocument statusDoc;
     statusDoc["type"] = "status";
     statusDoc["enabled"] = stepperController->isEnabled();
     statusDoc["speed"] = stepperController->getSpeed();
@@ -193,10 +203,17 @@ void BLEManager::sendStatus() {
     String statusString;
     serializeJson(statusDoc, statusString);
     
-    commandCharacteristic->setValue(statusString.c_str());
+    // Check if the message is too long for BLE
+    if (statusString.length() > 500) {
+        Serial.printf("Warning: Status message is long (%d bytes)\n", statusString.length());
+    }
     
-    if (deviceConnected) {
+    try {
+        commandCharacteristic->setValue(statusString.c_str());
         commandCharacteristic->notify();
+        Serial.printf("Status sent: %s\n", statusString.c_str());
+    } catch (...) {
+        Serial.println("Failed to send status notification");
     }
 }
 
@@ -215,6 +232,10 @@ void BLEManager::update() {
     
     if (deviceConnected && !oldDeviceConnected) {
         oldDeviceConnected = deviceConnected;
+        Serial.println("New client connection established");
+        // Send initial status after a short delay
+        delay(1000);
+        sendStatus();
     }
     
     // Update status periodically
