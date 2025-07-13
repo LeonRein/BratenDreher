@@ -2,19 +2,13 @@ class BratenDreherBLE {
     constructor() {
         // BLE Service and Characteristic UUIDs (must match ESP32)
         this.serviceUUID = '12345678-1234-1234-1234-123456789abc';
-        this.speedCharacteristicUUID = '12345678-1234-1234-1234-123456789ab1';
-        this.directionCharacteristicUUID = '12345678-1234-1234-1234-123456789ab2';
-        this.enableCharacteristicUUID = '12345678-1234-1234-1234-123456789ab3';
-        this.statusCharacteristicUUID = '12345678-1234-1234-1234-123456789ab4';
-        this.microstepsCharacteristicUUID = '12345678-1234-1234-1234-123456789ab5';
-        this.currentCharacteristicUUID = '12345678-1234-1234-1234-123456789ab6';
-        this.resetCharacteristicUUID = '12345678-1234-1234-1234-123456789ab7';
+        this.commandCharacteristicUUID = '12345678-1234-1234-1234-123456789ab1';
         
         // BLE objects
         this.device = null;
         this.server = null;
         this.service = null;
-        this.characteristics = {};
+        this.commandCharacteristic = null;
         
         // State
         this.connected = false;
@@ -170,39 +164,23 @@ class BratenDreherBLE {
             this.service = await this.server.getPrimaryService(this.serviceUUID);
             console.log('Service found');
             
-            // Get characteristics one by one with better error handling
-            console.log('Getting characteristics...');
-            
-            const characteristicMap = {
-                'speed': this.speedCharacteristicUUID,
-                'direction': this.directionCharacteristicUUID,
-                'enable': this.enableCharacteristicUUID,
-                'status': this.statusCharacteristicUUID,
-                'microsteps': this.microstepsCharacteristicUUID,
-                'current': this.currentCharacteristicUUID,
-                'reset': this.resetCharacteristicUUID
-            };
-            
-            for (const [name, uuid] of Object.entries(characteristicMap)) {
-                try {
-                    console.log(`Getting ${name} characteristic (${uuid})...`);
-                    this.characteristics[name] = await this.service.getCharacteristic(uuid);
-                    console.log(`✓ ${name} characteristic found`);
-                } catch (error) {
-                    console.error(`✗ Failed to get ${name} characteristic:`, error);
-                    throw new Error(`Missing ${name} characteristic (${uuid}). Make sure ESP32 firmware is up to date.`);
-                }
+            // Get command characteristic
+            console.log('Getting command characteristic...');
+            try {
+                this.commandCharacteristic = await this.service.getCharacteristic(this.commandCharacteristicUUID);
+                console.log('✓ Command characteristic found');
+            } catch (error) {
+                console.error('✗ Failed to get command characteristic:', error);
+                throw new Error(`Missing command characteristic (${this.commandCharacteristicUUID}). Make sure ESP32 firmware is up to date.`);
             }
             
-            console.log('All characteristics found:', Object.keys(this.characteristics));
-            
-            // Subscribe to status notifications
-            console.log('Setting up status notifications...');
-            await this.characteristics.status.startNotifications();
-            this.characteristics.status.addEventListener('characteristicvaluechanged', (event) => {
-                this.handleStatusUpdate(event);
+            // Subscribe to notifications
+            console.log('Setting up command notifications...');
+            await this.commandCharacteristic.startNotifications();
+            this.commandCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                this.handleMessage(event);
             });
-            console.log('Status notifications enabled');
+            console.log('Command notifications enabled');
             
             // Handle disconnection
             this.device.addEventListener('gattserverdisconnected', () => {
@@ -213,6 +191,11 @@ class BratenDreherBLE {
             this.connected = true;
             this.updateConnectionStatus('Connected');
             this.updateUI();
+            
+            // Request initial status
+            setTimeout(() => {
+                this.requestStatus();
+            }, 1000);
             
             console.log('Successfully connected to BratenDreher');
             
@@ -248,7 +231,7 @@ class BratenDreherBLE {
         // this.device = null;
         this.server = null;
         this.service = null;
-        this.characteristics = {};
+        this.commandCharacteristic = null;
         
         this.updateConnectionStatus('Disconnected');
         this.updateUI();
@@ -267,7 +250,7 @@ class BratenDreherBLE {
         }
 
         // Check if we have a valid server connection
-        if (!this.server || !this.service || Object.keys(this.characteristics).length === 0) {
+        if (!this.server || !this.service || !this.commandCharacteristic) {
             console.log('Invalid connection state, attempting to reconnect...');
             try {
                 await this.reconnect();
@@ -298,22 +281,16 @@ class BratenDreherBLE {
             this.service = await this.server.getPrimaryService(this.serviceUUID);
             console.log('Service found');
             
-            // Get characteristics
-            this.characteristics.speed = await this.service.getCharacteristic(this.speedCharacteristicUUID);
-            this.characteristics.direction = await this.service.getCharacteristic(this.directionCharacteristicUUID);
-            this.characteristics.enable = await this.service.getCharacteristic(this.enableCharacteristicUUID);
-            this.characteristics.status = await this.service.getCharacteristic(this.statusCharacteristicUUID);
-            this.characteristics.microsteps = await this.service.getCharacteristic(this.microstepsCharacteristicUUID);
-            this.characteristics.current = await this.service.getCharacteristic(this.currentCharacteristicUUID);
-            this.characteristics.reset = await this.service.getCharacteristic(this.resetCharacteristicUUID);
+            // Get command characteristic
+            this.commandCharacteristic = await this.service.getCharacteristic(this.commandCharacteristicUUID);
+            console.log('Command characteristic found');
             
-            console.log('All characteristics reconnected');
-            
-            // Subscribe to status notifications
-            await this.characteristics.status.startNotifications();
-            this.characteristics.status.addEventListener('characteristicvaluechanged', (event) => {
-                this.handleStatusUpdate(event);
+            // Subscribe to notifications
+            await this.commandCharacteristic.startNotifications();
+            this.commandCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                this.handleMessage(event);
             });
+            console.log('Notifications re-enabled');
             
             this.connected = true;
             this.updateConnectionStatus('Connected');
@@ -362,69 +339,59 @@ class BratenDreherBLE {
         }
     }
     
+    // Send command using JSON protocol
+    async sendCommand(type, value) {
+        if (!await this.ensureConnected() || !this.commandCharacteristic) {
+            console.error('Not connected or characteristic not available');
+            return false;
+        }
+        
+        try {
+            const command = { type, value };
+            const commandString = JSON.stringify(command);
+            await this.commandCharacteristic.writeValue(new TextEncoder().encode(commandString));
+            console.log(`Command sent: ${commandString}`);
+            return true;
+        } catch (error) {
+            console.error(`Failed to send ${type} command:`, error);
+            this.handleBLEError(error, `Failed to send ${type} command`);
+            return false;
+        }
+    }
+    
+    // Request status update
+    async requestStatus() {
+        return await this.sendCommand('status_request', true);
+    }
+    
     async setSpeed(speed) {
         speed = Math.max(0.1, Math.min(30.0, speed)); // Clamp to valid range
         this.motorSpeed = speed;
         this.speedValue.textContent = speed.toFixed(1);
         
-        if (await this.ensureConnected() && this.characteristics.speed) {
-            try {
-                const value = speed.toString();
-                await this.characteristics.speed.writeValue(new TextEncoder().encode(value));
-                console.log(`Speed set to ${speed} RPM`);
-            } catch (error) {
-                console.error('Failed to set speed:', error);
-                this.handleBLEError(error, 'Failed to set speed');
-            }
-        }
+        return await this.sendCommand('speed', speed);
     }
     
     async setMicrosteps(microsteps) {
         this.microsteps = microsteps;
-        
-        if (await this.ensureConnected() && this.characteristics.microsteps) {
-            try {
-                const value = microsteps.toString();
-                await this.characteristics.microsteps.writeValue(new TextEncoder().encode(value));
-                console.log(`Microsteps set to ${microsteps}`);
-            } catch (error) {
-                console.error('Failed to set microsteps:', error);
-                this.handleBLEError(error, 'Failed to set microsteps');
-            }
-        }
+        return await this.sendCommand('microsteps', microsteps);
     }
     
     async setCurrent(current) {
         this.current = current;
-        
-        if (await this.ensureConnected() && this.characteristics.current) {
-            try {
-                const value = current.toString();
-                await this.characteristics.current.writeValue(new TextEncoder().encode(value));
-                console.log(`Current set to ${current}%`);
-            } catch (error) {
-                console.error('Failed to set current:', error);
-                this.handleBLEError(error, 'Failed to set current');
-            }
-        }
+        return await this.sendCommand('current', current);
     }
     
     async resetStatistics() {
-        if (await this.ensureConnected() && this.characteristics.reset) {
-            try {
-                await this.characteristics.reset.writeValue(new TextEncoder().encode('1'));
-                console.log('Statistics reset');
-                
-                // Visual feedback
-                this.resetStatsBtn.textContent = '📊 Reset Successful';
-                setTimeout(() => {
-                    this.resetStatsBtn.textContent = '📊 Reset Statistics';
-                }, 2000);
-            } catch (error) {
-                console.error('Failed to reset statistics:', error);
-                this.handleBLEError(error, 'Failed to reset statistics');
-            }
+        const success = await this.sendCommand('reset', true);
+        if (success) {
+            // Visual feedback
+            this.resetStatsBtn.textContent = '📊 Reset Successful';
+            setTimeout(() => {
+                this.resetStatsBtn.textContent = '📊 Reset Statistics';
+            }, 2000);
         }
+        return success;
     }
     
     async setDirection(clockwise) {
@@ -434,32 +401,14 @@ class BratenDreherBLE {
         this.clockwiseBtn.classList.toggle('active', clockwise);
         this.counterclockwiseBtn.classList.toggle('active', !clockwise);
         
-        if (await this.ensureConnected() && this.characteristics.direction) {
-            try {
-                const value = clockwise ? '1' : '0';
-                await this.characteristics.direction.writeValue(new TextEncoder().encode(value));
-                console.log(`Direction set to ${clockwise ? 'clockwise' : 'counter-clockwise'}`);
-            } catch (error) {
-                console.error('Failed to set direction:', error);
-                this.handleBLEError(error, 'Failed to set direction');
-            }
-        }
+        return await this.sendCommand('direction', clockwise);
     }
     
     async setMotorEnabled(enabled) {
         this.motorEnabled = enabled;
         this.motorToggle.checked = enabled;
         
-        if (await this.ensureConnected() && this.characteristics.enable) {
-            try {
-                const value = enabled ? '1' : '0';
-                await this.characteristics.enable.writeValue(new TextEncoder().encode(value));
-                console.log(`Motor ${enabled ? 'enabled' : 'disabled'}`);
-            } catch (error) {
-                console.error('Failed to set motor state:', error);
-                this.handleBLEError(error, 'Failed to set motor state');
-            }
-        }
+        return await this.sendCommand('enable', enabled);
     }
     
     async emergencyStop() {
@@ -476,59 +425,69 @@ class BratenDreherBLE {
         }, 2000);
     }
     
-    handleStatusUpdate(event) {
+    // Handle incoming messages (status updates and responses)
+    handleMessage(event) {
         try {
             const value = new TextDecoder().decode(event.target.value);
-            const status = JSON.parse(value);
+            const message = JSON.parse(value);
             
-            console.log('Status update:', status);
+            console.log('Message received:', message);
             
-            // Update status display
-            this.motorStatus.textContent = status.enabled ? 
-                (status.running ? 'Running' : 'Enabled') : 'Stopped';
-            this.currentSpeed.textContent = `${status.speed.toFixed(1)} RPM`;
-            this.currentDirection.textContent = status.direction === 'cw' ? 'Clockwise' : 'Counter-clockwise';
-            this.currentMicrosteps.textContent = status.microsteps || this.microsteps;
-            this.currentCurrent.textContent = `${status.current || this.current}%`;
-            this.lastUpdate.textContent = new Date().toLocaleTimeString();
-            
-            // Update statistics
-            if (status.totalRevolutions !== undefined) {
-                this.totalRevolutions.textContent = status.totalRevolutions.toFixed(3);
-            }
-            
-            if (status.runtime !== undefined) {
-                this.runTime.textContent = this.formatTime(status.runtime);
-            }
-            
-            // Calculate average speed
-            if (status.runtime > 0 && status.totalRevolutions > 0) {
-                const avgSpeed = (status.totalRevolutions * 60) / status.runtime; // RPM
-                this.avgSpeed.textContent = avgSpeed.toFixed(1);
+            if (message.type === 'status') {
+                this.handleStatusUpdate(message);
             } else {
-                this.avgSpeed.textContent = '0.0';
+                console.log('Unknown message type:', message.type);
             }
-            
-            // Update UI state if needed
-            if (this.motorEnabled !== status.enabled) {
-                this.motorEnabled = status.enabled;
-                this.motorToggle.checked = status.enabled;
-            }
-            
-            // Update microsteps and current if different
-            if (status.microsteps && status.microsteps !== this.microsteps) {
-                this.microsteps = status.microsteps;
-                this.microstepsSelect.value = status.microsteps;
-            }
-            
-            if (status.current && status.current !== this.current) {
-                this.current = status.current;
-                this.currentSlider.value = status.current;
-                this.currentValue.textContent = status.current;
-            }
-            
         } catch (error) {
-            console.error('Failed to parse status update:', error);
+            console.error('Failed to parse message:', error);
+        }
+    }
+    
+    handleStatusUpdate(status) {
+        console.log('Status update:', status);
+        
+        // Update status display
+        this.motorStatus.textContent = status.enabled ? 
+            (status.running ? 'Running' : 'Enabled') : 'Stopped';
+        this.currentSpeed.textContent = `${status.speed.toFixed(1)} RPM`;
+        this.currentDirection.textContent = status.direction === 'cw' ? 'Clockwise' : 'Counter-clockwise';
+        this.currentMicrosteps.textContent = status.microsteps || this.microsteps;
+        this.currentCurrent.textContent = `${status.current || this.current}%`;
+        this.lastUpdate.textContent = new Date().toLocaleTimeString();
+        
+        // Update statistics
+        if (status.totalRevolutions !== undefined) {
+            this.totalRevolutions.textContent = status.totalRevolutions.toFixed(3);
+        }
+        
+        if (status.runtime !== undefined) {
+            this.runTime.textContent = this.formatTime(status.runtime);
+        }
+        
+        // Calculate average speed
+        if (status.runtime > 0 && status.totalRevolutions > 0) {
+            const avgSpeed = (status.totalRevolutions * 60) / status.runtime; // RPM
+            this.avgSpeed.textContent = avgSpeed.toFixed(1);
+        } else {
+            this.avgSpeed.textContent = '0.0';
+        }
+        
+        // Update UI state if needed
+        if (this.motorEnabled !== status.enabled) {
+            this.motorEnabled = status.enabled;
+            this.motorToggle.checked = status.enabled;
+        }
+        
+        // Update microsteps and current if different
+        if (status.microsteps && status.microsteps !== this.microsteps) {
+            this.microsteps = status.microsteps;
+            this.microstepsSelect.value = status.microsteps;
+        }
+        
+        if (status.current && status.current !== this.current) {
+            this.current = status.current;
+            this.currentSlider.value = status.current;
+            this.currentValue.textContent = status.current;
         }
     }
     

@@ -14,24 +14,12 @@ class BLEManager {
 private:
     // BLE Service and Characteristic UUIDs
     static const char* SERVICE_UUID;
-    static const char* SPEED_CHARACTERISTIC_UUID;
-    static const char* DIRECTION_CHARACTERISTIC_UUID;
-    static const char* ENABLE_CHARACTERISTIC_UUID;
-    static const char* STATUS_CHARACTERISTIC_UUID;
-    static const char* MICROSTEPS_CHARACTERISTIC_UUID;
-    static const char* CURRENT_CHARACTERISTIC_UUID;
-    static const char* RESET_CHARACTERISTIC_UUID;
+    static const char* COMMAND_CHARACTERISTIC_UUID;
     
     // BLE objects
     BLEServer* server;
     BLEService* service;
-    BLECharacteristic* speedCharacteristic;
-    BLECharacteristic* directionCharacteristic;
-    BLECharacteristic* enableCharacteristic;
-    BLECharacteristic* statusCharacteristic;
-    BLECharacteristic* microstepsCharacteristic;
-    BLECharacteristic* currentCharacteristic;
-    BLECharacteristic* resetCharacteristic;
+    BLECharacteristic* commandCharacteristic;
     
     // State
     bool deviceConnected;
@@ -56,27 +44,21 @@ public:
     
     // Status updates
     void updateStatus();
+    void sendStatus();
     
     // Main loop
     void update();
+    
+    // Handle incoming commands
+    void handleCommand(const std::string& command);
     
     // Server callbacks
     class ServerCallbacks;
     friend class ServerCallbacks;
     
     // Characteristic callbacks
-    class SpeedCharacteristicCallbacks;
-    class DirectionCharacteristicCallbacks;
-    class EnableCharacteristicCallbacks;
-    class MicrostepsCharacteristicCallbacks;
-    class CurrentCharacteristicCallbacks;
-    class ResetCharacteristicCallbacks;
-    friend class SpeedCharacteristicCallbacks;
-    friend class DirectionCharacteristicCallbacks;
-    friend class EnableCharacteristicCallbacks;
-    friend class MicrostepsCharacteristicCallbacks;
-    friend class CurrentCharacteristicCallbacks;
-    friend class ResetCharacteristicCallbacks;
+    class CommandCharacteristicCallbacks;
+    friend class CommandCharacteristicCallbacks;
 };
 
 #endif // BLE_MANAGER_H
