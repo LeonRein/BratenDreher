@@ -77,7 +77,9 @@ bool StepperController::begin() {
     stepper->setDelayToDisable(1000);
     
     // Set acceleration (steps/s²) - smooth acceleration for rotisserie
-    stepper->setAcceleration(500);
+    // Default: reach 30 RPM in 10 seconds for gentle start (3200 steps/s²)
+    uint32_t defaultAcceleration = calculateAccelerationForTime(30.0f, 10.0f);
+    stepper->setAcceleration(defaultAcceleration);
     
     // Set initial speed using internal method (avoid command queue during initialization)
     setSpeedInternal(currentSpeedRPM, 0); // Use commandId 0 for internal calls
@@ -434,7 +436,7 @@ void StepperController::reportResult(uint32_t commandId, CommandResult result, c
     CommandResultData resultData;
     resultData.commandId = commandId;
     resultData.result = result;
-    resultData.errorMessage = errorMessage;
+    resultData.setErrorMessage(errorMessage.c_str());
     
     // Try to send result, but don't block if queue is full
     xQueueSend(resultQueue, &resultData, 0);
@@ -592,4 +594,32 @@ uint32_t StepperController::resetCounters() {
         return commandId;
     }
     return 0;
+}
+
+uint32_t StepperController::calculateAccelerationForTime(float targetRPM, float timeSeconds) {
+    // Calculate required acceleration to reach target RPM in specified time
+    // Using kinematic equation: v = u + at, where u = 0 (starting from rest)
+    
+    uint32_t targetStepsPerSecond = rpmToStepsPerSecond(targetRPM);
+    float acceleration = targetStepsPerSecond / timeSeconds;
+    
+    Serial.printf("Acceleration calculation:\n");
+    Serial.printf("  Target: %.1f RPM in %.1f seconds\n", targetRPM, timeSeconds);
+    Serial.printf("  Target steps/s: %u\n", targetStepsPerSecond);
+    Serial.printf("  Required acceleration: %.0f steps/s²\n", acceleration);
+    
+    return static_cast<uint32_t>(acceleration);
+}
+
+void StepperController::setAccelerationForTime(float targetRPM, float timeSeconds) {
+    if (!stepper) {
+        Serial.println("Stepper not initialized");
+        return;
+    }
+    
+    uint32_t newAcceleration = calculateAccelerationForTime(targetRPM, timeSeconds);
+    stepper->setAcceleration(newAcceleration);
+    
+    Serial.printf("Acceleration set to %u steps/s² for %0.1f RPM in %.1f seconds\n", 
+                  newAcceleration, targetRPM, timeSeconds);
 }

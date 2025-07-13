@@ -55,7 +55,7 @@ public:
 };
 
 BLEManager::BLEManager() 
-    : Task("BLE_Task", 12288, 2, 0), // Task name, 12KB stack, priority 2, core 0
+    : Task("BLE_Task", 8192, 2, 0), // Task name, 8KB stack (reduced from 12KB), priority 2, core 0
       server(nullptr), service(nullptr), commandCharacteristic(nullptr),
       deviceConnected(false), oldDeviceConnected(false),
       stepperController(nullptr), lastStatusUpdate(0) {
@@ -65,6 +65,9 @@ BLEManager::BLEManager()
     if (commandQueue == nullptr) {
         Serial.println("ERROR: Failed to create command queue!");
     }
+    
+    // Print memory status for debugging
+    Serial.printf("BLE Task created. Free heap: %u bytes\n", ESP.getFreeHeap());
 }
 
 BLEManager::~BLEManager() {
@@ -132,8 +135,14 @@ void BLEManager::handleCommand(const std::string& command) {
     
     Serial.printf("Processing command: %s (length: %d)\n", command.c_str(), command.length());
     
-    // Use smaller JSON document to reduce stack usage
-    JsonDocument doc;
+    // Prevent buffer overflow attacks
+    if (command.length() > MAX_COMMAND_LENGTH || command.length() == 0) {
+        Serial.printf("ERROR: Invalid command length: %d\n", command.length());
+        return;
+    }
+    
+    // Use properly sized static JSON document to prevent heap issues
+    StaticJsonDocument<256> doc;
     DeserializationError error = deserializeJson(doc, command);
     
     if (error) {
@@ -144,6 +153,12 @@ void BLEManager::handleCommand(const std::string& command) {
     const char* type = doc["type"];
     if (!type) {
         Serial.println("Missing command type");
+        return;
+    }
+    
+    // Validate that we have the required value field for most commands
+    if (strcmp(type, "status_request") != 0 && !doc.containsKey("value")) {
+        Serial.println("ERROR: Command missing required 'value' field");
         return;
     }
     
@@ -220,6 +235,22 @@ void BLEManager::handleCommand(const std::string& command) {
     else if (strcmp(type, "status_request") == 0) {
         sendStatus();
     }
+    else if (strcmp(type, "acceleration_time") == 0) {
+        // Set acceleration to reach max speed in specified time
+        float targetRPM = doc["target_rpm"] | 30.0f;  // Default to 30 RPM if not specified
+        float timeSeconds = doc["value"];  // Time in seconds
+        
+        if (timeSeconds > 0.1f && timeSeconds <= 60.0f && targetRPM > 0.1f && targetRPM <= 30.0f) {
+            stepperController->setAccelerationForTime(targetRPM, timeSeconds);
+            Serial.printf("Acceleration set for %.1f RPM in %.1f seconds\n", targetRPM, timeSeconds);
+            
+            // Send success response
+            sendCommandResult(0, "success", String("Acceleration set for ") + targetRPM + " RPM in " + timeSeconds + " seconds");
+        } else {
+            Serial.println("Invalid acceleration time parameters");
+            sendCommandResult(0, "invalid_parameter", "Time must be 0.1-60s, RPM must be 0.1-30");
+        }
+    }
     else {
         Serial.printf("Unknown command type: %s\n", type);
     }
@@ -231,8 +262,8 @@ void BLEManager::sendStatus() {
         return;
     }
     
-    // Use static JSON document to reduce stack usage
-    JsonDocument statusDoc;
+    // Use properly sized JSON document to prevent heap issues
+    StaticJsonDocument<512> statusDoc;
     statusDoc["type"] = "status";
     statusDoc["enabled"] = stepperController->isEnabled();
     statusDoc["speed"] = stepperController->getSpeed();
@@ -246,7 +277,11 @@ void BLEManager::sendStatus() {
     statusDoc["timestamp"] = millis();
     
     String statusString;
-    serializeJson(statusDoc, statusString);
+    size_t result = serializeJson(statusDoc, statusString);
+    if (result == 0) {
+        Serial.println("ERROR: Failed to serialize status JSON");
+        return;
+    }
     
     // Check if the message is too long for BLE
     if (statusString.length() > 500) {
@@ -257,6 +292,9 @@ void BLEManager::sendStatus() {
         commandCharacteristic->setValue(statusString.c_str());
         commandCharacteristic->notify();
         Serial.printf("Status sent: %s\n", statusString.c_str());
+        
+        // Small delay to prevent overwhelming BLE stack
+        vTaskDelay(pdMS_TO_TICKS(10));
     } catch (...) {
         Serial.println("Failed to send status notification");
     }
@@ -307,6 +345,21 @@ void BLEManager::update() {
     if (currentTime - lastStatusUpdate >= STATUS_UPDATE_INTERVAL) {
         updateStatus();
         lastStatusUpdate = currentTime;
+        
+        // Monitor memory usage every 30 seconds (only when connected)
+        static unsigned long lastMemoryCheck = 0;
+        if (deviceConnected && (currentTime - lastMemoryCheck) >= 30000) {
+            uint32_t freeHeap = ESP.getFreeHeap();
+            uint32_t minFreeHeap = ESP.getMinFreeHeap();
+            Serial.printf("Memory status - Free: %u bytes, Min free: %u bytes\n", freeHeap, minFreeHeap);
+            
+            // Warn if memory is getting low
+            if (freeHeap < 20000) {
+                Serial.println("WARNING: Low memory detected!");
+            }
+            
+            lastMemoryCheck = currentTime;
+        }
     }
     
     // Small delay to prevent busy waiting when no commands are queued
@@ -332,10 +385,27 @@ void BLEManager::processQueuedCommands() {
     char commandBuffer[MAX_COMMAND_LENGTH];
     
     // Process commands with timeout to avoid busy waiting
-    while (xQueueReceive(commandQueue, commandBuffer, pdMS_TO_TICKS(5)) == pdTRUE) {
+    // Limit processing to prevent overwhelming the system
+    int commandsProcessed = 0;
+    const int maxCommandsPerCycle = 5;
+    
+    while (commandsProcessed < maxCommandsPerCycle && 
+           xQueueReceive(commandQueue, commandBuffer, pdMS_TO_TICKS(1)) == pdTRUE) {
         std::string command(commandBuffer);
         Serial.printf("Processing queued command: %s\n", command.c_str());
         handleCommand(command);
+        commandsProcessed++;
+        
+        // Small delay between commands to prevent system overload
+        if (commandsProcessed < maxCommandsPerCycle) {
+            vTaskDelay(pdMS_TO_TICKS(2));
+        }
+    }
+    
+    // If queue is getting full, warn about potential command loss
+    if (uxQueueMessagesWaiting(commandQueue) > (MAX_QUEUE_SIZE * 0.8)) {
+        Serial.printf("WARNING: Command queue nearly full (%d/%d)\n", 
+                     uxQueueMessagesWaiting(commandQueue), MAX_QUEUE_SIZE);
     }
 }
 
@@ -368,32 +438,49 @@ void BLEManager::processCommandResults() {
         }
         
         Serial.printf("Command %u result: %s", result.commandId, status.c_str());
-        if (result.errorMessage.length() > 0) {
-            Serial.printf(" - %s", result.errorMessage.c_str());
+        if (strlen(result.errorMessage) > 0) {
+            Serial.printf(" - %s", result.errorMessage);
         }
         Serial.println();
         
         // Send result to client
-        sendCommandResult(result.commandId, status, result.errorMessage);
+        sendCommandResult(result.commandId, status, String(result.errorMessage));
     }
 }
 
 void BLEManager::sendCommandResult(uint32_t commandId, const String& status, const String& message) {
     if (!commandCharacteristic || !deviceConnected) return;
     
-    // Create JSON response
-    JsonDocument doc;
+    // Use properly sized static JSON document to prevent heap corruption
+    StaticJsonDocument<256> doc;
     doc["type"] = "command_result";
     doc["command_id"] = commandId;
     doc["status"] = status;
-    if (message.length() > 0) {
+    if (message.length() > 0 && message.length() < 128) { // Prevent buffer overflow
         doc["message"] = message;
     }
     
     String response;
-    serializeJson(doc, response);
+    size_t result = serializeJson(doc, response);
+    if (result == 0) {
+        Serial.println("ERROR: Failed to serialize command result JSON");
+        return;
+    }
+    
+    // Ensure response is not too long for BLE characteristic
+    if (response.length() > 512) {
+        Serial.printf("WARNING: Command result too long (%d chars), truncating\n", response.length());
+        response = response.substring(0, 512);
+    }
     
     // Send via BLE notification
-    commandCharacteristic->setValue(response.c_str());
-    commandCharacteristic->notify();
+    try {
+        commandCharacteristic->setValue(response.c_str());
+        commandCharacteristic->notify();
+        
+        // Small delay to prevent overwhelming BLE stack
+        vTaskDelay(pdMS_TO_TICKS(5));
+    } catch (...) {
+        Serial.println("ERROR: Failed to send command result notification");
+    }
 }

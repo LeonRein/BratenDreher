@@ -414,6 +414,13 @@ body {
     color: #374151;
 }
 
+.setting-hint {
+    font-size: 0.75rem;
+    color: #6b7280;
+    font-style: italic;
+    margin-top: 4px;
+}
+
 .setting-select {
     padding: 8px 12px;
     border: 2px solid #e5e7eb;

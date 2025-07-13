@@ -45,7 +45,21 @@ struct StepperCommandData {
 struct CommandResultData {
     uint32_t commandId;
     CommandResult result;
-    String errorMessage;     // detailed error description
+    char errorMessage[128];  // fixed-size buffer to prevent heap fragmentation
+    
+    // Helper constructor to safely set error message
+    CommandResultData() : commandId(0), result(CommandResult::SUCCESS) {
+        errorMessage[0] = '\0';
+    }
+    
+    void setErrorMessage(const char* msg) {
+        if (msg) {
+            strncpy(errorMessage, msg, sizeof(errorMessage) - 1);
+            errorMessage[sizeof(errorMessage) - 1] = '\0';
+        } else {
+            errorMessage[0] = '\0';
+        }
+    }
 };
 
 class StepperController : public Task {
@@ -123,6 +137,10 @@ private:
     
     // Helper methods for status reporting
     void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
+
+    // Helper function to calculate acceleration for reaching target RPM in specified time
+    uint32_t calculateAccelerationForTime(float targetRPM, float timeSeconds);
+    void setAccelerationForTime(float targetRPM, float timeSeconds);
 
 protected:
     // Task implementation

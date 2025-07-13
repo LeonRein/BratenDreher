@@ -59,6 +59,8 @@ class BratenDreherBLE {
         this.microstepsSelect = document.getElementById('microstepsSelect');
         this.currentSlider = document.getElementById('currentSlider');
         this.currentValue = document.getElementById('currentValue');
+        this.accelerationTimeSlider = document.getElementById('accelerationTimeSlider');
+        this.accelerationTimeValue = document.getElementById('accelerationTimeValue');
         this.resetStatsBtn = document.getElementById('resetStatsBtn');
         
         // Status elements
@@ -127,6 +129,12 @@ class BratenDreherBLE {
             const current = parseInt(e.target.value);
             this.currentValue.textContent = current;
             this.setCurrent(current);
+        });
+        
+        this.accelerationTimeSlider.addEventListener('input', (e) => {
+            const time = parseInt(e.target.value);
+            this.accelerationTimeValue.textContent = time;
+            this.setAccelerationTime(time);
         });
         
         this.resetStatsBtn.addEventListener('click', () => {
@@ -386,7 +394,7 @@ class BratenDreherBLE {
     }
     
     // Send command using JSON protocol
-    async sendCommand(type, value) {
+    async sendCommand(type, value, additionalParams = {}) {
         // Check if we're actually connected
         if (!this.device || !this.device.gatt || !this.device.gatt.connected) {
             console.error(`Cannot send ${type} command: Device not connected`);
@@ -400,7 +408,7 @@ class BratenDreherBLE {
         }
         
         try {
-            const command = { type, value };
+            const command = { type, value, ...additionalParams };
             const commandString = JSON.stringify(command);
             await this.commandCharacteristic.writeValue(new TextEncoder().encode(commandString));
             console.log(`Command sent: ${commandString}`);
@@ -433,6 +441,11 @@ class BratenDreherBLE {
     async setCurrent(current) {
         this.current = current;
         return await this.sendCommand('current', current);
+    }
+    
+    async setAccelerationTime(timeSeconds) {
+        // Send acceleration time command with target RPM of 30
+        return await this.sendCommand('acceleration_time', timeSeconds, { target_rpm: 30.0 });
     }
     
     async resetStatistics() {
@@ -665,6 +678,7 @@ class BratenDreherBLE {
             this.emergencyStopBtn,
             this.microstepsSelect,
             this.currentSlider,
+            this.accelerationTimeSlider,
             this.resetStatsBtn
         ];
         
