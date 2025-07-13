@@ -88,7 +88,7 @@ class BratenDreherBLE {
         // Status elements
         this.motorStatus = document.getElementById('motorStatus');
         this.currentSpeed = document.getElementById('currentSpeed');
-        this.currentAcceleration = document.getElementById('currentAcceleration');
+        this.currentAccelerationTime = document.getElementById('currentAccelerationTime');
         this.currentDirection = document.getElementById('currentDirection');
         this.currentCurrent = document.getElementById('currentCurrent');
         this.tmc2209Status = document.getElementById('tmc2209Status');
@@ -715,8 +715,8 @@ class BratenDreherBLE {
         this.motorStatus.textContent = status.enabled ? 
             (status.running ? 'Running' : 'Enabled') : 'Stopped';
         this.currentSpeed.textContent = `${status.speed.toFixed(1)} RPM`;
-        this.currentAcceleration.textContent = status.acceleration ? 
-            `${status.acceleration.toLocaleString()} steps/s²` : '0 steps/s²';
+        this.currentAccelerationTime.textContent = status.accelerationTime ? 
+            `${status.accelerationTime.toFixed(1)}s to 30 RPM` : '5.0s to 30 RPM';
         this.currentDirection.textContent = status.direction === 'cw' ? 'Clockwise' : 'Counter-clockwise';
         this.currentCurrent.textContent = `${status.current || this.current}%`;
         
@@ -772,6 +772,18 @@ class BratenDreherBLE {
             this.current = status.current;
             this.currentSlider.value = status.current;
             this.currentValue.textContent = status.current;
+        }
+        
+        // Update acceleration time slider if different (e.g., when variable speed changes it)
+        if (status.accelerationTime !== undefined) {
+            const currentSliderTime = parseInt(this.accelerationTimeSlider.value);
+            const deviceTime = Math.round(status.accelerationTime);
+            
+            if (Math.abs(currentSliderTime - deviceTime) > 0.5) {
+                this.accelerationTimeSlider.value = deviceTime;
+                this.accelerationTimeValue.textContent = deviceTime;
+                console.log(`Acceleration time updated from device: ${deviceTime}s`);
+            }
         }
         
         // Update preset button active state based on current speed

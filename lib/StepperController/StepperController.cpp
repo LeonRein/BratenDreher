@@ -715,6 +715,19 @@ uint32_t StepperController::calculateAccelerationForTime(float targetRPM, float 
     return static_cast<uint32_t>(acceleration);
 }
 
+float StepperController::getCurrentAccelerationTime() const {
+    // Convert current acceleration (steps/s²) back to time format (seconds to reach 30 RPM)
+    if (currentAcceleration == 0) {
+        return 5.0f; // Default fallback
+    }
+    
+    uint32_t targetStepsPerSecond = rpmToStepsPerSecond(30.0f); // Use 30 RPM as reference
+    float timeSeconds = static_cast<float>(targetStepsPerSecond) / static_cast<float>(currentAcceleration);
+    
+    // Clamp to reasonable range (1-30 seconds)
+    return constrain(timeSeconds, 1.0f, 30.0f);
+}
+
 void StepperController::setAccelerationForTime(float targetRPM, float timeSeconds) {
     if (!stepper) {
         Serial.println("Stepper not initialized");
