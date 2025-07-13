@@ -67,9 +67,16 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
     font-size: 1.1rem;
     font-weight: 500;
+}
+
+.connection-info {
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    opacity: 0.8;
+    font-style: italic;
 }
 
 .status-indicator {

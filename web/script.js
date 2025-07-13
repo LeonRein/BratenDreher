@@ -30,7 +30,9 @@ class BratenDreherBLE {
         
         // Check Web Bluetooth support
         if (!navigator.bluetooth) {
-            this.showError('Web Bluetooth is not supported in this browser.');
+            this.showError('Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or Opera.');
+            this.connectBtn.disabled = true;
+            this.reconnectBtn.disabled = true;
             return;
         }
         
@@ -41,6 +43,7 @@ class BratenDreherBLE {
         // Connection elements
         this.statusIndicator = document.getElementById('statusIndicator');
         this.connectionStatus = document.getElementById('connectionStatus');
+        this.connectionInfo = document.getElementById('connectionInfo');
         this.connectBtn = document.getElementById('connectBtn');
         this.reconnectBtn = document.getElementById('reconnectBtn');
         this.disconnectBtn = document.getElementById('disconnectBtn');
@@ -132,38 +135,43 @@ class BratenDreherBLE {
     
     async connect() {
         try {
-            console.log('Requesting Bluetooth device...');
+            console.log('Starting connection process...');
+            console.log('Web Bluetooth available:', !!navigator.bluetooth);
             this.updateConnectionStatus('Connecting...');
             
             // If we already have a device, try to reconnect to it first
             if (this.device) {
                 try {
-                    console.log('Attempting to reconnect to existing device...');
+                    console.log('Attempting to reconnect to existing device:', this.device.name);
                     await this.reconnect();
                     return;
                 } catch (error) {
-                    console.log('Reconnection failed, requesting new device');
+                    console.log('Reconnection failed, requesting new device:', error.message);
                     this.device = null;
                 }
             }
             
             // Request device
+            console.log('Requesting Bluetooth device with filter: name="BratenDreher"');
             this.device = await navigator.bluetooth.requestDevice({
                 filters: [{ name: 'BratenDreher' }],
                 optionalServices: [this.serviceUUID]
             });
             
-            console.log('Device selected:', this.device.name);
+            console.log('Device selected:', this.device.name, 'ID:', this.device.id);
             
             // Connect to GATT server
+            console.log('Connecting to GATT server...');
             this.server = await this.device.gatt.connect();
             console.log('Connected to GATT server');
             
             // Get service
+            console.log('Getting primary service:', this.serviceUUID);
             this.service = await this.server.getPrimaryService(this.serviceUUID);
             console.log('Service found');
             
             // Get characteristics
+            console.log('Getting characteristics...');
             this.characteristics.speed = await this.service.getCharacteristic(this.speedCharacteristicUUID);
             this.characteristics.direction = await this.service.getCharacteristic(this.directionCharacteristicUUID);
             this.characteristics.enable = await this.service.getCharacteristic(this.enableCharacteristicUUID);
@@ -172,16 +180,19 @@ class BratenDreherBLE {
             this.characteristics.current = await this.service.getCharacteristic(this.currentCharacteristicUUID);
             this.characteristics.reset = await this.service.getCharacteristic(this.resetCharacteristicUUID);
             
-            console.log('All characteristics found');
+            console.log('All characteristics found:', Object.keys(this.characteristics));
             
             // Subscribe to status notifications
+            console.log('Setting up status notifications...');
             await this.characteristics.status.startNotifications();
             this.characteristics.status.addEventListener('characteristicvaluechanged', (event) => {
                 this.handleStatusUpdate(event);
             });
+            console.log('Status notifications enabled');
             
             // Handle disconnection
             this.device.addEventListener('gattserverdisconnected', () => {
+                console.log('GATT server disconnected event received');
                 this.onDisconnected();
             });
             
@@ -193,7 +204,19 @@ class BratenDreherBLE {
             
         } catch (error) {
             console.error('Connection failed:', error);
-            this.showError(`Connection failed: ${error.message}`);
+            console.error('Error name:', error.name);
+            console.error('Error message:', error.message);
+            
+            let userMessage = `Connection failed: ${error.message}`;
+            if (error.name === 'NotFoundError') {
+                userMessage = 'No BratenDreher device found. Make sure the device is powered on and advertising.';
+            } else if (error.name === 'NotSupportedError') {
+                userMessage = 'Web Bluetooth is not supported or enabled in this browser.';
+            } else if (error.name === 'SecurityError') {
+                userMessage = 'Bluetooth access denied. Please enable Bluetooth and try again.';
+            }
+            
+            this.showError(userMessage);
             this.updateConnectionStatus('Disconnected');
         }
     }
@@ -207,7 +230,8 @@ class BratenDreherBLE {
     
     onDisconnected() {
         this.connected = false;
-        this.device = null;
+        // Don't null the device - keep it for reconnection attempts
+        // this.device = null;
         this.server = null;
         this.service = null;
         this.characteristics = {};
@@ -292,16 +316,22 @@ class BratenDreherBLE {
 
     async handleReconnect() {
         if (!this.device) {
-            this.showError('No device to reconnect to. Please connect first.');
+            // If no device, try a fresh connection
+            console.log('No stored device, attempting fresh connection...');
+            await this.connect();
             return;
         }
 
         try {
             console.log('User initiated reconnection...');
+            this.updateConnectionStatus('Reconnecting...', 'Attempting to reconnect to existing device...');
             await this.reconnect();
         } catch (error) {
             console.error('Manual reconnection failed:', error);
-            this.showError(`Reconnection failed: ${error.message}`);
+            this.showError(`Reconnection failed: ${error.message}. Try connecting again.`);
+            // Clear the device if reconnection fails completely
+            this.device = null;
+            this.updateConnectionStatus('Disconnected', 'Reconnection failed - Click Connect to try again');
         }
     }
 
@@ -495,8 +525,11 @@ class BratenDreherBLE {
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     
-    updateConnectionStatus(status) {
+    updateConnectionStatus(status, info = '') {
         this.connectionStatus.textContent = status;
+        if (this.connectionInfo) {
+            this.connectionInfo.textContent = info || this.getStatusInfo(status);
+        }
         
         if (status === 'Connected') {
             this.statusIndicator.classList.add('connected');
@@ -512,8 +545,24 @@ class BratenDreherBLE {
             // Disconnected
             this.statusIndicator.classList.remove('connected');
             this.connectBtn.disabled = false;
-            this.reconnectBtn.disabled = !this.device; // Enable only if we have a device to reconnect to
+            // Enable reconnect button - it will handle both reconnection and fresh connection
+            this.reconnectBtn.disabled = false;
             this.disconnectBtn.disabled = true;
+        }
+    }
+
+    getStatusInfo(status) {
+        switch (status) {
+            case 'Connected':
+                return this.device ? `Connected to ${this.device.name}` : 'Connected to BratenDreher';
+            case 'Connecting...':
+                return 'Searching for BratenDreher device...';
+            case 'Reconnecting...':
+                return 'Attempting to reconnect...';
+            case 'Disconnected':
+                return this.device ? 'Disconnected - Use Reconnect/Retry button' : 'Click Connect to start';
+            default:
+                return '';
         }
     }
     
