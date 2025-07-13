@@ -6,6 +6,7 @@ StepperController::StepperController()
       microSteps(16), runCurrent(30), motorEnabled(false), clockwise(true),  // Fixed to 16 microsteps
       startTime(0), totalSteps(0), isFirstStart(true), tmc2209Initialized(false),
       stallDetected(false), lastStallTime(0), stallCount(0),
+      speedVariationEnabled(false), speedVariationStrength(0.0f), speedVariationPhase(0.0f), speedVariationStartPosition(0),
       cachedCurrentPosition(0), cachedIsRunning(false), cachedStallDetected(false), nextCommandId(1) {
     
     // Create command queue for thread-safe operation
@@ -226,34 +227,44 @@ void StepperController::run() {
     // Initialize timing variables
     StepperCommandData cmd;
     unsigned long nextCacheUpdate = millis() + CACHE_UPDATE_INTERVAL;
+    unsigned long nextSpeedUpdate = millis() + MOTOR_SPEED_UPDATE_INTERVAL;
     
     // Main event loop
     while (true) {
-        // Calculate smart timeout for queue operations
-        TickType_t timeout = calculateQueueTimeout(nextCacheUpdate);
+        // Calculate smart timeout for queue operations (use the earliest upcoming event)
+        unsigned long nextEvent = min(nextCacheUpdate, nextSpeedUpdate);
+        TickType_t timeout = calculateQueueTimeout(nextEvent);
         
-        // Block on queue until command arrives or cache update is due
+        // Block on queue until command arrives or any update is due
         if (xQueueReceive(commandQueue, &cmd, timeout) == pdTRUE) {
             processCommand(cmd);
         }
         
+        unsigned long currentTime = millis();
+        
         // Perform cache update if due
         if (isCacheUpdateDue(nextCacheUpdate)) {
             updateCache();
-            nextCacheUpdate = millis() + CACHE_UPDATE_INTERVAL;
+            nextCacheUpdate = currentTime + CACHE_UPDATE_INTERVAL;
+        }
+        
+        // Update motor speed if due (more frequent for smooth variation)
+        if (isUpdateDue(nextSpeedUpdate)) {
+            updateMotorSpeed();
+            nextSpeedUpdate = currentTime + MOTOR_SPEED_UPDATE_INTERVAL;
         }
     }
 }
 
-TickType_t StepperController::calculateQueueTimeout(unsigned long nextCacheUpdate) {
+TickType_t StepperController::calculateQueueTimeout(unsigned long nextUpdate) {
     unsigned long currentTime = millis();
     
     // Handle millis() overflow gracefully
-    if (nextCacheUpdate < currentTime) {
-        return 0; // Cache update overdue
+    if (nextUpdate < currentTime) {
+        return 0; // Update overdue
     }
     
-    unsigned long timeUntilUpdate = nextCacheUpdate - currentTime;
+    unsigned long timeUntilUpdate = nextUpdate - currentTime;
     
     // Clamp timeout to reasonable bounds
     if (timeUntilUpdate > 100) {
@@ -264,14 +275,18 @@ TickType_t StepperController::calculateQueueTimeout(unsigned long nextCacheUpdat
 }
 
 bool StepperController::isCacheUpdateDue(unsigned long nextCacheUpdate) {
+    return isUpdateDue(nextCacheUpdate);
+}
+
+bool StepperController::isUpdateDue(unsigned long nextUpdate) {
     unsigned long currentTime = millis();
     
     // Handle millis() overflow case
-    if (nextCacheUpdate > currentTime && (nextCacheUpdate - currentTime) > 0x80000000UL) {
+    if (nextUpdate > currentTime && (nextUpdate - currentTime) > 0x80000000UL) {
         return true; // Overflow detected
     }
     
-    return currentTime >= nextCacheUpdate;
+    return currentTime >= nextUpdate;
 }
 
 void StepperController::updateCache() {
@@ -345,6 +360,22 @@ void StepperController::processCommand(const StepperCommandData& cmd) {
             
         case StepperCommand::RESET_STALL_COUNT:
             resetStallCountInternal(cmd.commandId);
+            break;
+            
+        case StepperCommand::SET_SPEED_VARIATION:
+            setSpeedVariationInternal(cmd.floatValue, cmd.commandId);
+            break;
+            
+        case StepperCommand::SET_SPEED_VARIATION_PHASE:
+            setSpeedVariationPhaseInternal(cmd.floatValue, cmd.commandId);
+            break;
+            
+        case StepperCommand::ENABLE_SPEED_VARIATION:
+            enableSpeedVariationInternal(cmd.commandId);
+            break;
+            
+        case StepperCommand::DISABLE_SPEED_VARIATION:
+            disableSpeedVariationInternal(cmd.commandId);
             break;
     }
 }
@@ -686,4 +717,130 @@ void StepperController::setAccelerationForTime(float targetRPM, float timeSecond
     
     Serial.printf("Acceleration set to %u steps/s² for %0.1f RPM in %.1f seconds\n", 
                   newAcceleration, targetRPM, timeSeconds);
+}
+
+void StepperController::setSpeedVariationInternal(float strength, uint32_t commandId) {
+    // Validate strength (0.0 to 1.0)
+    if (strength < 0.0f || strength > 1.0f) {
+        reportResult(commandId, CommandResult::INVALID_PARAMETER, 
+                    "Speed variation strength out of range (0.0-1.0)");
+        return;
+    }
+    
+    speedVariationStrength = strength;
+    
+    Serial.printf("Speed variation strength set to %.2f (%.0f%%)\n", strength, strength * 100.0f);
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+void StepperController::setSpeedVariationPhaseInternal(float phase, uint32_t commandId) {
+    // Normalize phase to 0-2π range
+    while (phase < 0.0f) phase += 2.0f * PI;
+    while (phase >= 2.0f * PI) phase -= 2.0f * PI;
+    
+    speedVariationPhase = phase;
+    
+    Serial.printf("Speed variation phase set to %.2f radians (%.0f degrees)\n", 
+                  phase, phase * 180.0f / PI);
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+void StepperController::enableSpeedVariationInternal(uint32_t commandId) {
+    if (!stepper) {
+        reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
+        return;
+    }
+    
+    // Set current position as the reference point for variation
+    speedVariationStartPosition = stepper->getCurrentPosition();
+    speedVariationEnabled = true;
+    
+    Serial.printf("Speed variation enabled at position %ld (strength: %.0f%%)\n", 
+                  speedVariationStartPosition, speedVariationStrength * 100.0f);
+    Serial.println("Current position will be the slowest point in the cycle");
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+void StepperController::disableSpeedVariationInternal(uint32_t commandId) {
+    speedVariationEnabled = false;
+    
+    // Reset to base speed immediately
+    if (stepper && motorEnabled) {
+        uint32_t baseStepsPerSecond = rpmToStepsPerSecond(currentSpeedRPM);
+        stepper->setSpeedInHz(baseStepsPerSecond);
+    }
+    
+    Serial.println("Speed variation disabled, returned to constant speed");
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+float StepperController::calculateVariableSpeed() const {
+    if (!speedVariationEnabled || speedVariationStrength == 0.0f) {
+        return currentSpeedRPM;
+    }
+    
+    // Calculate current angle in the rotation cycle
+    float angle = getPositionAngle();
+    
+    // Apply phase offset
+    angle += speedVariationPhase;
+    
+    // Normalize angle to 0-2π
+    while (angle >= 2.0f * PI) angle -= 2.0f * PI;
+    while (angle < 0.0f) angle += 2.0f * PI;
+    
+    // Calculate speed variation using sine wave
+    // sin(angle) ranges from -1 to +1
+    // We want minimum speed at angle = 0 (current position when enabled)
+    // So we use -cos(angle) which gives -1 at angle = 0
+    float variation = -cosf(angle);
+    
+    // Scale variation by strength
+    float speedMultiplier = 1.0f + (variation * speedVariationStrength);
+    
+    // Ensure we don't go below minimum or above maximum speed
+    float variableSpeed = currentSpeedRPM * speedMultiplier;
+    variableSpeed = constrain(variableSpeed, minSpeedRPM, maxSpeedRPM);
+    
+    return variableSpeed;
+}
+
+float StepperController::getPositionAngle() const {
+    if (!stepper) return 0.0f;
+    
+    // Calculate position relative to where speed variation was enabled
+    int32_t relativePosition = cachedCurrentPosition - speedVariationStartPosition;
+    
+    // Convert position to angle in one full output revolution
+    // One full output revolution = TOTAL_STEPS_PER_REVOLUTION * microSteps
+    int32_t stepsPerOutputRevolution = TOTAL_STEPS_PER_REVOLUTION * microSteps;
+    
+    // Calculate angle (0 to 2π for one complete revolution)
+    float angle = (2.0f * PI * relativePosition) / stepsPerOutputRevolution;
+    
+    return angle;
+}
+
+float StepperController::getCurrentVariableSpeed() const {
+    if (speedVariationEnabled) {
+        return calculateVariableSpeed();
+    }
+    return currentSpeedRPM;
+}
+
+void StepperController::updateMotorSpeed() {
+    // Only update speed if motor is enabled, stepper is initialized, and variable speed is enabled
+    if (!stepper || !motorEnabled || !speedVariationEnabled) {
+        return;
+    }
+    
+    // Only update if motor is actually running (use cached state)
+    if (!cachedIsRunning) {
+        return;
+    }
+    
+    // Calculate and apply variable speed
+    float variableSpeed = calculateVariableSpeed();
+    uint32_t stepsPerSecond = rpmToStepsPerSecond(variableSpeed);
+    stepper->setSpeedInHz(stepsPerSecond);
 }

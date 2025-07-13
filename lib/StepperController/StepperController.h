@@ -18,7 +18,11 @@ enum class StepperCommand {
     EMERGENCY_STOP,
     SET_CURRENT,
     RESET_COUNTERS,
-    RESET_STALL_COUNT
+    RESET_STALL_COUNT,
+    SET_SPEED_VARIATION,
+    SET_SPEED_VARIATION_PHASE,
+    ENABLE_SPEED_VARIATION,
+    DISABLE_SPEED_VARIATION
 };
 
 // Command result status
@@ -89,7 +93,8 @@ private:
     static const int TOTAL_STEPS_PER_REVOLUTION = STEPS_PER_REVOLUTION * GEAR_RATIO;
     
     // Timing configuration
-    static const unsigned long CACHE_UPDATE_INTERVAL = 500;
+    static const unsigned long CACHE_UPDATE_INTERVAL = 500;      // Cache update every 500ms
+    static const unsigned long MOTOR_SPEED_UPDATE_INTERVAL = 50; // Speed update every 50ms for smooth variation
     
     // Speed settings (in RPM) - max 30 RPM for the final output (0.5 RPS)
     float currentSpeedRPM;
@@ -97,6 +102,12 @@ private:
     float maxSpeedRPM;
     int microSteps;          // Fixed at 16 - no longer user configurable
     int runCurrent;
+    
+    // Speed variation settings
+    bool speedVariationEnabled;
+    float speedVariationStrength;    // 0.0 to 1.0 (0% to 100% variation)
+    float speedVariationPhase;       // Phase offset in radians (0 to 2*PI)
+    int32_t speedVariationStartPosition; // Position where variation was enabled
     
     // State tracking
     bool motorEnabled;
@@ -142,9 +153,20 @@ private:
     void setRunCurrentInternal(int current, uint32_t commandId);
     void resetCountersInternal(uint32_t commandId);
     void resetStallCountInternal(uint32_t commandId);
+    void setSpeedVariationInternal(float strength, uint32_t commandId);
+    void setSpeedVariationPhaseInternal(float phase, uint32_t commandId);
+    void enableSpeedVariationInternal(uint32_t commandId);
+    void disableSpeedVariationInternal(uint32_t commandId);
+    
+    // Speed variation helper methods
+    float calculateVariableSpeed() const;
+    float getPositionAngle() const;
     
     // Helper methods for status reporting
     void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
+    
+    // Speed variation control
+    void updateMotorSpeed();
 
 protected:
     // Task implementation
@@ -155,8 +177,9 @@ protected:
     void updateCache();
     
     // Helper methods for run() timing
-    TickType_t calculateQueueTimeout(unsigned long nextCacheUpdate);
+    TickType_t calculateQueueTimeout(unsigned long nextUpdate);
     bool isCacheUpdateDue(unsigned long nextCacheUpdate);
+    bool isUpdateDue(unsigned long nextUpdate);
     
 public:
     StepperController();
@@ -174,6 +197,12 @@ public:
     uint32_t setRunCurrent(int current);
     uint32_t resetCounters();
     uint32_t resetStallCount();
+    
+    // Speed variation control (thread-safe via command queue)
+    uint32_t setSpeedVariation(float strength);           // Set variation strength (0.0 to 1.0)
+    uint32_t setSpeedVariationPhase(float phase);         // Set phase offset (0.0 to 2*PI)
+    uint32_t enableSpeedVariation();                      // Enable variable speed (current position becomes slowest)
+    uint32_t disableSpeedVariation();                     // Disable variable speed
     
     // Command result retrieval (thread-safe)
     bool getCommandResult(CommandResultData& result); // non-blocking, returns false if no result available
@@ -198,6 +227,12 @@ public:
     bool isStallDetected() const { return cachedStallDetected; }
     uint16_t getStallCount() const { return stallCount; }
     unsigned long getLastStallTime() const { return lastStallTime; }
+    
+    // Speed variation getters (thread-safe - read-only)
+    bool isSpeedVariationEnabled() const { return speedVariationEnabled; }
+    float getSpeedVariationStrength() const { return speedVariationStrength; }
+    float getSpeedVariationPhase() const { return speedVariationPhase; }
+    float getCurrentVariableSpeed() const;  // Get current speed including variation
     
     // Stall detection configuration
     void setStallGuardThreshold(uint8_t threshold); // 0 = most sensitive, 255 = least sensitive
