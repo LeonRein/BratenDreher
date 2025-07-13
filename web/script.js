@@ -63,9 +63,10 @@ class BratenDreherBLE {
     // Acceleration conversion methods
     rpmToStepsPerSecond(rpm) {
         // Calculate steps per second for the motor (before gear reduction)
+        // Must match exactly with backend calculation in StepperController::rpmToStepsPerSecond()
         const motorRPM = rpm * this.GEAR_RATIO;
         const motorStepsPerSecond = (motorRPM * this.STEPS_PER_REVOLUTION * this.MICROSTEPS) / 60.0;
-        return Math.round(motorStepsPerSecond);
+        return Math.floor(motorStepsPerSecond); // Use Math.floor to match backend's static_cast<uint32_t>
     }
     
     accelerationToTime(accelerationStepsPerSec2) {
@@ -83,8 +84,10 @@ class BratenDreherBLE {
     
     timeToAcceleration(timeSeconds) {
         // Convert time (to reach max speed) to acceleration (steps/s²)
+        // Must match exactly with backend calculation in StepperController::calculateAccelerationForTime()
         const maxStepsPerSecond = this.rpmToStepsPerSecond(this.MAX_SPEED_RPM);
-        return Math.round(maxStepsPerSecond / timeSeconds);
+        const acceleration = maxStepsPerSecond / timeSeconds;
+        return Math.floor(acceleration); // Use Math.floor to match backend's static_cast<uint32_t>
     }
     
     initializeUIElements() {
