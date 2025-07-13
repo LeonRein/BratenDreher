@@ -6,6 +6,7 @@ StepperController::StepperController()
       microSteps(16), runCurrent(30), motorEnabled(false), clockwise(true),  // Fixed to 16 microsteps
       startTime(0), totalSteps(0), isFirstStart(true), tmc2209Initialized(false),
       stallDetected(false), lastStallTime(0), stallCount(0),
+      currentAcceleration(0),  // Will be set during initialization
       speedVariationEnabled(false), speedVariationStrength(0.0f), speedVariationPhase(0.0f), speedVariationStartPosition(0),
       cachedCurrentPosition(0), cachedIsRunning(false), cachedStallDetected(false), nextCommandId(1) {
     
@@ -91,6 +92,7 @@ bool StepperController::begin() {
     // Target: reach 30 RPM in 2 seconds for responsive speed changes (16000 steps/s²)
     uint32_t defaultAcceleration = calculateAccelerationForTime(30.0f, 2.0f);
     stepper->setAcceleration(defaultAcceleration);
+    currentAcceleration = defaultAcceleration;  // Track the set acceleration
     
     // Set initial speed using internal method (avoid command queue during initialization)
     setSpeedInternal(currentSpeedRPM, 0); // Use commandId 0 for internal calls
@@ -721,6 +723,7 @@ void StepperController::setAccelerationForTime(float targetRPM, float timeSecond
     
     uint32_t newAcceleration = calculateAccelerationForTime(targetRPM, timeSeconds);
     stepper->setAcceleration(newAcceleration);
+    currentAcceleration = newAcceleration;  // Track the set acceleration
     stepper->applySpeedAcceleration();
     
     Serial.printf("Acceleration set to %u steps/s² for %0.1f RPM in %.1f seconds\n", 
@@ -903,22 +906,16 @@ void StepperController::updateAccelerationForVariableSpeed() {
         return;
     }
     
-    // Get current acceleration (FastAccelStepper doesn't provide a getter, 
-    // so we'll track it ourselves or use a reasonable minimum)
-    // For now, let's use the normal acceleration as baseline
-    uint32_t normalAcceleration = calculateAccelerationForTime(30.0f, 2.0f);
+    // FastAccelStepper doesn't provide a getter for current acceleration,
+    // so we need to track it ourselves or always apply the calculated value.
+    // For now, we'll always set the required acceleration when variable speed is active
+    // to ensure smooth operation regardless of the previous setting.
+    stepper->setAcceleration(requiredAcceleration);
+    currentAcceleration = requiredAcceleration;  // Track the set acceleration
+    stepper->applySpeedAcceleration();
     
-    // Only increase acceleration if we need more than what we currently have
-    if (requiredAcceleration > normalAcceleration) {
-        stepper->setAcceleration(requiredAcceleration);
-        stepper->applySpeedAcceleration();
-        
-        Serial.printf("Acceleration increased to %u steps/s² for variable speed operation\n", 
-                      requiredAcceleration);
-    } else {
-        Serial.printf("Current acceleration sufficient for variable speed (required: %u, keeping current)\n", 
-                      requiredAcceleration);
-    }
+    Serial.printf("Acceleration set to %u steps/s² for variable speed operation\n", 
+                  requiredAcceleration);
 }
 
 void StepperController::updateMotorSpeed() {

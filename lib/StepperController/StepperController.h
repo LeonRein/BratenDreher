@@ -103,6 +103,9 @@ private:
     int microSteps;          // Fixed at 16 - no longer user configurable
     int runCurrent;
     
+    // Acceleration tracking
+    uint32_t currentAcceleration;    // Current acceleration in steps/s²
+    
     // Speed variation settings
     bool speedVariationEnabled;
     float speedVariationStrength;    // 0.0 to 1.0 (0% to 100% variation)
@@ -212,6 +215,7 @@ public:
     
     // Getters
     float getSpeed() const { return currentSpeedRPM; }
+    uint32_t getCurrentAcceleration() const { return currentAcceleration; }
     bool isEnabled() const { return motorEnabled; }
     bool isClockwise() const { return clockwise; }
     float getMinSpeed() const { return minSpeedRPM; }

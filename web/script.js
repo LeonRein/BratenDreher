@@ -88,6 +88,7 @@ class BratenDreherBLE {
         // Status elements
         this.motorStatus = document.getElementById('motorStatus');
         this.currentSpeed = document.getElementById('currentSpeed');
+        this.currentAcceleration = document.getElementById('currentAcceleration');
         this.currentDirection = document.getElementById('currentDirection');
         this.currentCurrent = document.getElementById('currentCurrent');
         this.tmc2209Status = document.getElementById('tmc2209Status');
@@ -714,6 +715,8 @@ class BratenDreherBLE {
         this.motorStatus.textContent = status.enabled ? 
             (status.running ? 'Running' : 'Enabled') : 'Stopped';
         this.currentSpeed.textContent = `${status.speed.toFixed(1)} RPM`;
+        this.currentAcceleration.textContent = status.acceleration ? 
+            `${status.acceleration.toLocaleString()} steps/s²` : '0 steps/s²';
         this.currentDirection.textContent = status.direction === 'cw' ? 'Clockwise' : 'Counter-clockwise';
         this.currentCurrent.textContent = `${status.current || this.current}%`;
         
