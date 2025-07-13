@@ -12,16 +12,15 @@ unsigned long lastLedToggle = 0;
 bool ledState = false;
 
 void setup() {
+    delay(200);
     // Initialize USB CDC for ESP32-S3
     Serial.begin(115200);
     
     // Wait for USB CDC connection (ESP32-S3 specific)
     unsigned long startTime = millis();
-    while (!Serial && (millis() - startTime < 5000)) {
+    while (!Serial && (millis() - startTime < 1000)) {
         delay(100);
     }
-    
-    delay(1000);
     
     Serial.println();
     Serial.println("=== BratenDreher Stepper Control ===");
