@@ -436,12 +436,22 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
         updateAccelerationForVariableSpeed();
     }
     
+    // Save settings only if not during initialization (commandId != 0)
+    if (commandId != 0) {
+        saveSettings();
+    }
+    
     Serial.printf("Speed set to %.2f RPM (%u steps/sec)\n", rpm, stepsPerSecond);
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
 void StepperController::setDirectionInternal(bool clockwise, uint32_t commandId) {
     this->clockwise = clockwise;
+    
+    // Save settings only if not during initialization (commandId != 0)
+    if (commandId != 0) {
+        saveSettings();
+    }
     
     Serial.printf("Direction set to %s\n", clockwise ? "clockwise" : "counter-clockwise");
     reportResult(commandId, CommandResult::SUCCESS);
@@ -785,10 +795,13 @@ void StepperController::enableSpeedVariationInternal(uint32_t commandId) {
     speedVariationStartPosition = stepper->getCurrentPosition();
     speedVariationEnabled = true;
     
+    // Reset phase offset to 0 when re-enabling variable speed
+    speedVariationPhase = 0.0f;
+    
     // Dynamically calculate and apply required acceleration for variable speed
     updateAccelerationForVariableSpeed();
     
-    Serial.printf("Speed variation enabled at position %ld (strength: %.0f%%)\n", 
+    Serial.printf("Speed variation enabled at position %ld (strength: %.0f%%, phase: 0°)\n", 
                   speedVariationStartPosition, speedVariationStrength * 100.0f);
     Serial.println("Current position will be the slowest point in the cycle");
     reportResult(commandId, CommandResult::SUCCESS);

@@ -618,7 +618,6 @@ class BratenDreherBLE {
     async setAccelerationTime(timeSeconds) {
         // Convert time to acceleration and send acceleration directly in steps/s²
         const accelerationStepsPerSec2 = this.timeToAcceleration(timeSeconds);
-        console.log(`Setting acceleration time: ${timeSeconds}s → Acceleration: ${accelerationStepsPerSec2} steps/s²`);
         return await this.sendCommand('acceleration', accelerationStepsPerSec2);
     }
     
@@ -833,12 +832,6 @@ class BratenDreherBLE {
             const deviceAccelerationTime = this.accelerationToTime(status.acceleration);
             const deviceTime = Math.round(deviceAccelerationTime);
             
-            // Debug logging to understand the mismatch
-            console.log(`Acceleration Status Debug:`);
-            console.log(`  Current slider time: ${currentSliderTime}s`);
-            console.log(`  Device acceleration: ${status.acceleration} steps/s²`);
-            console.log(`  Device acceleration → time: ${deviceAccelerationTime.toFixed(2)}s (rounded: ${deviceTime}s)`);
-            
             // Check if this is a round-trip issue: convert current slider value to acceleration 
             // and see if it matches what the device reported
             const currentSliderAcceleration = this.timeToAcceleration(currentSliderTime);
@@ -846,18 +839,10 @@ class BratenDreherBLE {
             const accelerationToleranceValue = status.acceleration * 0.02; // 2% tolerance
             const significantDifference = accelerationDifference > accelerationToleranceValue;
             
-            console.log(`  Current slider time → acceleration: ${currentSliderAcceleration} steps/s²`);
-            console.log(`  Acceleration difference: ${accelerationDifference} steps/s² (tolerance: ${accelerationToleranceValue.toFixed(1)})`);
-            console.log(`  Significant difference: ${significantDifference}`);
-            console.log(`  Time difference: ${Math.abs(currentSliderTime - deviceTime)}s`);
-            
             // Only update if there's a significant difference AND time difference > 1 second
             if (significantDifference && Math.abs(currentSliderTime - deviceTime) > 1) {
-                console.log(`  → UPDATING slider from ${currentSliderTime}s to ${deviceTime}s`);
                 this.accelerationTimeSlider.value = deviceTime;
                 this.accelerationTimeValue.textContent = deviceTime;
-            } else {
-                console.log(`  → NOT updating slider (within tolerance or time difference <= 1s)`);
             }
         }
         
