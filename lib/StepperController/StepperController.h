@@ -57,6 +57,9 @@ private:
     static const int GEAR_RATIO = 10;             // 1:10 reduction
     static const int TOTAL_STEPS_PER_REVOLUTION = STEPS_PER_REVOLUTION * GEAR_RATIO;
     
+    // Timing configuration
+    static const unsigned long CACHE_UPDATE_INTERVAL = 500;
+    
     // Speed settings (in RPM) - max 30 RPM for the final output (0.5 RPS)
     float currentSpeedRPM;
     float minSpeedRPM;
@@ -70,6 +73,10 @@ private:
     unsigned long startTime;
     unsigned long totalSteps;
     bool isFirstStart;
+    
+    // Cached values for thread-safe reading
+    mutable int32_t cachedCurrentPosition;
+    mutable bool cachedIsRunning;
     
     // Command queue for thread-safe operation
     QueueHandle_t commandQueue;
@@ -96,9 +103,13 @@ protected:
     // Task implementation
     void run() override;
     
-    // Internal update method
-    void update();
-    void processCommands();
+    // Internal methods
+    void processCommand(const StepperCommandData& cmd);
+    void updateCache();
+    
+    // Helper methods for run() timing
+    TickType_t calculateQueueTimeout(unsigned long nextCacheUpdate);
+    bool isCacheUpdateDue(unsigned long nextCacheUpdate);
     
 public:
     StepperController();

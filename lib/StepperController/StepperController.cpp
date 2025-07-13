@@ -4,7 +4,8 @@ StepperController::StepperController()
     : Task("Stepper_Task", 4096, 1, 1), // Task name, 4KB stack, priority 1, core 1
       stepper(nullptr), serialStream(Serial2), currentSpeedRPM(1.0f), minSpeedRPM(0.1f), maxSpeedRPM(30.0f),
       microSteps(32), runCurrent(30), motorEnabled(false), clockwise(true),
-      startTime(0), totalSteps(0), isFirstStart(true) {
+      startTime(0), totalSteps(0), isFirstStart(true),
+      cachedCurrentPosition(0), cachedIsRunning(false) {
     
     // Create command queue for thread-safe operation
     commandQueue = xQueueCreate(COMMAND_QUEUE_SIZE, sizeof(StepperCommandData));
@@ -185,11 +186,8 @@ void StepperController::emergencyStopInternal() {
 }
 
 float StepperController::getTotalRevolutions() const {
-    if (!stepper) return 0.0f;
-    
-    // Get total steps from FastAccelStepper
-    int32_t currentPosition = stepper->getCurrentPosition();
-    float motorRevolutions = abs(currentPosition) / (float)(STEPS_PER_REVOLUTION * microSteps);
+    // Use cached position to avoid thread safety issues with FastAccelStepper
+    float motorRevolutions = abs(cachedCurrentPosition) / (float)(STEPS_PER_REVOLUTION * microSteps);
     return motorRevolutions / GEAR_RATIO; // Convert to output shaft revolutions
 }
 
@@ -199,8 +197,8 @@ unsigned long StepperController::getRunTime() const {
 }
 
 bool StepperController::isRunning() const {
-    if (!stepper) return false;
-    return stepper->isRunning() && motorEnabled;
+    // Use cached running state to avoid thread safety issues
+    return cachedIsRunning && motorEnabled;
 }
 
 void StepperController::setMicroStepsInternal(int steps) {
@@ -241,20 +239,102 @@ void StepperController::run() {
     
     Serial.println("Stepper Controller initialized successfully!");
     
+    // Initialize timing variables
+    StepperCommandData cmd;
+    unsigned long nextCacheUpdate = millis() + CACHE_UPDATE_INTERVAL;
+    
+    // Main event loop
     while (true) {
-        // Process commands first (thread-safe)
-        processCommands();
+        // Calculate smart timeout for queue operations
+        TickType_t timeout = calculateQueueTimeout(nextCacheUpdate);
         
-        // Then update stepper state
-        update();
+        // Block on queue until command arrives or cache update is due
+        if (xQueueReceive(commandQueue, &cmd, timeout) == pdTRUE) {
+            processCommand(cmd);
+        }
         
-        vTaskDelay(pdMS_TO_TICKS(1)); // 1ms delay for precise stepper control
+        // Perform cache update if due
+        if (isCacheUpdateDue(nextCacheUpdate)) {
+            updateCache();
+            nextCacheUpdate = millis() + CACHE_UPDATE_INTERVAL;
+        }
     }
 }
 
-void StepperController::update() {
-    // FastAccelStepper handles everything internally via interrupts
-    // No manual update needed, but we can add monitoring here if needed
+TickType_t StepperController::calculateQueueTimeout(unsigned long nextCacheUpdate) {
+    unsigned long currentTime = millis();
+    
+    // Handle millis() overflow gracefully
+    if (nextCacheUpdate < currentTime) {
+        return 0; // Cache update overdue
+    }
+    
+    unsigned long timeUntilUpdate = nextCacheUpdate - currentTime;
+    
+    // Clamp timeout to reasonable bounds
+    if (timeUntilUpdate > 100) {
+        timeUntilUpdate = 100; // Max 100ms timeout for responsiveness
+    }
+    
+    return timeUntilUpdate > 0 ? pdMS_TO_TICKS(timeUntilUpdate) : 0;
+}
+
+bool StepperController::isCacheUpdateDue(unsigned long nextCacheUpdate) {
+    unsigned long currentTime = millis();
+    
+    // Handle millis() overflow case
+    if (nextCacheUpdate > currentTime && (nextCacheUpdate - currentTime) > 0x80000000UL) {
+        return true; // Overflow detected
+    }
+    
+    return currentTime >= nextCacheUpdate;
+}
+
+void StepperController::updateCache() {
+    // Update cached values for thread-safe reading
+    if (stepper) {
+        cachedCurrentPosition = stepper->getCurrentPosition();
+        cachedIsRunning = stepper->isRunning();
+    } else {
+        cachedCurrentPosition = 0;
+        cachedIsRunning = false;
+    }
+}
+
+void StepperController::processCommand(const StepperCommandData& cmd) {
+    switch (cmd.command) {
+        case StepperCommand::SET_SPEED:
+            setSpeedInternal(cmd.floatValue);
+            break;
+            
+        case StepperCommand::SET_DIRECTION:
+            setDirectionInternal(cmd.boolValue);
+            break;
+            
+        case StepperCommand::ENABLE:
+            enableInternal();
+            break;
+            
+        case StepperCommand::DISABLE:
+            disableInternal();
+            break;
+            
+        case StepperCommand::EMERGENCY_STOP:
+            emergencyStopInternal();
+            break;
+            
+        case StepperCommand::SET_MICROSTEPS:
+            setMicroStepsInternal(cmd.intValue);
+            break;
+            
+        case StepperCommand::SET_CURRENT:
+            setRunCurrentInternal(cmd.intValue);
+            break;
+            
+        case StepperCommand::RESET_COUNTERS:
+            resetCountersInternal();
+            break;
+    }
 }
 
 void StepperController::resetCountersInternal() {
@@ -302,48 +382,6 @@ void StepperController::loadSettings() {
     } else {
         Serial.println("Failed to open preferences for loading, using defaults");
         // Default values are already set in constructor
-    }
-}
-
-void StepperController::processCommands() {
-    StepperCommandData cmd;
-    
-    // Process all pending commands with minimal timeout
-    while (xQueueReceive(commandQueue, &cmd, pdMS_TO_TICKS(1)) == pdTRUE) {
-        switch (cmd.command) {
-            case StepperCommand::SET_SPEED:
-                // Direct call to internal implementation
-                setSpeedInternal(cmd.floatValue);
-                break;
-                
-            case StepperCommand::SET_DIRECTION:
-                setDirectionInternal(cmd.boolValue);
-                break;
-                
-            case StepperCommand::ENABLE:
-                enableInternal();
-                break;
-                
-            case StepperCommand::DISABLE:
-                disableInternal();
-                break;
-                
-            case StepperCommand::EMERGENCY_STOP:
-                emergencyStopInternal();
-                break;
-                
-            case StepperCommand::SET_MICROSTEPS:
-                setMicroStepsInternal(cmd.intValue);
-                break;
-                
-            case StepperCommand::SET_CURRENT:
-                setRunCurrentInternal(cmd.intValue);
-                break;
-                
-            case StepperCommand::RESET_COUNTERS:
-                resetCountersInternal();
-                break;
-        }
     }
 }
 
