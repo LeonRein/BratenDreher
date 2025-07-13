@@ -418,8 +418,9 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
     currentSpeedRPM = rpm;
     uint32_t stepsPerSecond = rpmToStepsPerSecond(rpm);
     
-    // FastAccelStepper setSpeedInHz returns void - just call it
+    // Set speed and apply it with acceleration
     stepper->setSpeedInHz(stepsPerSecond);
+    stepper->applySpeedAcceleration();
     
     Serial.printf("Speed set to %.2f RPM (%u steps/sec)\n", rpm, stepsPerSecond);
     reportResult(commandId, CommandResult::SUCCESS);
@@ -714,6 +715,7 @@ void StepperController::setAccelerationForTime(float targetRPM, float timeSecond
     
     uint32_t newAcceleration = calculateAccelerationForTime(targetRPM, timeSeconds);
     stepper->setAcceleration(newAcceleration);
+    stepper->applySpeedAcceleration();
     
     Serial.printf("Acceleration set to %u steps/s² for %0.1f RPM in %.1f seconds\n", 
                   newAcceleration, targetRPM, timeSeconds);
@@ -768,6 +770,7 @@ void StepperController::disableSpeedVariationInternal(uint32_t commandId) {
     if (stepper && motorEnabled) {
         uint32_t baseStepsPerSecond = rpmToStepsPerSecond(currentSpeedRPM);
         stepper->setSpeedInHz(baseStepsPerSecond);
+        stepper->applySpeedAcceleration();
     }
     
     Serial.println("Speed variation disabled, returned to constant speed");
@@ -843,4 +846,5 @@ void StepperController::updateMotorSpeed() {
     float variableSpeed = calculateVariableSpeed();
     uint32_t stepsPerSecond = rpmToStepsPerSecond(variableSpeed);
     stepper->setSpeedInHz(stepsPerSecond);
+    stepper->applySpeedAcceleration();
 }
