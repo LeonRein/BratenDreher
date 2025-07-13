@@ -16,7 +16,6 @@ class BratenDreherBLE {
         this.motorSpeed = 1.0;
         this.motorDirection = true; // true = clockwise
         this.motorEnabled = false;
-        this.microsteps = 32;
         this.current = 30;
         
         // Bind the disconnect handler so we can add/remove it
@@ -56,7 +55,6 @@ class BratenDreherBLE {
         this.clockwiseBtn = document.getElementById('clockwiseBtn');
         this.counterclockwiseBtn = document.getElementById('counterclockwiseBtn');
         this.emergencyStopBtn = document.getElementById('emergencyStopBtn');
-        this.microstepsSelect = document.getElementById('microstepsSelect');
         this.currentSlider = document.getElementById('currentSlider');
         this.currentValue = document.getElementById('currentValue');
         this.accelerationTimeSlider = document.getElementById('accelerationTimeSlider');
@@ -67,7 +65,6 @@ class BratenDreherBLE {
         this.motorStatus = document.getElementById('motorStatus');
         this.currentSpeed = document.getElementById('currentSpeed');
         this.currentDirection = document.getElementById('currentDirection');
-        this.currentMicrosteps = document.getElementById('currentMicrosteps');
         this.currentCurrent = document.getElementById('currentCurrent');
         this.lastUpdate = document.getElementById('lastUpdate');
         
@@ -121,10 +118,6 @@ class BratenDreherBLE {
         });
         
         // Advanced settings
-        this.microstepsSelect.addEventListener('change', (e) => {
-            this.setMicrosteps(parseInt(e.target.value));
-        });
-        
         this.currentSlider.addEventListener('input', (e) => {
             const current = parseInt(e.target.value);
             this.currentValue.textContent = current;
@@ -433,11 +426,6 @@ class BratenDreherBLE {
         return await this.sendCommand('speed', speed);
     }
     
-    async setMicrosteps(microsteps) {
-        this.microsteps = microsteps;
-        return await this.sendCommand('microsteps', microsteps);
-    }
-    
     async setCurrent(current) {
         this.current = current;
         return await this.sendCommand('current', current);
@@ -519,7 +507,6 @@ class BratenDreherBLE {
             (status.running ? 'Running' : 'Enabled') : 'Stopped';
         this.currentSpeed.textContent = `${status.speed.toFixed(1)} RPM`;
         this.currentDirection.textContent = status.direction === 'cw' ? 'Clockwise' : 'Counter-clockwise';
-        this.currentMicrosteps.textContent = status.microsteps || this.microsteps;
         this.currentCurrent.textContent = `${status.current || this.current}%`;
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
         
@@ -540,18 +527,7 @@ class BratenDreherBLE {
             this.avgSpeed.textContent = '0.0';
         }
         
-        // Update UI state if needed
-        if (this.motorEnabled !== status.enabled) {
-            this.motorEnabled = status.enabled;
-            this.motorToggle.checked = status.enabled;
-        }
-        
-        // Update microsteps and current if different
-        if (status.microsteps && status.microsteps !== this.microsteps) {
-            this.microsteps = status.microsteps;
-            this.microstepsSelect.value = status.microsteps;
-        }
-        
+        // Update current if different
         if (status.current && status.current !== this.current) {
             this.current = status.current;
             this.currentSlider.value = status.current;
@@ -593,8 +569,6 @@ class BratenDreherBLE {
                         userMessage = 'Speed Error: ' + message;
                     } else if (message.includes('Current out of range')) {
                         userMessage = 'Current Error: ' + message;
-                    } else if (message.includes('microsteps')) {
-                        userMessage = 'Microsteps Error: ' + message;
                     } else {
                         userMessage = 'Invalid Setting: ' + (message || 'The parameter value is out of range');
                     }
@@ -676,7 +650,6 @@ class BratenDreherBLE {
             this.clockwiseBtn,
             this.counterclockwiseBtn,
             this.emergencyStopBtn,
-            this.microstepsSelect,
             this.currentSlider,
             this.accelerationTimeSlider,
             this.resetStatsBtn

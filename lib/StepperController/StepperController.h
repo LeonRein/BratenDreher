@@ -16,7 +16,6 @@ enum class StepperCommand {
     ENABLE,
     DISABLE,
     EMERGENCY_STOP,
-    SET_MICROSTEPS,
     SET_CURRENT,
     RESET_COUNTERS
 };
@@ -95,7 +94,7 @@ private:
     float currentSpeedRPM;
     float minSpeedRPM;
     float maxSpeedRPM;
-    int microSteps;
+    int microSteps;          // Fixed at 16 - no longer user configurable
     int runCurrent;
     
     // State tracking
@@ -131,7 +130,6 @@ private:
     void enableInternal(uint32_t commandId);
     void disableInternal(uint32_t commandId);
     void emergencyStopInternal(uint32_t commandId);
-    void setMicroStepsInternal(int steps, uint32_t commandId);
     void setRunCurrentInternal(int current, uint32_t commandId);
     void resetCountersInternal(uint32_t commandId);
     
@@ -163,7 +161,6 @@ public:
     uint32_t enable();
     uint32_t disable();
     uint32_t emergencyStop();
-    uint32_t setMicroSteps(int steps);
     uint32_t setRunCurrent(int current);
     uint32_t resetCounters();
     
@@ -183,7 +180,6 @@ public:
     bool isRunning() const;
     
     // Settings (thread-safe - read-only)
-    int getMicroSteps() const { return microSteps; }
     int getRunCurrent() const { return runCurrent; }
     
     // Helper functions for acceleration calculation

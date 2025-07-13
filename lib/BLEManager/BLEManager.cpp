@@ -199,18 +199,6 @@ void BLEManager::handleCommand(const std::string& command) {
             sendCommandResult(0, "error", String("Failed to queue motor ") + (enable ? "enable" : "disable") + " command");
         }
     }
-    else if (strcmp(type, "microsteps") == 0) {
-        int microsteps = doc["value"];
-        if (microsteps > 0) {
-            uint32_t commandId = stepperController->setMicroSteps(microsteps);
-            if (commandId > 0) {
-                Serial.printf("Microsteps command queued: %d (ID: %u)\n", microsteps, commandId);
-            } else {
-                Serial.println("Failed to queue microsteps command");
-                sendCommandResult(0, "error", "Failed to queue microsteps command");
-            }
-        }
-    }
     else if (strcmp(type, "current") == 0) {
         int current = doc["value"];
         if (current >= 10 && current <= 100) {
@@ -272,7 +260,6 @@ void BLEManager::sendStatus() {
     statusDoc["connected"] = deviceConnected;
     statusDoc["totalRevolutions"] = stepperController->getTotalRevolutions();
     statusDoc["runtime"] = stepperController->getRunTime();
-    statusDoc["microsteps"] = stepperController->getMicroSteps();
     statusDoc["current"] = stepperController->getRunCurrent();
     statusDoc["timestamp"] = millis();
     

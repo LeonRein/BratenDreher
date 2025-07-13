@@ -3,7 +3,7 @@
 StepperController::StepperController() 
     : Task("Stepper_Task", 4096, 1, 1), // Task name, 4KB stack, priority 1, core 1
       stepper(nullptr), serialStream(Serial2), currentSpeedRPM(1.0f), minSpeedRPM(0.1f), maxSpeedRPM(30.0f),
-      microSteps(32), runCurrent(30), motorEnabled(false), clockwise(true),
+      microSteps(16), runCurrent(30), motorEnabled(false), clockwise(true),  // Fixed to 16 microsteps
       startTime(0), totalSteps(0), isFirstStart(true),
       cachedCurrentPosition(0), cachedIsRunning(false), nextCommandId(1) {
     
@@ -256,10 +256,6 @@ void StepperController::processCommand(const StepperCommandData& cmd) {
             emergencyStopInternal(cmd.commandId);
             break;
             
-        case StepperCommand::SET_MICROSTEPS:
-            setMicroStepsInternal(cmd.intValue, cmd.commandId);
-            break;
-            
         case StepperCommand::SET_CURRENT:
             setRunCurrentInternal(cmd.intValue, cmd.commandId);
             break;
@@ -375,32 +371,6 @@ void StepperController::emergencyStopInternal(uint32_t commandId) {
     stepperDriver.disable();
     
     Serial.println("EMERGENCY STOP executed");
-    reportResult(commandId, CommandResult::SUCCESS);
-}
-
-void StepperController::setMicroStepsInternal(int steps, uint32_t commandId) {
-    // Validate microsteps (must be power of 2, typically 1, 2, 4, 8, 16, 32, 64, 128, 256)
-    if (steps <= 0 || (steps & (steps - 1)) != 0 || steps > 256) {
-        reportResult(commandId, CommandResult::INVALID_PARAMETER, 
-                    "Invalid microsteps value (must be power of 2, 1-256)");
-        return;
-    }
-    
-    microSteps = steps;
-    
-    // Set microsteps on TMC2209
-    stepperDriver.setMicrostepsPerStep(steps);
-    
-    // Verify driver communication by checking if it's responding
-    if (!stepperDriver.isSetupAndCommunicating()) {
-        reportResult(commandId, CommandResult::COMMUNICATION_ERROR, 
-                    "TMC2209 driver not responding after setting microsteps");
-        return;
-    }
-    
-    saveSettings();
-    
-    Serial.printf("Microsteps set to %d\n", steps);
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -547,21 +517,6 @@ uint32_t StepperController::emergencyStop() {
     
     // Emergency stop has higher priority - try to send immediately
     if (xQueueSend(commandQueue, &cmd, 0) == pdTRUE) {
-        return commandId;
-    }
-    return 0;
-}
-
-uint32_t StepperController::setMicroSteps(int steps) {
-    if (commandQueue == nullptr) return 0;
-    
-    uint32_t commandId = nextCommandId++;
-    StepperCommandData cmd;
-    cmd.command = StepperCommand::SET_MICROSTEPS;
-    cmd.intValue = steps;
-    cmd.commandId = commandId;
-    
-    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
         return commandId;
     }
     return 0;
