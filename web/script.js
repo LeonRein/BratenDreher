@@ -18,6 +18,11 @@ class BratenDreherBLE {
         this.motorEnabled = false;
         this.current = 30;
         
+        // Debouncing timers for sliders
+        this.speedSliderTimer = null;
+        this.currentSliderTimer = null;
+        this.accelerationSliderTimer = null;
+        
         // Bind the disconnect handler so we can add/remove it
         this.onDisconnectedHandler = () => {
             console.log('GATT server disconnected event received');
@@ -90,7 +95,22 @@ class BratenDreherBLE {
         });
         
         this.speedSlider.addEventListener('input', (e) => {
-            this.setSpeed(parseFloat(e.target.value));
+            const speed = parseFloat(e.target.value);
+            this.speedValue.textContent = speed.toFixed(1); // Update display immediately
+            
+            // Visual feedback that change is pending
+            this.speedValue.style.opacity = '0.7';
+            
+            // Debounce the actual command sending
+            if (this.speedSliderTimer) {
+                clearTimeout(this.speedSliderTimer);
+            }
+            this.speedSliderTimer = setTimeout(() => {
+                this.setSpeed(speed).then(() => {
+                    // Restore full opacity when command is sent
+                    this.speedValue.style.opacity = '1';
+                });
+            }, 300); // Wait 300ms after user stops moving slider
         });
         
         this.clockwiseBtn.addEventListener('click', () => {
@@ -121,14 +141,40 @@ class BratenDreherBLE {
         // Advanced settings
         this.currentSlider.addEventListener('input', (e) => {
             const current = parseInt(e.target.value);
-            this.currentValue.textContent = current;
-            this.setCurrent(current);
+            this.currentValue.textContent = current; // Update display immediately
+            
+            // Visual feedback that change is pending
+            this.currentValue.style.opacity = '0.7';
+            
+            // Debounce the actual command sending
+            if (this.currentSliderTimer) {
+                clearTimeout(this.currentSliderTimer);
+            }
+            this.currentSliderTimer = setTimeout(() => {
+                this.setCurrent(current).then(() => {
+                    // Restore full opacity when command is sent
+                    this.currentValue.style.opacity = '1';
+                });
+            }, 300); // Wait 300ms after user stops moving slider
         });
         
         this.accelerationTimeSlider.addEventListener('input', (e) => {
             const time = parseInt(e.target.value);
-            this.accelerationTimeValue.textContent = time;
-            this.setAccelerationTime(time);
+            this.accelerationTimeValue.textContent = time; // Update display immediately
+            
+            // Visual feedback that change is pending
+            this.accelerationTimeValue.style.opacity = '0.7';
+            
+            // Debounce the actual command sending
+            if (this.accelerationSliderTimer) {
+                clearTimeout(this.accelerationSliderTimer);
+            }
+            this.accelerationSliderTimer = setTimeout(() => {
+                this.setAccelerationTime(time).then(() => {
+                    // Restore full opacity when command is sent
+                    this.accelerationTimeValue.style.opacity = '1';
+                });
+            }, 300); // Wait 300ms after user stops moving slider
         });
         
         this.resetStatsBtn.addEventListener('click', () => {
@@ -249,6 +295,9 @@ class BratenDreherBLE {
         this.server = null;
         this.service = null;
         this.commandCharacteristic = null;
+
+        // Clear any pending slider timers
+        this.clearSliderTimers();
 
         this.updateConnectionStatus('Disconnected');
         this.updateUI();
@@ -374,6 +423,21 @@ class BratenDreherBLE {
         }
     }
 
+    clearSliderTimers() {
+        if (this.speedSliderTimer) {
+            clearTimeout(this.speedSliderTimer);
+            this.speedSliderTimer = null;
+        }
+        if (this.currentSliderTimer) {
+            clearTimeout(this.currentSliderTimer);
+            this.currentSliderTimer = null;
+        }
+        if (this.accelerationSliderTimer) {
+            clearTimeout(this.accelerationSliderTimer);
+            this.accelerationSliderTimer = null;
+        }
+    }
+
     handleBLEError(error, userMessage) {
         console.error('BLE Error:', error);
         
@@ -422,7 +486,6 @@ class BratenDreherBLE {
     async setSpeed(speed) {
         speed = Math.max(0.1, Math.min(30.0, speed)); // Clamp to valid range
         this.motorSpeed = speed;
-        this.speedValue.textContent = speed.toFixed(1);
         
         return await this.sendCommand('speed', speed);
     }
@@ -503,6 +566,20 @@ class BratenDreherBLE {
     handleStatusUpdate(status) {
         console.log('Status update:', status);
         
+        // Update internal state from device status
+        this.motorEnabled = status.enabled;
+        this.motorSpeed = status.speed;
+        this.motorDirection = status.direction === 'cw';
+        
+        // Update UI controls to match device state
+        this.motorToggle.checked = status.enabled;
+        this.speedSlider.value = status.speed;
+        this.speedValue.textContent = status.speed.toFixed(1);
+        
+        // Update direction buttons
+        this.clockwiseBtn.classList.toggle('active', status.direction === 'cw');
+        this.counterclockwiseBtn.classList.toggle('active', status.direction !== 'cw');
+        
         // Update status display
         this.motorStatus.textContent = status.enabled ? 
             (status.running ? 'Running' : 'Enabled') : 'Stopped';
@@ -544,6 +621,12 @@ class BratenDreherBLE {
             this.currentSlider.value = status.current;
             this.currentValue.textContent = status.current;
         }
+        
+        // Update preset button active state based on current speed
+        this.presetBtns.forEach(btn => {
+            const presetSpeed = parseFloat(btn.dataset.speed);
+            btn.classList.toggle('active', Math.abs(presetSpeed - status.speed) < 0.05);
+        });
     }
     
     handleCommandResult(result) {
