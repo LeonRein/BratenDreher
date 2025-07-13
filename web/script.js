@@ -42,6 +42,7 @@ class BratenDreherBLE {
         this.statusIndicator = document.getElementById('statusIndicator');
         this.connectionStatus = document.getElementById('connectionStatus');
         this.connectBtn = document.getElementById('connectBtn');
+        this.reconnectBtn = document.getElementById('reconnectBtn');
         this.disconnectBtn = document.getElementById('disconnectBtn');
         
         // Control elements
@@ -76,6 +77,7 @@ class BratenDreherBLE {
     bindEventListeners() {
         // Connection buttons
         this.connectBtn.addEventListener('click', () => this.connect());
+        this.reconnectBtn.addEventListener('click', () => this.handleReconnect());
         this.disconnectBtn.addEventListener('click', () => this.disconnect());
         
         // Motor controls
@@ -132,6 +134,18 @@ class BratenDreherBLE {
         try {
             console.log('Requesting Bluetooth device...');
             this.updateConnectionStatus('Connecting...');
+            
+            // If we already have a device, try to reconnect to it first
+            if (this.device) {
+                try {
+                    console.log('Attempting to reconnect to existing device...');
+                    await this.reconnect();
+                    return;
+                } catch (error) {
+                    console.log('Reconnection failed, requesting new device');
+                    this.device = null;
+                }
+            }
             
             // Request device
             this.device = await navigator.bluetooth.requestDevice({
@@ -203,20 +217,120 @@ class BratenDreherBLE {
         
         console.log('Disconnected from BratenDreher');
     }
+
+    async ensureConnected() {
+        // Check if device exists and is connected
+        if (!this.device || !this.device.gatt || !this.device.gatt.connected) {
+            console.log('Device is not connected, updating state...');
+            this.connected = false;
+            this.updateConnectionStatus('Disconnected');
+            this.updateUI();
+            return false;
+        }
+
+        // Check if we have a valid server connection
+        if (!this.server || !this.service || Object.keys(this.characteristics).length === 0) {
+            console.log('Invalid connection state, attempting to reconnect...');
+            try {
+                await this.reconnect();
+                return this.connected;
+            } catch (error) {
+                console.error('Reconnection failed:', error);
+                return false;
+            }
+        }
+
+        return this.connected;
+    }
+
+    async reconnect() {
+        if (!this.device) {
+            throw new Error('No device available for reconnection');
+        }
+
+        console.log('Attempting to reconnect...');
+        this.updateConnectionStatus('Reconnecting...');
+
+        try {
+            // Reconnect to GATT server
+            this.server = await this.device.gatt.connect();
+            console.log('Reconnected to GATT server');
+            
+            // Get service
+            this.service = await this.server.getPrimaryService(this.serviceUUID);
+            console.log('Service found');
+            
+            // Get characteristics
+            this.characteristics.speed = await this.service.getCharacteristic(this.speedCharacteristicUUID);
+            this.characteristics.direction = await this.service.getCharacteristic(this.directionCharacteristicUUID);
+            this.characteristics.enable = await this.service.getCharacteristic(this.enableCharacteristicUUID);
+            this.characteristics.status = await this.service.getCharacteristic(this.statusCharacteristicUUID);
+            this.characteristics.microsteps = await this.service.getCharacteristic(this.microstepsCharacteristicUUID);
+            this.characteristics.current = await this.service.getCharacteristic(this.currentCharacteristicUUID);
+            this.characteristics.reset = await this.service.getCharacteristic(this.resetCharacteristicUUID);
+            
+            console.log('All characteristics reconnected');
+            
+            // Subscribe to status notifications
+            await this.characteristics.status.startNotifications();
+            this.characteristics.status.addEventListener('characteristicvaluechanged', (event) => {
+                this.handleStatusUpdate(event);
+            });
+            
+            this.connected = true;
+            this.updateConnectionStatus('Connected');
+            this.updateUI();
+            
+            console.log('Successfully reconnected to BratenDreher');
+            
+        } catch (error) {
+            console.error('Reconnection failed:', error);
+            this.onDisconnected();
+            throw error;
+        }
+    }
+
+    async handleReconnect() {
+        if (!this.device) {
+            this.showError('No device to reconnect to. Please connect first.');
+            return;
+        }
+
+        try {
+            console.log('User initiated reconnection...');
+            await this.reconnect();
+        } catch (error) {
+            console.error('Manual reconnection failed:', error);
+            this.showError(`Reconnection failed: ${error.message}`);
+        }
+    }
+
+    handleBLEError(error, userMessage) {
+        console.error('BLE Error:', error);
+        
+        // Check if it's a connection-related error
+        if (error.message && error.message.includes('GATT Server is disconnected')) {
+            console.log('GATT disconnection detected, updating connection state');
+            this.onDisconnected();
+            this.showError(`${userMessage}. Device disconnected. Please reconnect.`);
+        } else {
+            this.showError(userMessage);
+        }
+    }
     
     async setSpeed(speed) {
         speed = Math.max(0.1, Math.min(30.0, speed)); // Clamp to valid range
         this.motorSpeed = speed;
         this.speedValue.textContent = speed.toFixed(1);
         
-        if (this.connected && this.characteristics.speed) {
+        if (await this.ensureConnected() && this.characteristics.speed) {
             try {
                 const value = speed.toString();
                 await this.characteristics.speed.writeValue(new TextEncoder().encode(value));
                 console.log(`Speed set to ${speed} RPM`);
             } catch (error) {
                 console.error('Failed to set speed:', error);
-                this.showError('Failed to set speed');
+                this.handleBLEError(error, 'Failed to set speed');
             }
         }
     }
@@ -224,14 +338,14 @@ class BratenDreherBLE {
     async setMicrosteps(microsteps) {
         this.microsteps = microsteps;
         
-        if (this.connected && this.characteristics.microsteps) {
+        if (await this.ensureConnected() && this.characteristics.microsteps) {
             try {
                 const value = microsteps.toString();
                 await this.characteristics.microsteps.writeValue(new TextEncoder().encode(value));
                 console.log(`Microsteps set to ${microsteps}`);
             } catch (error) {
                 console.error('Failed to set microsteps:', error);
-                this.showError('Failed to set microsteps');
+                this.handleBLEError(error, 'Failed to set microsteps');
             }
         }
     }
@@ -239,20 +353,20 @@ class BratenDreherBLE {
     async setCurrent(current) {
         this.current = current;
         
-        if (this.connected && this.characteristics.current) {
+        if (await this.ensureConnected() && this.characteristics.current) {
             try {
                 const value = current.toString();
                 await this.characteristics.current.writeValue(new TextEncoder().encode(value));
                 console.log(`Current set to ${current}%`);
             } catch (error) {
                 console.error('Failed to set current:', error);
-                this.showError('Failed to set current');
+                this.handleBLEError(error, 'Failed to set current');
             }
         }
     }
     
     async resetStatistics() {
-        if (this.connected && this.characteristics.reset) {
+        if (await this.ensureConnected() && this.characteristics.reset) {
             try {
                 await this.characteristics.reset.writeValue(new TextEncoder().encode('1'));
                 console.log('Statistics reset');
@@ -264,7 +378,7 @@ class BratenDreherBLE {
                 }, 2000);
             } catch (error) {
                 console.error('Failed to reset statistics:', error);
-                this.showError('Failed to reset statistics');
+                this.handleBLEError(error, 'Failed to reset statistics');
             }
         }
     }
@@ -276,14 +390,14 @@ class BratenDreherBLE {
         this.clockwiseBtn.classList.toggle('active', clockwise);
         this.counterclockwiseBtn.classList.toggle('active', !clockwise);
         
-        if (this.connected && this.characteristics.direction) {
+        if (await this.ensureConnected() && this.characteristics.direction) {
             try {
                 const value = clockwise ? '1' : '0';
                 await this.characteristics.direction.writeValue(new TextEncoder().encode(value));
                 console.log(`Direction set to ${clockwise ? 'clockwise' : 'counter-clockwise'}`);
             } catch (error) {
                 console.error('Failed to set direction:', error);
-                this.showError('Failed to set direction');
+                this.handleBLEError(error, 'Failed to set direction');
             }
         }
     }
@@ -292,14 +406,14 @@ class BratenDreherBLE {
         this.motorEnabled = enabled;
         this.motorToggle.checked = enabled;
         
-        if (this.connected && this.characteristics.enable) {
+        if (await this.ensureConnected() && this.characteristics.enable) {
             try {
                 const value = enabled ? '1' : '0';
                 await this.characteristics.enable.writeValue(new TextEncoder().encode(value));
                 console.log(`Motor ${enabled ? 'enabled' : 'disabled'}`);
             } catch (error) {
                 console.error('Failed to set motor state:', error);
-                this.showError('Failed to set motor state');
+                this.handleBLEError(error, 'Failed to set motor state');
             }
         }
     }
@@ -387,10 +501,18 @@ class BratenDreherBLE {
         if (status === 'Connected') {
             this.statusIndicator.classList.add('connected');
             this.connectBtn.disabled = true;
+            this.reconnectBtn.disabled = false;
             this.disconnectBtn.disabled = false;
+        } else if (status === 'Connecting...' || status === 'Reconnecting...') {
+            this.statusIndicator.classList.remove('connected');
+            this.connectBtn.disabled = true;
+            this.reconnectBtn.disabled = true;
+            this.disconnectBtn.disabled = true;
         } else {
+            // Disconnected
             this.statusIndicator.classList.remove('connected');
             this.connectBtn.disabled = false;
+            this.reconnectBtn.disabled = !this.device; // Enable only if we have a device to reconnect to
             this.disconnectBtn.disabled = true;
         }
     }
@@ -420,9 +542,57 @@ class BratenDreherBLE {
     }
     
     showError(message) {
-        // Simple error display - you could enhance this with a toast or modal
         console.error(message);
-        alert(message);
+        
+        // Create a toast notification instead of alert
+        const toast = document.createElement('div');
+        toast.className = 'error-toast';
+        toast.textContent = message;
+        
+        // Add toast styles inline
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ef4444;
+            color: white;
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+            max-width: 350px;
+            font-size: 0.9rem;
+            animation: slideIn 0.3s ease;
+        `;
+        
+        // Add animation keyframes
+        if (!document.getElementById('toast-styles')) {
+            const style = document.createElement('style');
+            style.id = 'toast-styles';
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        document.body.appendChild(toast);
+        
+        // Remove toast after 5 seconds
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 5000);
     }
 }
 

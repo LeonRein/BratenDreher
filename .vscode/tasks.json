@@ -10,6 +10,16 @@
 				"$gcc"
 			],
 			"isBackground": false
+		},
+		{
+			"label": "Upload BratenDreher",
+			"type": "shell",
+			"command": "pio run -t upload",
+			"group": "build",
+			"problemMatcher": [
+				"$gcc"
+			],
+			"isBackground": false
 		}
 	]
 }
