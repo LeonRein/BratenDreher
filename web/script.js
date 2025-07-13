@@ -65,6 +65,7 @@ class BratenDreherBLE {
         this.accelerationTimeSlider = document.getElementById('accelerationTimeSlider');
         this.accelerationTimeValue = document.getElementById('accelerationTimeValue');
         this.resetStatsBtn = document.getElementById('resetStatsBtn');
+        this.resetStallBtn = document.getElementById('resetStallBtn');
         
         // Status elements
         this.motorStatus = document.getElementById('motorStatus');
@@ -72,6 +73,8 @@ class BratenDreherBLE {
         this.currentDirection = document.getElementById('currentDirection');
         this.currentCurrent = document.getElementById('currentCurrent');
         this.tmc2209Status = document.getElementById('tmc2209Status');
+        this.stallStatus = document.getElementById('stallStatus');
+        this.stallCount = document.getElementById('stallCount');
         this.lastUpdate = document.getElementById('lastUpdate');
         
         // Statistics elements
@@ -179,6 +182,10 @@ class BratenDreherBLE {
         
         this.resetStatsBtn.addEventListener('click', () => {
             this.resetStatistics();
+        });
+        
+        this.resetStallBtn.addEventListener('click', () => {
+            this.resetStallCount();
         });
     }
     
@@ -512,6 +519,18 @@ class BratenDreherBLE {
         return success;
     }
     
+    async resetStallCount() {
+        const success = await this.sendCommand('reset_stall', true);
+        if (success) {
+            // Visual feedback
+            this.resetStallBtn.textContent = '⚠️ Reset Successful';
+            setTimeout(() => {
+                this.resetStallBtn.textContent = '⚠️ Reset Stall Count';
+            }, 2000);
+        }
+        return success;
+    }
+    
     async setDirection(clockwise) {
         this.motorDirection = clockwise;
         
@@ -594,6 +613,25 @@ class BratenDreherBLE {
         } else {
             this.tmc2209Status.textContent = 'Unknown';
             this.tmc2209Status.style.color = '#f39c12';
+        }
+        
+        // Update stall status with fallback for backward compatibility
+        if (status.stallDetected !== undefined) {
+            this.stallStatus.textContent = status.stallDetected ? 'STALL!' : 'OK';
+            this.stallStatus.style.color = status.stallDetected ? '#e74c3c' : '#2ecc71';
+            this.stallStatus.style.fontWeight = status.stallDetected ? 'bold' : 'normal';
+        } else {
+            this.stallStatus.textContent = 'Unknown';
+            this.stallStatus.style.color = '#f39c12';
+        }
+        
+        // Update stall count
+        if (status.stallCount !== undefined) {
+            this.stallCount.textContent = status.stallCount;
+            this.stallCount.style.color = status.stallCount > 0 ? '#e67e22' : '#2ecc71';
+        } else {
+            this.stallCount.textContent = 'N/A';
+            this.stallCount.style.color = '#95a5a6';
         }
         
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
@@ -746,7 +784,8 @@ class BratenDreherBLE {
             this.emergencyStopBtn,
             this.currentSlider,
             this.accelerationTimeSlider,
-            this.resetStatsBtn
+            this.resetStatsBtn,
+            this.resetStallBtn
         ];
         
         controls.forEach(control => {

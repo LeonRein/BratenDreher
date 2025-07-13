@@ -138,6 +138,8 @@ python3 -m http.server 8000
   "microsteps": 32,
   "current": 60,
   "tmc2209Status": true,
+  "stallDetected": false,
+  "stallCount": 0,
   "timestamp": 123456
 }
 ```

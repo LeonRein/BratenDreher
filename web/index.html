@@ -147,6 +147,14 @@
                     <span id="tmc2209Status" class="status-value">Unknown</span>
                 </div>
                 <div class="status-item">
+                    <span class="status-label">Stall Status:</span>
+                    <span id="stallStatus" class="status-value">OK</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Stall Count:</span>
+                    <span id="stallCount" class="status-value">0</span>
+                </div>
+                <div class="status-item">
                     <span class="status-label">Last Update:</span>
                     <span id="lastUpdate" class="status-value">Never</span>
                 </div>
@@ -170,9 +178,14 @@
                     <span class="stat-label">Avg Speed (RPM)</span>
                 </div>
             </div>
-            <button id="resetStatsBtn" class="btn btn-secondary stats-reset">
-                📊 Reset Statistics
-            </button>
+            <div class="stats-buttons">
+                <button id="resetStatsBtn" class="btn btn-secondary stats-reset">
+                    📊 Reset Statistics
+                </button>
+                <button id="resetStallBtn" class="btn btn-warning stall-reset">
+                    ⚠️ Reset Stall Count
+                </button>
+            </div>
         </div>
 
         <!-- Info Card -->

@@ -5,7 +5,8 @@ StepperController::StepperController()
       stepper(nullptr), serialStream(Serial2), currentSpeedRPM(1.0f), minSpeedRPM(0.1f), maxSpeedRPM(30.0f),
       microSteps(16), runCurrent(30), motorEnabled(false), clockwise(true),  // Fixed to 16 microsteps
       startTime(0), totalSteps(0), isFirstStart(true), tmc2209Initialized(false),
-      cachedCurrentPosition(0), cachedIsRunning(false), nextCommandId(1) {
+      stallDetected(false), lastStallTime(0), stallCount(0),
+      cachedCurrentPosition(0), cachedIsRunning(false), cachedStallDetected(false), nextCommandId(1) {
     
     // Create command queue for thread-safe operation
     commandQueue = xQueueCreate(COMMAND_QUEUE_SIZE, sizeof(StepperCommandData));
@@ -137,12 +138,16 @@ void StepperController::configureDriver() {
     stepperDriver.enableStealthChop();
     stepperDriver.setCoolStepDurationThreshold(5000);
     
+    // Enable StallGuard for stall detection
+    stepperDriver.enableStallGuard();
+    stepperDriver.setStallGuardThreshold(10); // Sensitivity: 0 (most sensitive) to 255 (least sensitive)
+    
     // Update communication status after configuration
     tmc2209Initialized = stepperDriver.isSetupAndCommunicating();
     
     // Check if driver is communicating properly
     if (tmc2209Initialized) {
-        Serial.printf("TMC2209 configured: %d microsteps, %d%% current\n", microSteps, runCurrent);
+        Serial.printf("TMC2209 configured: %d microsteps, %d%% current, StallGuard enabled\n", microSteps, runCurrent);
     } else {
         Serial.println("WARNING: TMC2209 driver not responding during configuration");
     }
@@ -243,6 +248,24 @@ void StepperController::updateCache() {
         cachedCurrentPosition = 0;
         cachedIsRunning = false;
     }
+    
+    // Check for stall detection via DIAG pin
+    bool diagPinHigh = digitalRead(DIAG);
+    
+    // DIAG pin goes high when StallGuard triggers (motor stalled)
+    if (diagPinHigh && motorEnabled && cachedIsRunning && !stallDetected) {
+        // New stall detected
+        stallDetected = true;
+        lastStallTime = millis();
+        stallCount++;
+        Serial.printf("STALL DETECTED! Count: %d, Time: %lu\n", stallCount, lastStallTime);
+    } else if (!diagPinHigh && stallDetected) {
+        // Stall cleared
+        stallDetected = false;
+        Serial.println("Stall condition cleared");
+    }
+    
+    cachedStallDetected = stallDetected;
 }
 
 void StepperController::processCommand(const StepperCommandData& cmd) {
@@ -274,6 +297,10 @@ void StepperController::processCommand(const StepperCommandData& cmd) {
         case StepperCommand::RESET_COUNTERS:
             resetCountersInternal(cmd.commandId);
             break;
+            
+        case StepperCommand::RESET_STALL_COUNT:
+            resetStallCountInternal(cmd.commandId);
+            break;
     }
 }
 
@@ -287,6 +314,15 @@ void StepperController::resetCountersInternal(uint32_t commandId) {
     isFirstStart = false;
     
     Serial.println("Counters reset");
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+void StepperController::resetStallCountInternal(uint32_t commandId) {
+    stallCount = 0;
+    stallDetected = false;
+    lastStallTime = 0;
+    
+    Serial.println("Stall count reset");
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -557,6 +593,20 @@ uint32_t StepperController::resetCounters() {
     uint32_t commandId = nextCommandId++;
     StepperCommandData cmd;
     cmd.command = StepperCommand::RESET_COUNTERS;
+    cmd.commandId = commandId;
+    
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
+}
+
+uint32_t StepperController::resetStallCount() {
+    if (commandQueue == nullptr) return 0;
+    
+    uint32_t commandId = nextCommandId++;
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::RESET_STALL_COUNT;
     cmd.commandId = commandId;
     
     if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {

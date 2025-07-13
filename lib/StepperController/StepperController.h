@@ -17,7 +17,8 @@ enum class StepperCommand {
     DISABLE,
     EMERGENCY_STOP,
     SET_CURRENT,
-    RESET_COUNTERS
+    RESET_COUNTERS,
+    RESET_STALL_COUNT
 };
 
 // Command result status
@@ -105,9 +106,15 @@ private:
     bool isFirstStart;
     bool tmc2209Initialized;  // Track TMC2209 driver initialization status
     
+    // Stall detection
+    bool stallDetected;
+    unsigned long lastStallTime;
+    uint16_t stallCount;
+    
     // Cached values for thread-safe reading
     mutable int32_t cachedCurrentPosition;
     mutable bool cachedIsRunning;
+    mutable bool cachedStallDetected;
     
     // Command queue for thread-safe operation
     QueueHandle_t commandQueue;
@@ -133,6 +140,7 @@ private:
     void emergencyStopInternal(uint32_t commandId);
     void setRunCurrentInternal(int current, uint32_t commandId);
     void resetCountersInternal(uint32_t commandId);
+    void resetStallCountInternal(uint32_t commandId);
     
     // Helper methods for status reporting
     void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
@@ -164,6 +172,7 @@ public:
     uint32_t emergencyStop();
     uint32_t setRunCurrent(int current);
     uint32_t resetCounters();
+    uint32_t resetStallCount();
     
     // Command result retrieval (thread-safe)
     bool getCommandResult(CommandResultData& result); // non-blocking, returns false if no result available
@@ -183,6 +192,11 @@ public:
     // Settings (thread-safe - read-only)
     int getRunCurrent() const { return runCurrent; }
     bool isTMC2209Initialized() const { return tmc2209Initialized; }
+    
+    // Stall detection (thread-safe - read-only)
+    bool isStallDetected() const { return cachedStallDetected; }
+    uint16_t getStallCount() const { return stallCount; }
+    unsigned long getLastStallTime() const { return lastStallTime; }
     
     // Helper functions for acceleration calculation
     uint32_t calculateAccelerationForTime(float targetRPM, float timeSeconds);

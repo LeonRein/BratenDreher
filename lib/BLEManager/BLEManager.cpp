@@ -220,6 +220,15 @@ void BLEManager::handleCommand(const std::string& command) {
             sendCommandResult(0, "error", "Failed to queue reset counters command");
         }
     }
+    else if (strcmp(type, "reset_stall") == 0) {
+        uint32_t commandId = stepperController->resetStallCount();
+        if (commandId > 0) {
+            Serial.printf("Reset stall count command queued (ID: %u)\n", commandId);
+        } else {
+            Serial.println("Failed to queue reset stall count command");
+            sendCommandResult(0, "error", "Failed to queue reset stall count command");
+        }
+    }
     else if (strcmp(type, "status_request") == 0) {
         sendStatus();
     }
@@ -262,6 +271,8 @@ void BLEManager::sendStatus() {
     statusDoc["runtime"] = stepperController->getRunTime();
     statusDoc["current"] = stepperController->getRunCurrent();
     statusDoc["tmc2209Status"] = stepperController->isTMC2209Initialized();
+    statusDoc["stallDetected"] = stepperController->isStallDetected();
+    statusDoc["stallCount"] = stepperController->getStallCount();
     statusDoc["timestamp"] = millis();
     
     String statusString;
