@@ -141,7 +141,7 @@ void BLEManager::handleCommand(const std::string& command) {
         return;
     }
     
-    // Use properly sized static JSON document to prevent heap issues
+    // Use fixed-size JSON document to prevent heap issues (compatible with ArduinoJson v6)
     StaticJsonDocument<256> doc;
     DeserializationError error = deserializeJson(doc, command);
     
@@ -157,7 +157,7 @@ void BLEManager::handleCommand(const std::string& command) {
     }
     
     // Validate that we have the required value field for most commands
-    if (strcmp(type, "status_request") != 0 && !doc.containsKey("value")) {
+    if (strcmp(type, "status_request") != 0 && doc["value"].isNull()) {
         Serial.println("ERROR: Command missing required 'value' field");
         return;
     }
@@ -262,7 +262,7 @@ void BLEManager::sendStatus() {
         return;
     }
     
-    // Use properly sized JSON document to prevent heap issues
+    // Use fixed-size JSON document to prevent heap issues (compatible with ArduinoJson v6)
     StaticJsonDocument<512> statusDoc;
     statusDoc["type"] = "status";
     statusDoc["enabled"] = stepperController->isEnabled();
@@ -451,7 +451,7 @@ void BLEManager::processCommandResults() {
 void BLEManager::sendCommandResult(uint32_t commandId, const String& status, const String& message) {
     if (!commandCharacteristic || !deviceConnected) return;
     
-    // Use properly sized static JSON document to prevent heap corruption
+    // Use fixed-size JSON document to prevent heap corruption (compatible with ArduinoJson v6)
     StaticJsonDocument<256> doc;
     doc["type"] = "command_result";
     doc["command_id"] = commandId;

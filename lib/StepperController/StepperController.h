@@ -138,10 +138,6 @@ private:
     // Helper methods for status reporting
     void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
 
-    // Helper function to calculate acceleration for reaching target RPM in specified time
-    uint32_t calculateAccelerationForTime(float targetRPM, float timeSeconds);
-    void setAccelerationForTime(float targetRPM, float timeSeconds);
-
 protected:
     // Task implementation
     void run() override;
@@ -189,6 +185,10 @@ public:
     // Settings (thread-safe - read-only)
     int getMicroSteps() const { return microSteps; }
     int getRunCurrent() const { return runCurrent; }
+    
+    // Helper functions for acceleration calculation
+    uint32_t calculateAccelerationForTime(float targetRPM, float timeSeconds);
+    void setAccelerationForTime(float targetRPM, float timeSeconds);
 };
 
 #endif // STEPPER_CONTROLLER_H
