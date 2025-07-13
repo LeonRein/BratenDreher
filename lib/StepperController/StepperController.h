@@ -47,6 +47,7 @@ private:
     bool isFirstStart;
     
     // Helper methods
+    bool initPreferences();
     void saveSettings();
     void loadSettings();
     void configureDriver();

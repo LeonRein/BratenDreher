@@ -194,60 +194,85 @@ bool BLEManager::begin(const char* deviceName) {
     service = server->createService(SERVICE_UUID);
     
     // Create Speed Characteristic
+    Serial.println("Creating speed characteristic...");
     speedCharacteristic = service->createCharacteristic(
         SPEED_CHARACTERISTIC_UUID,
         BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE
     );
     speedCharacteristic->setCallbacks(new SpeedCharacteristicCallbacks(this));
     speedCharacteristic->setValue("1.0"); // Default speed
+    Serial.println("Speed characteristic created");
     
     // Create Direction Characteristic
+    Serial.println("Creating direction characteristic...");
     directionCharacteristic = service->createCharacteristic(
         DIRECTION_CHARACTERISTIC_UUID,
         BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE
     );
     directionCharacteristic->setCallbacks(new DirectionCharacteristicCallbacks(this));
     directionCharacteristic->setValue("1"); // Default clockwise
+    Serial.println("Direction characteristic created");
     
     // Create Enable Characteristic
+    Serial.println("Creating enable characteristic...");
     enableCharacteristic = service->createCharacteristic(
         ENABLE_CHARACTERISTIC_UUID,
         BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE
     );
     enableCharacteristic->setCallbacks(new EnableCharacteristicCallbacks(this));
     enableCharacteristic->setValue("0"); // Default disabled
+    Serial.println("Enable characteristic created");
     
     // Create Status Characteristic (read/notify only)
+    Serial.println("Creating status characteristic...");
     statusCharacteristic = service->createCharacteristic(
         STATUS_CHARACTERISTIC_UUID,
         BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
     );
     statusCharacteristic->addDescriptor(new BLE2902());
+    Serial.println("Status characteristic created");
     
     // Create Microsteps Characteristic
+    Serial.println("Creating microsteps characteristic...");
     microstepsCharacteristic = service->createCharacteristic(
         MICROSTEPS_CHARACTERISTIC_UUID,
         BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE
     );
     microstepsCharacteristic->setCallbacks(new MicrostepsCharacteristicCallbacks(this));
     microstepsCharacteristic->setValue("32"); // Default microsteps
+    Serial.println("Microsteps characteristic created");
     
     // Create Current Characteristic
+    Serial.println("Creating current characteristic...");
     currentCharacteristic = service->createCharacteristic(
         CURRENT_CHARACTERISTIC_UUID,
         BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE
     );
     currentCharacteristic->setCallbacks(new CurrentCharacteristicCallbacks(this));
     currentCharacteristic->setValue("30"); // Default current percentage
+    Serial.println("Current characteristic created");
     
     // Create Reset Characteristic
+    Serial.println("Creating reset characteristic...");
     resetCharacteristic = service->createCharacteristic(
         RESET_CHARACTERISTIC_UUID,
         BLECharacteristic::PROPERTY_WRITE
     );
     resetCharacteristic->setCallbacks(new ResetCharacteristicCallbacks(this));
+    Serial.println("Reset characteristic created");
+    
+    // Verify all characteristics were created successfully
+    if (!speedCharacteristic || !directionCharacteristic || !enableCharacteristic ||
+        !statusCharacteristic || !microstepsCharacteristic || !currentCharacteristic ||
+        !resetCharacteristic) {
+        Serial.println("ERROR: Failed to create one or more BLE characteristics!");
+        return false;
+    }
+    
+    Serial.println("All BLE characteristics created successfully");
     
     // Start the service
+    Serial.println("Starting BLE service...");
     service->start();
     
     // Start advertising

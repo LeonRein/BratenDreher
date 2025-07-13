@@ -170,15 +170,29 @@ class BratenDreherBLE {
             this.service = await this.server.getPrimaryService(this.serviceUUID);
             console.log('Service found');
             
-            // Get characteristics
+            // Get characteristics one by one with better error handling
             console.log('Getting characteristics...');
-            this.characteristics.speed = await this.service.getCharacteristic(this.speedCharacteristicUUID);
-            this.characteristics.direction = await this.service.getCharacteristic(this.directionCharacteristicUUID);
-            this.characteristics.enable = await this.service.getCharacteristic(this.enableCharacteristicUUID);
-            this.characteristics.status = await this.service.getCharacteristic(this.statusCharacteristicUUID);
-            this.characteristics.microsteps = await this.service.getCharacteristic(this.microstepsCharacteristicUUID);
-            this.characteristics.current = await this.service.getCharacteristic(this.currentCharacteristicUUID);
-            this.characteristics.reset = await this.service.getCharacteristic(this.resetCharacteristicUUID);
+            
+            const characteristicMap = {
+                'speed': this.speedCharacteristicUUID,
+                'direction': this.directionCharacteristicUUID,
+                'enable': this.enableCharacteristicUUID,
+                'status': this.statusCharacteristicUUID,
+                'microsteps': this.microstepsCharacteristicUUID,
+                'current': this.currentCharacteristicUUID,
+                'reset': this.resetCharacteristicUUID
+            };
+            
+            for (const [name, uuid] of Object.entries(characteristicMap)) {
+                try {
+                    console.log(`Getting ${name} characteristic (${uuid})...`);
+                    this.characteristics[name] = await this.service.getCharacteristic(uuid);
+                    console.log(`✓ ${name} characteristic found`);
+                } catch (error) {
+                    console.error(`✗ Failed to get ${name} characteristic:`, error);
+                    throw new Error(`Missing ${name} characteristic (${uuid}). Make sure ESP32 firmware is up to date.`);
+                }
+            }
             
             console.log('All characteristics found:', Object.keys(this.characteristics));
             

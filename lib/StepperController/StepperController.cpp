@@ -9,6 +9,9 @@ StepperController::StepperController()
 bool StepperController::begin() {
     Serial.println("Initializing FastAccelStepper with TMC2209...");
     
+    // Initialize preferences storage
+    initPreferences();
+    
     // Configure pins
     pinMode(TMC_EN, OUTPUT);
     pinMode(MS1, OUTPUT);
@@ -65,6 +68,27 @@ bool StepperController::begin() {
     Serial.printf("Microsteps: %d, Run current: %d%%\n", microSteps, runCurrent);
     
     return true;
+}
+
+bool StepperController::initPreferences() {
+    // Try to open the namespace with write permissions to ensure it exists
+    if (preferences.begin("stepper", false)) {
+        // Check if this is a fresh namespace by looking for a key
+        if (!preferences.isKey("speed")) {
+            // Fresh namespace - write default values
+            Serial.println("Fresh preferences namespace, writing defaults");
+            preferences.putFloat("speed", currentSpeedRPM);
+            preferences.putBool("clockwise", clockwise);
+            preferences.putInt("microsteps", microSteps);
+            preferences.putInt("current", runCurrent);
+        }
+        preferences.end();
+        Serial.println("Preferences namespace initialized");
+        return true;
+    } else {
+        Serial.println("Failed to initialize preferences namespace");
+        return false;
+    }
 }
 
 void StepperController::configureDriver() {
@@ -210,31 +234,38 @@ void StepperController::resetCounters() {
 }
 
 void StepperController::saveSettings() {
-    preferences.begin("stepper", false);
-    preferences.putFloat("speed", currentSpeedRPM);
-    preferences.putBool("clockwise", clockwise);
-    preferences.putInt("microsteps", microSteps);
-    preferences.putInt("current", runCurrent);
-    preferences.end();
-    
-    Serial.println("Settings saved to flash");
+    if (preferences.begin("stepper", false)) {
+        preferences.putFloat("speed", currentSpeedRPM);
+        preferences.putBool("clockwise", clockwise);
+        preferences.putInt("microsteps", microSteps);
+        preferences.putInt("current", runCurrent);
+        preferences.end();
+        
+        Serial.println("Settings saved to flash");
+    } else {
+        Serial.println("Failed to open preferences for saving");
+    }
 }
 
 void StepperController::loadSettings() {
-    preferences.begin("stepper", true); // read-only
-    
-    currentSpeedRPM = preferences.getFloat("speed", 1.0f);
-    clockwise = preferences.getBool("clockwise", true);
-    microSteps = preferences.getInt("microsteps", 32);
-    runCurrent = preferences.getInt("current", 30);
-    
-    preferences.end();
-    
-    // Validate loaded values
-    currentSpeedRPM = constrain(currentSpeedRPM, minSpeedRPM, maxSpeedRPM);
-    runCurrent = constrain(runCurrent, 10, 100);
-    
-    Serial.println("Settings loaded from flash");
-    Serial.printf("Loaded: Speed=%.2f RPM, Direction=%s, Microsteps=%d, Current=%d%%\n",
-                  currentSpeedRPM, clockwise ? "CW" : "CCW", microSteps, runCurrent);
+    // Open in read-only mode since namespace should already be created
+    if (preferences.begin("stepper", true)) {
+        currentSpeedRPM = preferences.getFloat("speed", 1.0f);
+        clockwise = preferences.getBool("clockwise", true);
+        microSteps = preferences.getInt("microsteps", 32);
+        runCurrent = preferences.getInt("current", 30);
+        
+        preferences.end();
+        
+        // Validate loaded values
+        currentSpeedRPM = constrain(currentSpeedRPM, minSpeedRPM, maxSpeedRPM);
+        runCurrent = constrain(runCurrent, 10, 100);
+        
+        Serial.println("Settings loaded from flash");
+        Serial.printf("Loaded: Speed=%.2f RPM, Direction=%s, Microsteps=%d, Current=%d%%\n",
+                      currentSpeedRPM, clockwise ? "CW" : "CCW", microSteps, runCurrent);
+    } else {
+        Serial.println("Failed to open preferences for loading, using defaults");
+        // Default values are already set in constructor
+    }
 }
