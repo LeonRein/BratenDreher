@@ -26,6 +26,14 @@ private:
     BLEService* service;
     BLECharacteristic* commandCharacteristic;
     
+    // Forward declaration of callback classes
+    class ServerCallbacks;
+    class CommandCharacteristicCallbacks;
+    
+    // BLE callback objects (stored for proper cleanup)
+    ServerCallbacks* serverCallbacks;
+    CommandCharacteristicCallbacks* commandCallbacks;
+    
     // State
     bool deviceConnected;
     bool oldDeviceConnected;
@@ -69,12 +77,8 @@ public:
     void handleCommand(const std::string& command);
     void processQueuedCommands();
     
-    // Server callbacks
-    class ServerCallbacks;
+    // Friend declarations for callback access
     friend class ServerCallbacks;
-    
-    // Characteristic callbacks
-    class CommandCharacteristicCallbacks;
     friend class CommandCharacteristicCallbacks;
 };
 

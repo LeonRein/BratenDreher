@@ -55,6 +55,7 @@ public:
 BLEManager::BLEManager() 
     : Task("BLE_Task", 8192, 2, 0), // Task name, 8KB stack (reduced from 12KB), priority 2, core 0
       server(nullptr), service(nullptr), commandCharacteristic(nullptr),
+      serverCallbacks(nullptr), commandCallbacks(nullptr),
       deviceConnected(false), oldDeviceConnected(false),
       stepperController(nullptr), lastStatusUpdate(0) {
     
@@ -72,6 +73,17 @@ BLEManager::~BLEManager() {
     if (commandQueue != nullptr) {
         vQueueDelete(commandQueue);
     }
+    
+    // Clean up BLE callback objects
+    if (serverCallbacks != nullptr) {
+        delete serverCallbacks;
+        serverCallbacks = nullptr;
+    }
+    
+    if (commandCallbacks != nullptr) {
+        delete commandCallbacks;
+        commandCallbacks = nullptr;
+    }
 }
 
 bool BLEManager::begin(const char* deviceName) {
@@ -82,7 +94,8 @@ bool BLEManager::begin(const char* deviceName) {
     
     // Create BLE Server
     server = BLEDevice::createServer();
-    server->setCallbacks(new ServerCallbacks(this));
+    serverCallbacks = new ServerCallbacks(this);
+    server->setCallbacks(serverCallbacks);
     
     // Create BLE Service
     service = server->createService(SERVICE_UUID);
@@ -95,7 +108,8 @@ bool BLEManager::begin(const char* deviceName) {
         BLECharacteristic::PROPERTY_WRITE | 
         BLECharacteristic::PROPERTY_NOTIFY
     );
-    commandCharacteristic->setCallbacks(new CommandCharacteristicCallbacks(this));
+    commandCallbacks = new CommandCharacteristicCallbacks(this);
+    commandCharacteristic->setCallbacks(commandCallbacks);
     commandCharacteristic->addDescriptor(new BLE2902());
     Serial.println("Command characteristic created");
     

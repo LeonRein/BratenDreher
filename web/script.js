@@ -2,7 +2,7 @@ class BratenDreherBLE {
     constructor() {
         // Motor specifications for acceleration conversion
         this.MAX_SPEED_RPM = 30.0; // Maximum available speed - easily changeable
-        this.GEAR_RATIO = 25.77; // Motor gear ratio
+        this.GEAR_RATIO = 10; // Motor gear ratio - must match StepperController.h
         this.STEPS_PER_REVOLUTION = 200; // Motor steps per revolution
         this.MICROSTEPS = 16; // Microsteps setting
         

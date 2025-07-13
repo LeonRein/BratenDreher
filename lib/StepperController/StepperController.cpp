@@ -90,8 +90,8 @@ bool StepperController::begin() {
     // Set acceleration (steps/s²) - optimized for variable speed operation
     // For variable speed to work smoothly, we need fast acceleration
     // Target: reach 30 RPM in 2 seconds for responsive speed changes
-    // Calculate: 30 RPM * 25.77 gear ratio * 200 steps * 16 microsteps / 60 seconds = 41232 steps/s
-    // Acceleration for 2 seconds: 41232 / 2 = 20616 steps/s²
+    // Calculate: 30 RPM * 10 gear ratio * 200 steps * 16 microsteps / 60 seconds = 16000 steps/s
+    // Acceleration for 2 seconds: 16000 / 2 = 8000 steps/s²
     uint32_t defaultAcceleration = rpmToStepsPerSecond(30.0f) / 2;  // 2 seconds to reach max speed
     stepper->setAcceleration(defaultAcceleration);
     currentAcceleration = defaultAcceleration;  // Track the set acceleration
