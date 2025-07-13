@@ -19,6 +19,12 @@ class BratenDreherBLE {
         this.microsteps = 32;
         this.current = 30;
         
+        // Bind the disconnect handler so we can add/remove it
+        this.onDisconnectedHandler = () => {
+            console.log('GATT server disconnected event received');
+            this.onDisconnected();
+        };
+        
         // UI elements
         this.initializeUIElements();
         this.bindEventListeners();
@@ -185,10 +191,7 @@ class BratenDreherBLE {
             console.log('Command notifications enabled');
             
             // Handle disconnection
-            this.device.addEventListener('gattserverdisconnected', () => {
-                console.log('GATT server disconnected event received');
-                this.onDisconnected();
-            });
+            this.device.addEventListener('gattserverdisconnected', this.onDisconnectedHandler);
             
             this.connected = true;
             this.updateConnectionStatus('Connected');
@@ -223,9 +226,17 @@ class BratenDreherBLE {
     async disconnect() {
         console.log('User initiated disconnect');
         this.intentionalDisconnect = true; // Mark as intentional
+        
+        // Remove the disconnect event listener temporarily to prevent it from firing
+        if (this.device) {
+            this.device.removeEventListener('gattserverdisconnected', this.onDisconnectedHandler);
+        }
+        
         if (this.device && this.device.gatt.connected) {
             await this.device.gatt.disconnect();
         }
+        
+        // Call onDisconnected manually
         this.onDisconnected();
     }
     
@@ -244,6 +255,11 @@ class BratenDreherBLE {
 
         // Only attempt automatic reconnection if it wasn't intentional
         if (!this.intentionalDisconnect) {
+            // Re-add the event listener for future connections
+            if (this.device) {
+                this.device.addEventListener('gattserverdisconnected', this.onDisconnectedHandler);
+            }
+            
             setTimeout(() => {
                 if (!this.connected && this.device) {
                     console.log('Attempting automatic reconnection...');
@@ -308,6 +324,9 @@ class BratenDreherBLE {
                 this.handleMessage(event);
             });
             console.log('Notifications re-enabled');
+            
+            // Re-add disconnect event listener
+            this.device.addEventListener('gattserverdisconnected', this.onDisconnectedHandler);
             
             this.connected = true;
             this.updateConnectionStatus('Connected');
