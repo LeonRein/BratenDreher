@@ -307,7 +307,6 @@ void BLEManager::sendStatus() {
     statusDoc["acceleration"] = stepperController->getCurrentAcceleration();
     statusDoc["direction"] = stepperController->isClockwise() ? "cw" : "ccw";
     statusDoc["running"] = stepperController->isRunning();
-    statusDoc["connected"] = deviceConnected;
     statusDoc["totalRevolutions"] = stepperController->getTotalRevolutions();
     statusDoc["runtime"] = stepperController->getRunTime();
     statusDoc["current"] = stepperController->getRunCurrent();
