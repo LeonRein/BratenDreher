@@ -130,6 +130,7 @@ private:
     void saveSettings();
     void loadSettings();
     void configureDriver();
+    void configureStallDetection(bool enableStealthChop = true);
     uint32_t rpmToStepsPerSecond(float rpm);
     
     // Internal methods (called from command processing)
@@ -197,6 +198,9 @@ public:
     bool isStallDetected() const { return cachedStallDetected; }
     uint16_t getStallCount() const { return stallCount; }
     unsigned long getLastStallTime() const { return lastStallTime; }
+    
+    // Stall detection configuration
+    void setStallGuardThreshold(uint8_t threshold); // 0 = most sensitive, 255 = least sensitive
     
     // Helper functions for acceleration calculation
     uint32_t calculateAccelerationForTime(float targetRPM, float timeSeconds);

@@ -3,7 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BratenDreher Control</title>
+                  <div class="status-item">
+                    <span class="status-label">TMC2209:</span>
+                    <span id="tmc2209Status" class="status-value">Unknown</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Stall Status:</span>
+                    <span id="stallStatus" class="status-value">Unknown</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Stall Count:</span>
+                    <span id="stallCount" class="status-value">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Last Update:</span>
+                    <span id="lastUpdate" class="status-value">Never</span>
+                </div>>BratenDreher Control</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE2IDJMMjQgMTZMMTYgMzBMOCAxNkwxNiAyWiIgZmlsbD0iIzMzNzNkYyIvPgo8L3N2Zz4K">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -197,6 +212,8 @@
                 <p><strong>Speed Range:</strong> 0.1 - 30.0 RPM (0.5 RPS max)</p>
                 <p><strong>Steps per Revolution:</strong> 2000 (200 * 10)</p>
                 <p><strong>Max Torque:</strong> High due to gear reduction</p>
+                <p><strong>Stall Detection:</strong> TMC2209 StallGuard monitors motor load</p>
+                <p><em>Note: If stalls occur, reduce speed or check load</em></p>
             </div>
         </div>
     </div>

@@ -135,11 +135,14 @@ void StepperController::configureDriver() {
     stepperDriver.setRunCurrent(runCurrent);
     stepperDriver.setMicrostepsPerStep(microSteps);
     stepperDriver.enableAutomaticCurrentScaling();
+    
+    // Note: StallGuard typically requires SpreadCycle mode (not StealthChop)
+    // We'll enable StealthChop for quiet operation but may need to disable it for stall detection
     stepperDriver.enableStealthChop();
     stepperDriver.setCoolStepDurationThreshold(5000);
     
-    // Enable StallGuard for stall detection
-    stepperDriver.enableStallGuard();
+    // Configure StallGuard for stall detection
+    // Setting threshold automatically enables StallGuard functionality
     stepperDriver.setStallGuardThreshold(10); // Sensitivity: 0 (most sensitive) to 255 (least sensitive)
     
     // Update communication status after configuration
@@ -147,10 +150,42 @@ void StepperController::configureDriver() {
     
     // Check if driver is communicating properly
     if (tmc2209Initialized) {
-        Serial.printf("TMC2209 configured: %d microsteps, %d%% current, StallGuard enabled\n", microSteps, runCurrent);
+        Serial.printf("TMC2209 configured: %d microsteps, %d%% current, StallGuard threshold: 10\n", microSteps, runCurrent);
+        Serial.println("Note: StallGuard may require disabling StealthChop for optimal detection");
     } else {
         Serial.println("WARNING: TMC2209 driver not responding during configuration");
     }
+}
+
+void StepperController::configureStallDetection(bool enableStealthChop) {
+    if (!tmc2209Initialized) {
+        Serial.println("Cannot configure stall detection: TMC2209 not initialized");
+        return;
+    }
+    
+    if (enableStealthChop) {
+        // Quiet operation mode - StallGuard may be less sensitive
+        stepperDriver.enableStealthChop();
+        Serial.println("StealthChop enabled - quiet operation, reduced stall sensitivity");
+    } else {
+        // SpreadCycle mode - better for stall detection
+        stepperDriver.disableStealthChop();
+        Serial.println("StealthChop disabled - improved stall detection, may be noisier");
+    }
+    
+    // Configure StallGuard threshold (can be adjusted based on load)
+    stepperDriver.setStallGuardThreshold(10);
+    Serial.println("StallGuard configured for stall detection");
+}
+
+void StepperController::setStallGuardThreshold(uint8_t threshold) {
+    if (!tmc2209Initialized) {
+        Serial.println("Cannot set StallGuard threshold: TMC2209 not initialized");
+        return;
+    }
+    
+    stepperDriver.setStallGuardThreshold(threshold);
+    Serial.printf("StallGuard threshold set to %d (0=most sensitive, 255=least sensitive)\n", threshold);
 }
 
 uint32_t StepperController::rpmToStepsPerSecond(float rpm) {
@@ -253,16 +288,26 @@ void StepperController::updateCache() {
     bool diagPinHigh = digitalRead(DIAG);
     
     // DIAG pin goes high when StallGuard triggers (motor stalled)
-    if (diagPinHigh && motorEnabled && cachedIsRunning && !stallDetected) {
-        // New stall detected
-        stallDetected = true;
-        lastStallTime = millis();
-        stallCount++;
-        Serial.printf("STALL DETECTED! Count: %d, Time: %lu\n", stallCount, lastStallTime);
-    } else if (!diagPinHigh && stallDetected) {
-        // Stall cleared
-        stallDetected = false;
-        Serial.println("Stall condition cleared");
+    // Only check for stalls when motor is enabled and should be running
+    if (motorEnabled && cachedIsRunning) {
+        if (diagPinHigh && !stallDetected) {
+            // New stall detected
+            stallDetected = true;
+            lastStallTime = millis();
+            stallCount++;
+            Serial.printf("STALL DETECTED! Count: %d, Time: %lu\n", stallCount, lastStallTime);
+            Serial.println("Consider: reducing speed, increasing current, or checking load");
+        } else if (!diagPinHigh && stallDetected) {
+            // Stall cleared
+            stallDetected = false;
+            Serial.println("Stall condition cleared");
+        }
+    } else if (!motorEnabled || !cachedIsRunning) {
+        // Clear stall status when motor is stopped
+        if (stallDetected) {
+            stallDetected = false;
+            Serial.println("Stall status cleared (motor stopped)");
+        }
     }
     
     cachedStallDetected = stallDetected;
