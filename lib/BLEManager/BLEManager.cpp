@@ -22,11 +22,9 @@ public:
     void onDisconnect(BLEServer* pServer) override {
         bleManager->deviceConnected = false;
         
-        // Emergency stop on disconnect (critical safety feature)
-        // Use thread-safe interface - emergency stop will be processed immediately
-        if (bleManager->stepperController) {
-            bleManager->stepperController->emergencyStop();
-        }
+        // Note: Removed automatic emergency stop on disconnect to allow seamless reconnection
+        // Motor will continue running when web UI disconnects and reconnects
+        // Emergency stop is only triggered by explicit user command
         
         // Restart advertising immediately (safe in task context)
         pServer->startAdvertising();
