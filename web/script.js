@@ -611,10 +611,10 @@ class BratenDreherBLE {
     }
     
     async setAccelerationTime(timeSeconds) {
-        // Convert time to acceleration using max available speed as reference
-        const expectedAcceleration = this.timeToAcceleration(timeSeconds);
-        console.log(`Setting acceleration time: ${timeSeconds}s → Expected acceleration: ${expectedAcceleration} steps/s²`);
-        return await this.sendCommand('acceleration_time', timeSeconds, { target_rpm: this.MAX_SPEED_RPM });
+        // Convert time to acceleration and send acceleration directly in steps/s²
+        const accelerationStepsPerSec2 = this.timeToAcceleration(timeSeconds);
+        console.log(`Setting acceleration time: ${timeSeconds}s → Acceleration: ${accelerationStepsPerSec2} steps/s²`);
+        return await this.sendCommand('acceleration', accelerationStepsPerSec2);
     }
     
     // Variable speed commands

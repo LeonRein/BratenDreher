@@ -230,20 +230,19 @@ void BLEManager::handleCommand(const std::string& command) {
     else if (strcmp(type, "status_request") == 0) {
         sendStatus();
     }
-    else if (strcmp(type, "acceleration_time") == 0) {
-        // Set acceleration to reach max speed in specified time
-        float targetRPM = doc["target_rpm"] | 30.0f;  // Default to 30 RPM if not specified
-        float timeSeconds = doc["value"];  // Time in seconds
+    else if (strcmp(type, "acceleration") == 0) {
+        // Set acceleration directly in steps/s²
+        uint32_t accelerationStepsPerSec2 = doc["value"];  // Acceleration in steps/s²
         
-        if (timeSeconds > 0.1f && timeSeconds <= 60.0f && targetRPM > 0.1f && targetRPM <= 30.0f) {
-            stepperController->setAccelerationForTime(targetRPM, timeSeconds);
-            Serial.printf("Acceleration set for %.1f RPM in %.1f seconds\n", targetRPM, timeSeconds);
+        if (accelerationStepsPerSec2 >= 100 && accelerationStepsPerSec2 <= 100000) {
+            uint32_t commandId = stepperController->setAcceleration(accelerationStepsPerSec2);
+            Serial.printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
             
             // Send success response
-            sendCommandResult(0, "success", String("Acceleration set for ") + targetRPM + " RPM in " + timeSeconds + " seconds");
+            sendCommandResult(commandId, "success", String("Acceleration set to ") + accelerationStepsPerSec2 + " steps/s²");
         } else {
-            Serial.println("Invalid acceleration time parameters");
-            sendCommandResult(0, "invalid_parameter", "Time must be 0.1-60s, RPM must be 0.1-30");
+            Serial.println("Invalid acceleration parameters");
+            sendCommandResult(0, "invalid_parameter", "Acceleration must be 100-100000 steps/s²");
         }
     }
     else if (strcmp(type, "speed_variation_strength") == 0) {

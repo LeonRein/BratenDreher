@@ -17,6 +17,7 @@ enum class StepperCommand {
     DISABLE,
     EMERGENCY_STOP,
     SET_CURRENT,
+    SET_ACCELERATION,
     RESET_COUNTERS,
     RESET_STALL_COUNT,
     SET_SPEED_VARIATION,
@@ -154,6 +155,7 @@ private:
     void disableInternal(uint32_t commandId);
     void emergencyStopInternal(uint32_t commandId);
     void setRunCurrentInternal(int current, uint32_t commandId);
+    void setAccelerationInternal(uint32_t accelerationStepsPerSec2, uint32_t commandId);
     void resetCountersInternal(uint32_t commandId);
     void resetStallCountInternal(uint32_t commandId);
     void setSpeedVariationInternal(float strength, uint32_t commandId);
@@ -201,6 +203,7 @@ public:
     uint32_t disable();
     uint32_t emergencyStop();
     uint32_t setRunCurrent(int current);
+    uint32_t setAcceleration(uint32_t accelerationStepsPerSec2);
     uint32_t resetCounters();
     uint32_t resetStallCount();
     
@@ -243,10 +246,6 @@ public:
     
     // Stall detection configuration
     void setStallGuardThreshold(uint8_t threshold); // 0 = most sensitive, 255 = least sensitive
-    
-    // Helper functions for acceleration calculation
-    uint32_t calculateAccelerationForTime(float targetRPM, float timeSeconds);
-    void setAccelerationForTime(float targetRPM, float timeSeconds);
 };
 
 #endif // STEPPER_CONTROLLER_H

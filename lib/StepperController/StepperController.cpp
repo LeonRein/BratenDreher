@@ -89,8 +89,10 @@ bool StepperController::begin() {
     
     // Set acceleration (steps/s²) - optimized for variable speed operation
     // For variable speed to work smoothly, we need fast acceleration
-    // Target: reach 30 RPM in 2 seconds for responsive speed changes (16000 steps/s²)
-    uint32_t defaultAcceleration = calculateAccelerationForTime(30.0f, 2.0f);
+    // Target: reach 30 RPM in 2 seconds for responsive speed changes
+    // Calculate: 30 RPM * 25.77 gear ratio * 200 steps * 16 microsteps / 60 seconds = 41232 steps/s
+    // Acceleration for 2 seconds: 41232 / 2 = 20616 steps/s²
+    uint32_t defaultAcceleration = rpmToStepsPerSecond(30.0f) / 2;  // 2 seconds to reach max speed
     stepper->setAcceleration(defaultAcceleration);
     currentAcceleration = defaultAcceleration;  // Track the set acceleration
     
@@ -357,6 +359,10 @@ void StepperController::processCommand(const StepperCommandData& cmd) {
             setRunCurrentInternal(cmd.intValue, cmd.commandId);
             break;
             
+        case StepperCommand::SET_ACCELERATION:
+            setAccelerationInternal(cmd.intValue, cmd.commandId);
+            break;
+            
         case StepperCommand::RESET_COUNTERS:
             resetCountersInternal(cmd.commandId);
             break;
@@ -535,6 +541,29 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
+void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec2, uint32_t commandId) {
+    if (!stepper) {
+        reportResult(commandId, CommandResult::HARDWARE_ERROR, 
+                    "Stepper not initialized");
+        return;
+    }
+    
+    // Validate acceleration range (reasonable limits to prevent excessive values)
+    if (accelerationStepsPerSec2 < 100 || accelerationStepsPerSec2 > 100000) {
+        reportResult(commandId, CommandResult::INVALID_PARAMETER, 
+                    "Acceleration out of range (100-100000 steps/s²)");
+        return;
+    }
+    
+    // Set the acceleration on FastAccelStepper
+    stepper->setAcceleration(accelerationStepsPerSec2);
+    currentAcceleration = accelerationStepsPerSec2;  // Track the set acceleration
+    stepper->applySpeedAcceleration();
+    
+    Serial.printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
 void StepperController::reportResult(uint32_t commandId, CommandResult result, const String& errorMessage) {
     if (resultQueue == nullptr) return;
     
@@ -672,6 +701,21 @@ uint32_t StepperController::setRunCurrent(int current) {
     return 0;
 }
 
+uint32_t StepperController::setAcceleration(uint32_t accelerationStepsPerSec2) {
+    if (commandQueue == nullptr) return 0;
+    
+    uint32_t commandId = nextCommandId++;
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::SET_ACCELERATION;
+    cmd.intValue = accelerationStepsPerSec2;
+    cmd.commandId = commandId;
+    
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
+}
+
 uint32_t StepperController::resetCounters() {
     if (commandQueue == nullptr) return 0;
     
@@ -700,35 +744,6 @@ uint32_t StepperController::resetStallCount() {
     return 0;
 }
 
-uint32_t StepperController::calculateAccelerationForTime(float targetRPM, float timeSeconds) {
-    // Calculate required acceleration to reach target RPM in specified time
-    // Using kinematic equation: v = u + at, where u = 0 (starting from rest)
-    
-    uint32_t targetStepsPerSecond = rpmToStepsPerSecond(targetRPM);
-    float acceleration = targetStepsPerSecond / timeSeconds;
-    
-    Serial.printf("Acceleration calculation:\n");
-    Serial.printf("  Target: %.1f RPM in %.1f seconds\n", targetRPM, timeSeconds);
-    Serial.printf("  Target steps/s: %u\n", targetStepsPerSecond);
-    Serial.printf("  Required acceleration: %.0f steps/s²\n", acceleration);
-    
-    return static_cast<uint32_t>(acceleration);
-}
-
-void StepperController::setAccelerationForTime(float targetRPM, float timeSeconds) {
-    if (!stepper) {
-        Serial.println("Stepper not initialized");
-        return;
-    }
-    
-    uint32_t newAcceleration = calculateAccelerationForTime(targetRPM, timeSeconds);
-    stepper->setAcceleration(newAcceleration);
-    currentAcceleration = newAcceleration;  // Track the set acceleration
-    stepper->applySpeedAcceleration();
-    
-    Serial.printf("Acceleration set to %u steps/s² for %0.1f RPM in %.1f seconds\n", 
-                  newAcceleration, targetRPM, timeSeconds);
-}
 void StepperController::setSpeedVariationInternal(float strength, uint32_t commandId) {
     // Validate strength (0.0 to 1.0)
     if (strength < 0.0f || strength > 1.0f) {
