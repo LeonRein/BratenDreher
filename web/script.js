@@ -1,5 +1,11 @@
 class BratenDreherBLE {
     constructor() {
+        // Motor specifications for acceleration conversion
+        this.MAX_SPEED_RPM = 30.0; // Maximum available speed - easily changeable
+        this.GEAR_RATIO = 25.77; // Motor gear ratio
+        this.STEPS_PER_REVOLUTION = 200; // Motor steps per revolution
+        this.MICROSTEPS = 16; // Microsteps setting
+        
         // BLE Service and Characteristic UUIDs (must match ESP32)
         this.serviceUUID = '12345678-1234-1234-1234-123456789abc';
         this.commandCharacteristicUUID = '12345678-1234-1234-1234-123456789ab1';
@@ -54,6 +60,33 @@ class BratenDreherBLE {
         console.log('BratenDreher BLE Controller initialized');
     }
     
+    // Acceleration conversion methods
+    rpmToStepsPerSecond(rpm) {
+        // Calculate steps per second for the motor (before gear reduction)
+        const motorRPM = rpm * this.GEAR_RATIO;
+        const motorStepsPerSecond = (motorRPM * this.STEPS_PER_REVOLUTION * this.MICROSTEPS) / 60.0;
+        return Math.round(motorStepsPerSecond);
+    }
+    
+    accelerationToTime(accelerationStepsPerSec2) {
+        // Convert acceleration (steps/s²) to time to reach max speed
+        if (accelerationStepsPerSec2 === 0) {
+            return 5.0; // Default fallback
+        }
+        
+        const maxStepsPerSecond = this.rpmToStepsPerSecond(this.MAX_SPEED_RPM);
+        const timeSeconds = maxStepsPerSecond / accelerationStepsPerSec2;
+        
+        // Clamp to reasonable range (1-30 seconds)
+        return Math.max(1.0, Math.min(30.0, timeSeconds));
+    }
+    
+    timeToAcceleration(timeSeconds) {
+        // Convert time (to reach max speed) to acceleration (steps/s²)
+        const maxStepsPerSecond = this.rpmToStepsPerSecond(this.MAX_SPEED_RPM);
+        return Math.round(maxStepsPerSecond / timeSeconds);
+    }
+    
     initializeUIElements() {
         // Connection elements
         this.statusIndicator = document.getElementById('statusIndicator');
@@ -88,7 +121,7 @@ class BratenDreherBLE {
         // Status elements
         this.motorStatus = document.getElementById('motorStatus');
         this.currentSpeed = document.getElementById('currentSpeed');
-        this.currentAccelerationTime = document.getElementById('currentAccelerationTime');
+        this.currentAcceleration = document.getElementById('currentAcceleration');
         this.currentDirection = document.getElementById('currentDirection');
         this.currentCurrent = document.getElementById('currentCurrent');
         this.tmc2209Status = document.getElementById('tmc2209Status');
@@ -575,8 +608,8 @@ class BratenDreherBLE {
     }
     
     async setAccelerationTime(timeSeconds) {
-        // Send acceleration time command with target RPM of 30
-        return await this.sendCommand('acceleration_time', timeSeconds, { target_rpm: 30.0 });
+        // Convert time to acceleration using max available speed as reference
+        return await this.sendCommand('acceleration_time', timeSeconds, { target_rpm: this.MAX_SPEED_RPM });
     }
     
     // Variable speed commands
@@ -715,8 +748,12 @@ class BratenDreherBLE {
         this.motorStatus.textContent = status.enabled ? 
             (status.running ? 'Running' : 'Enabled') : 'Stopped';
         this.currentSpeed.textContent = `${status.speed.toFixed(1)} RPM`;
-        this.currentAccelerationTime.textContent = status.accelerationTime ? 
-            `${status.accelerationTime.toFixed(1)}s to 30 RPM` : '5.0s to 30 RPM';
+        
+        // Convert acceleration from steps/s² to time format for display
+        const accelerationTimeDisplay = status.acceleration ? 
+            this.accelerationToTime(status.acceleration).toFixed(1) : '5.0';
+        this.currentAcceleration.textContent = `${accelerationTimeDisplay}s to max`;
+        
         this.currentDirection.textContent = status.direction === 'cw' ? 'Clockwise' : 'Counter-clockwise';
         this.currentCurrent.textContent = `${status.current || this.current}%`;
         
@@ -775,14 +812,15 @@ class BratenDreherBLE {
         }
         
         // Update acceleration time slider if different (e.g., when variable speed changes it)
-        if (status.accelerationTime !== undefined) {
+        if (status.acceleration !== undefined) {
             const currentSliderTime = parseInt(this.accelerationTimeSlider.value);
-            const deviceTime = Math.round(status.accelerationTime);
+            const deviceAccelerationTime = this.accelerationToTime(status.acceleration);
+            const deviceTime = Math.round(deviceAccelerationTime);
             
             if (Math.abs(currentSliderTime - deviceTime) > 0.5) {
                 this.accelerationTimeSlider.value = deviceTime;
                 this.accelerationTimeValue.textContent = deviceTime;
-                console.log(`Acceleration time updated from device: ${deviceTime}s`);
+                console.log(`Acceleration time updated from device: ${deviceTime}s (from ${status.acceleration} steps/s²)`);
             }
         }
         

@@ -216,7 +216,6 @@ public:
     // Getters
     float getSpeed() const { return currentSpeedRPM; }
     uint32_t getCurrentAcceleration() const { return currentAcceleration; }
-    float getCurrentAccelerationTime() const; // Convert current acceleration back to time format
     bool isEnabled() const { return motorEnabled; }
     bool isClockwise() const { return clockwise; }
     float getMinSpeed() const { return minSpeedRPM; }
