@@ -142,7 +142,7 @@ void BLEManager::handleCommand(const std::string& command) {
     }
     
     // Use fixed-size JSON document to prevent heap issues (compatible with ArduinoJson v6)
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, command);
     
     if (error) {
@@ -251,7 +251,7 @@ void BLEManager::sendStatus() {
     }
     
     // Use fixed-size JSON document to prevent heap issues (compatible with ArduinoJson v6)
-    StaticJsonDocument<512> statusDoc;
+    JsonDocument statusDoc;
     statusDoc["type"] = "status";
     statusDoc["enabled"] = stepperController->isEnabled();
     statusDoc["speed"] = stepperController->getSpeed();
@@ -440,7 +440,7 @@ void BLEManager::sendCommandResult(uint32_t commandId, const String& status, con
     if (!commandCharacteristic || !deviceConnected) return;
     
     // Use fixed-size JSON document to prevent heap corruption (compatible with ArduinoJson v6)
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "command_result";
     doc["command_id"] = commandId;
     doc["status"] = status;
