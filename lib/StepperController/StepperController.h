@@ -5,7 +5,31 @@
 #include "FastAccelStepper.h"
 #include <TMC2209.h>
 #include <Preferences.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 #include "Task.h"
+
+// Command types for inter-task communication
+enum class StepperCommand {
+    SET_SPEED,
+    SET_DIRECTION,
+    ENABLE,
+    DISABLE,
+    EMERGENCY_STOP,
+    SET_MICROSTEPS,
+    SET_CURRENT,
+    RESET_COUNTERS
+};
+
+// Command data structure
+struct StepperCommandData {
+    StepperCommand command;
+    union {
+        float floatValue;    // for speed
+        bool boolValue;      // for direction, enable/disable
+        int intValue;        // for microsteps, current
+    };
+};
 
 class StepperController : public Task {
 private:
@@ -47,12 +71,26 @@ private:
     unsigned long totalSteps;
     bool isFirstStart;
     
+    // Command queue for thread-safe operation
+    QueueHandle_t commandQueue;
+    static const size_t COMMAND_QUEUE_SIZE = 20;
+    
     // Helper methods
     bool initPreferences();
     void saveSettings();
     void loadSettings();
     void configureDriver();
     uint32_t rpmToStepsPerSecond(float rpm);
+    
+    // Internal methods (called from command processing)
+    void setSpeedInternal(float rpm);
+    void setDirectionInternal(bool clockwise);
+    void enableInternal();
+    void disableInternal();
+    void emergencyStopInternal();
+    void setMicroStepsInternal(int steps);
+    void setRunCurrentInternal(int current);
+    void resetCountersInternal();
 
 protected:
     // Task implementation
@@ -60,19 +98,24 @@ protected:
     
     // Internal update method
     void update();
+    void processCommands();
     
 public:
     StepperController();
+    ~StepperController();
     
     // Initialization
     bool begin();
     
-    // Motor control
-    void setSpeed(float rpm);
-    void setDirection(bool clockwise);
-    void enable();
-    void disable();
-    void emergencyStop();
+    // Motor control (thread-safe via command queue)
+    bool setSpeed(float rpm);
+    bool setDirection(bool clockwise);
+    bool enable();
+    bool disable();
+    bool emergencyStop();
+    bool setMicroSteps(int steps);
+    bool setRunCurrent(int current);
+    bool resetCounters();
     
     // Getters
     float getSpeed() const { return currentSpeedRPM; }
@@ -81,19 +124,14 @@ public:
     float getMinSpeed() const { return minSpeedRPM; }
     float getMaxSpeed() const { return maxSpeedRPM; }
     
-    // Statistics
+    // Statistics (thread-safe - read-only)
     float getTotalRevolutions() const;
     unsigned long getRunTime() const; // in seconds
     bool isRunning() const;
     
-    // Settings
-    void setMicroSteps(int steps);
-    void setRunCurrent(int current);
+    // Settings (thread-safe - read-only)
     int getMicroSteps() const { return microSteps; }
     int getRunCurrent() const { return runCurrent; }
-    
-    // Reset statistics
-    void resetCounters();
 };
 
 #endif // STEPPER_CONTROLLER_H

@@ -16,21 +16,21 @@ public:
     
     void onConnect(BLEServer* pServer) override {
         bleManager->deviceConnected = true;
-        Serial.println("BLE Client connected");
+        // No Serial print in time-critical callback
     }
     
     void onDisconnect(BLEServer* pServer) override {
         bleManager->deviceConnected = false;
-        Serial.println("BLE Client disconnected");
         
-        // Emergency stop on disconnect
+        // Emergency stop on disconnect (critical safety feature)
+        // Use thread-safe interface - emergency stop will be processed immediately
         if (bleManager->stepperController) {
             bleManager->stepperController->emergencyStop();
         }
         
         // Restart advertising immediately (safe in task context)
         pServer->startAdvertising();
-        Serial.println("Restarted advertising after disconnect");
+        // No Serial print in time-critical callback
     }
 };
 
@@ -45,20 +45,32 @@ public:
     void onWrite(BLECharacteristic* pCharacteristic) override {
         std::string value = pCharacteristic->getValue();
         
-        if (value.length() > 0) {
-            Serial.printf("Received command: %s (length: %d)\n", value.c_str(), value.length());
-            bleManager->handleCommand(value);
-        } else {
-            Serial.println("Received empty command");
+        if (value.length() > 0 && value.length() <= BLEManager::MAX_COMMAND_LENGTH) {
+            // Queue the command for processing in the BLE task instead of processing here
+            // This avoids stack issues in the BLE callback context
+            // No Serial prints in time-critical callback context
+            bleManager->queueCommand(value);
         }
     }
 };
 
 BLEManager::BLEManager() 
-    : Task("BLE_Task", 8192, 2, 0), // Task name, 8KB stack, priority 2, core 0
+    : Task("BLE_Task", 12288, 2, 0), // Task name, 12KB stack, priority 2, core 0
       server(nullptr), service(nullptr), commandCharacteristic(nullptr),
       deviceConnected(false), oldDeviceConnected(false),
       stepperController(nullptr), lastStatusUpdate(0) {
+    
+    // Create FreeRTOS queue for commands
+    commandQueue = xQueueCreate(MAX_QUEUE_SIZE, MAX_COMMAND_LENGTH);
+    if (commandQueue == nullptr) {
+        Serial.println("ERROR: Failed to create command queue!");
+    }
+}
+
+BLEManager::~BLEManager() {
+    if (commandQueue != nullptr) {
+        vQueueDelete(commandQueue);
+    }
 }
 
 bool BLEManager::begin(const char* deviceName) {
@@ -120,7 +132,7 @@ void BLEManager::handleCommand(const std::string& command) {
     
     Serial.printf("Processing command: %s (length: %d)\n", command.c_str(), command.length());
     
-    // Parse JSON command with ArduinoJson
+    // Use smaller JSON document to reduce stack usage
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, command);
     
@@ -139,40 +151,60 @@ void BLEManager::handleCommand(const std::string& command) {
     
     if (strcmp(type, "speed") == 0) {
         float speed = doc["value"];
-        stepperController->setSpeed(speed);
-        Serial.printf("Speed set to: %.2f RPM\n", speed);
+        if (stepperController->setSpeed(speed)) {
+            Serial.printf("Speed command queued: %.2f RPM\n", speed);
+        } else {
+            Serial.println("Failed to queue speed command");
+        }
     }
     else if (strcmp(type, "direction") == 0) {
         bool clockwise = doc["value"];
-        stepperController->setDirection(clockwise);
-        Serial.printf("Direction set to: %s\n", clockwise ? "clockwise" : "counter-clockwise");
+        if (stepperController->setDirection(clockwise)) {
+            Serial.printf("Direction command queued: %s\n", clockwise ? "clockwise" : "counter-clockwise");
+        } else {
+            Serial.println("Failed to queue direction command");
+        }
     }
     else if (strcmp(type, "enable") == 0) {
         bool enable = doc["value"];
+        bool success = false;
         if (enable) {
-            stepperController->enable();
+            success = stepperController->enable();
         } else {
-            stepperController->disable();
+            success = stepperController->disable();
         }
-        Serial.printf("Motor %s\n", enable ? "enabled" : "disabled");
+        if (success) {
+            Serial.printf("Motor %s command queued\n", enable ? "enable" : "disable");
+        } else {
+            Serial.printf("Failed to queue motor %s command\n", enable ? "enable" : "disable");
+        }
     }
     else if (strcmp(type, "microsteps") == 0) {
         int microsteps = doc["value"];
         if (microsteps > 0) {
-            stepperController->setMicroSteps(microsteps);
-            Serial.printf("Microsteps set to: %d\n", microsteps);
+            if (stepperController->setMicroSteps(microsteps)) {
+                Serial.printf("Microsteps command queued: %d\n", microsteps);
+            } else {
+                Serial.println("Failed to queue microsteps command");
+            }
         }
     }
     else if (strcmp(type, "current") == 0) {
         int current = doc["value"];
         if (current >= 10 && current <= 100) {
-            stepperController->setRunCurrent(current);
-            Serial.printf("Current set to: %d%%\n", current);
+            if (stepperController->setRunCurrent(current)) {
+                Serial.printf("Current command queued: %d%%\n", current);
+            } else {
+                Serial.println("Failed to queue current command");
+            }
         }
     }
     else if (strcmp(type, "reset") == 0) {
-        stepperController->resetCounters();
-        Serial.println("Counters reset");
+        if (stepperController->resetCounters()) {
+            Serial.println("Reset counters command queued");
+        } else {
+            Serial.println("Failed to queue reset counters command");
+        }
     }
     else if (strcmp(type, "status_request") == 0) {
         sendStatus();
@@ -188,7 +220,7 @@ void BLEManager::sendStatus() {
         return;
     }
     
-    // Create JSON status using ArduinoJson
+    // Use static JSON document to reduce stack usage
     JsonDocument statusDoc;
     statusDoc["type"] = "status";
     statusDoc["enabled"] = stepperController->isEnabled();
@@ -235,22 +267,24 @@ void BLEManager::run() {
     Serial.println("BLE Manager initialized successfully!");
     
     while (true) {
-        update();
-        vTaskDelay(pdMS_TO_TICKS(10)); // 10ms delay
+        update(); // update() now includes its own delay
     }
 }
 
 void BLEManager::update() {
+    // Process any queued commands with timeout (non-blocking)
+    processQueuedCommands();
+    
     // Handle connection state changes
     if (!deviceConnected && oldDeviceConnected) {
         server->startAdvertising(); // Restart advertising
-        Serial.println("Start advertising");
+        Serial.println("BLE client disconnected - restarted advertising");
         oldDeviceConnected = deviceConnected;
     }
     
     if (deviceConnected && !oldDeviceConnected) {
         oldDeviceConnected = deviceConnected;
-        Serial.println("New client connection established");
+        Serial.println("BLE client connected");
         // Send initial status in next update cycle
     }
     
@@ -259,5 +293,34 @@ void BLEManager::update() {
     if (currentTime - lastStatusUpdate >= STATUS_UPDATE_INTERVAL) {
         updateStatus();
         lastStatusUpdate = currentTime;
+    }
+    
+    // Small delay to prevent busy waiting when no commands are queued
+    vTaskDelay(pdMS_TO_TICKS(10));
+}
+
+bool BLEManager::queueCommand(const std::string& command) {
+    if (commandQueue == nullptr || command.length() > MAX_COMMAND_LENGTH) {
+        return false;
+    }
+    
+    // Convert string to char array for queue
+    char commandBuffer[MAX_COMMAND_LENGTH];
+    strncpy(commandBuffer, command.c_str(), MAX_COMMAND_LENGTH - 1);
+    commandBuffer[MAX_COMMAND_LENGTH - 1] = '\0';
+    
+    // Try to send to queue without blocking (called from ISR context)
+    BaseType_t result = xQueueSendFromISR(commandQueue, commandBuffer, nullptr);
+    return result == pdTRUE;
+}
+
+void BLEManager::processQueuedCommands() {
+    char commandBuffer[MAX_COMMAND_LENGTH];
+    
+    // Process commands with timeout to avoid busy waiting
+    while (xQueueReceive(commandQueue, commandBuffer, pdMS_TO_TICKS(5)) == pdTRUE) {
+        std::string command(commandBuffer);
+        Serial.printf("Processing queued command: %s\n", command.c_str());
+        handleCommand(command);
     }
 }

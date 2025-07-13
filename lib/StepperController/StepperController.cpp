@@ -5,6 +5,18 @@ StepperController::StepperController()
       stepper(nullptr), serialStream(Serial2), currentSpeedRPM(1.0f), minSpeedRPM(0.1f), maxSpeedRPM(30.0f),
       microSteps(32), runCurrent(30), motorEnabled(false), clockwise(true),
       startTime(0), totalSteps(0), isFirstStart(true) {
+    
+    // Create command queue for thread-safe operation
+    commandQueue = xQueueCreate(COMMAND_QUEUE_SIZE, sizeof(StepperCommandData));
+    if (commandQueue == nullptr) {
+        Serial.println("ERROR: Failed to create stepper command queue!");
+    }
+}
+
+StepperController::~StepperController() {
+    if (commandQueue != nullptr) {
+        vQueueDelete(commandQueue);
+    }
 }
 
 bool StepperController::begin() {
@@ -110,7 +122,7 @@ uint32_t StepperController::rpmToStepsPerSecond(float rpm) {
     return static_cast<uint32_t>(motorStepsPerSecond);
 }
 
-void StepperController::setSpeed(float rpm) {
+void StepperController::setSpeedInternal(float rpm) {
     // Clamp speed to valid range
     rpm = constrain(rpm, minSpeedRPM, maxSpeedRPM);
     currentSpeedRPM = rpm;
@@ -123,12 +135,12 @@ void StepperController::setSpeed(float rpm) {
     }
 }
 
-void StepperController::setDirection(bool newClockwise) {
+void StepperController::setDirectionInternal(bool newClockwise) {
     clockwise = newClockwise;
     Serial.printf("Direction set to %s\n", clockwise ? "clockwise" : "counter-clockwise");
 }
 
-void StepperController::enable() {
+void StepperController::enableInternal() {
     if (!stepper || motorEnabled) return;
     
     motorEnabled = true;
@@ -152,7 +164,7 @@ void StepperController::enable() {
                   clockwise ? "clockwise" : "counter-clockwise", currentSpeedRPM);
 }
 
-void StepperController::disable() {
+void StepperController::disableInternal() {
     if (!stepper || !motorEnabled) return;
     
     motorEnabled = false;
@@ -162,7 +174,7 @@ void StepperController::disable() {
     Serial.println("Motor disabled");
 }
 
-void StepperController::emergencyStop() {
+void StepperController::emergencyStopInternal() {
     if (!stepper) return;
     
     motorEnabled = false;
@@ -191,7 +203,7 @@ bool StepperController::isRunning() const {
     return stepper->isRunning() && motorEnabled;
 }
 
-void StepperController::setMicroSteps(int steps) {
+void StepperController::setMicroStepsInternal(int steps) {
     // Stop motor before changing microsteps
     bool wasEnabled = motorEnabled;
     if (motorEnabled) {
@@ -212,7 +224,7 @@ void StepperController::setMicroSteps(int steps) {
     saveSettings();
 }
 
-void StepperController::setRunCurrent(int current) {
+void StepperController::setRunCurrentInternal(int current) {
     runCurrent = constrain(current, 10, 100);
     configureDriver();
     saveSettings();
@@ -230,7 +242,12 @@ void StepperController::run() {
     Serial.println("Stepper Controller initialized successfully!");
     
     while (true) {
+        // Process commands first (thread-safe)
+        processCommands();
+        
+        // Then update stepper state
         update();
+        
         vTaskDelay(pdMS_TO_TICKS(1)); // 1ms delay for precise stepper control
     }
 }
@@ -240,7 +257,7 @@ void StepperController::update() {
     // No manual update needed, but we can add monitoring here if needed
 }
 
-void StepperController::resetCounters() {
+void StepperController::resetCountersInternal() {
     if (stepper) {
         stepper->setCurrentPosition(0);
     }
@@ -286,4 +303,124 @@ void StepperController::loadSettings() {
         Serial.println("Failed to open preferences for loading, using defaults");
         // Default values are already set in constructor
     }
+}
+
+void StepperController::processCommands() {
+    StepperCommandData cmd;
+    
+    // Process all pending commands with minimal timeout
+    while (xQueueReceive(commandQueue, &cmd, pdMS_TO_TICKS(1)) == pdTRUE) {
+        switch (cmd.command) {
+            case StepperCommand::SET_SPEED:
+                // Direct call to internal implementation
+                setSpeedInternal(cmd.floatValue);
+                break;
+                
+            case StepperCommand::SET_DIRECTION:
+                setDirectionInternal(cmd.boolValue);
+                break;
+                
+            case StepperCommand::ENABLE:
+                enableInternal();
+                break;
+                
+            case StepperCommand::DISABLE:
+                disableInternal();
+                break;
+                
+            case StepperCommand::EMERGENCY_STOP:
+                emergencyStopInternal();
+                break;
+                
+            case StepperCommand::SET_MICROSTEPS:
+                setMicroStepsInternal(cmd.intValue);
+                break;
+                
+            case StepperCommand::SET_CURRENT:
+                setRunCurrentInternal(cmd.intValue);
+                break;
+                
+            case StepperCommand::RESET_COUNTERS:
+                resetCountersInternal();
+                break;
+        }
+    }
+}
+
+// Thread-safe public interface using command queue
+bool StepperController::setSpeed(float rpm) {
+    if (commandQueue == nullptr) return false;
+    
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::SET_SPEED;
+    cmd.floatValue = rpm;
+    
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+}
+
+bool StepperController::setDirection(bool clockwise) {
+    if (commandQueue == nullptr) return false;
+    
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::SET_DIRECTION;
+    cmd.boolValue = clockwise;
+    
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+}
+
+bool StepperController::enable() {
+    if (commandQueue == nullptr) return false;
+    
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::ENABLE;
+    
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+}
+
+bool StepperController::disable() {
+    if (commandQueue == nullptr) return false;
+    
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::DISABLE;
+    
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+}
+
+bool StepperController::emergencyStop() {
+    if (commandQueue == nullptr) return false;
+    
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::EMERGENCY_STOP;
+    
+    // Emergency stop has higher priority - try to send immediately
+    return xQueueSend(commandQueue, &cmd, 0) == pdTRUE;
+}
+
+bool StepperController::setMicroSteps(int steps) {
+    if (commandQueue == nullptr) return false;
+    
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::SET_MICROSTEPS;
+    cmd.intValue = steps;
+    
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+}
+
+bool StepperController::setRunCurrent(int current) {
+    if (commandQueue == nullptr) return false;
+    
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::SET_CURRENT;
+    cmd.intValue = current;
+    
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+}
+
+bool StepperController::resetCounters() {
+    if (commandQueue == nullptr) return false;
+    
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::RESET_COUNTERS;
+    
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
 }
