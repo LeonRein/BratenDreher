@@ -86,9 +86,10 @@ bool StepperController::begin() {
     stepper->setDelayToEnable(50);
     stepper->setDelayToDisable(1000);
     
-    // Set acceleration (steps/s²) - smooth acceleration for rotisserie
-    // Default: reach 30 RPM in 10 seconds for gentle start (3200 steps/s²)
-    uint32_t defaultAcceleration = calculateAccelerationForTime(30.0f, 10.0f);
+    // Set acceleration (steps/s²) - optimized for variable speed operation
+    // For variable speed to work smoothly, we need fast acceleration
+    // Target: reach 30 RPM in 2 seconds for responsive speed changes (16000 steps/s²)
+    uint32_t defaultAcceleration = calculateAccelerationForTime(30.0f, 2.0f);
     stepper->setAcceleration(defaultAcceleration);
     
     // Set initial speed using internal method (avoid command queue during initialization)
@@ -189,7 +190,7 @@ void StepperController::setStallGuardThreshold(uint8_t threshold) {
     Serial.printf("StallGuard threshold set to %d (0=most sensitive, 255=least sensitive)\n", threshold);
 }
 
-uint32_t StepperController::rpmToStepsPerSecond(float rpm) {
+uint32_t StepperController::rpmToStepsPerSecond(float rpm) const {
     // Calculate steps per second for the motor (before gear reduction)
     // Final RPM * gear ratio = motor RPM
     float motorRPM = rpm * GEAR_RATIO;
@@ -421,6 +422,11 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
     // Set speed and apply it with acceleration
     stepper->setSpeedInHz(stepsPerSecond);
     stepper->applySpeedAcceleration();
+    
+    // If variable speed is enabled, recalculate acceleration for new base speed
+    if (speedVariationEnabled) {
+        updateAccelerationForVariableSpeed();
+    }
     
     Serial.printf("Speed set to %.2f RPM (%u steps/sec)\n", rpm, stepsPerSecond);
     reportResult(commandId, CommandResult::SUCCESS);
@@ -720,7 +726,6 @@ void StepperController::setAccelerationForTime(float targetRPM, float timeSecond
     Serial.printf("Acceleration set to %u steps/s² for %0.1f RPM in %.1f seconds\n", 
                   newAcceleration, targetRPM, timeSeconds);
 }
-
 void StepperController::setSpeedVariationInternal(float strength, uint32_t commandId) {
     // Validate strength (0.0 to 1.0)
     if (strength < 0.0f || strength > 1.0f) {
@@ -730,6 +735,11 @@ void StepperController::setSpeedVariationInternal(float strength, uint32_t comma
     }
     
     speedVariationStrength = strength;
+    
+    // If variable speed is enabled, update acceleration for new strength
+    if (speedVariationEnabled) {
+        updateAccelerationForVariableSpeed();
+    }
     
     Serial.printf("Speed variation strength set to %.2f (%.0f%%)\n", strength, strength * 100.0f);
     reportResult(commandId, CommandResult::SUCCESS);
@@ -757,6 +767,9 @@ void StepperController::enableSpeedVariationInternal(uint32_t commandId) {
     speedVariationStartPosition = stepper->getCurrentPosition();
     speedVariationEnabled = true;
     
+    // Dynamically calculate and apply required acceleration for variable speed
+    updateAccelerationForVariableSpeed();
+    
     Serial.printf("Speed variation enabled at position %ld (strength: %.0f%%)\n", 
                   speedVariationStartPosition, speedVariationStrength * 100.0f);
     Serial.println("Current position will be the slowest point in the cycle");
@@ -774,6 +787,7 @@ void StepperController::disableSpeedVariationInternal(uint32_t commandId) {
     }
     
     Serial.println("Speed variation disabled, returned to constant speed");
+    Serial.println("Note: Acceleration remains at current setting for normal operation");
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -792,13 +806,15 @@ float StepperController::calculateVariableSpeed() const {
     while (angle >= 2.0f * PI) angle -= 2.0f * PI;
     while (angle < 0.0f) angle += 2.0f * PI;
     
-    // Calculate speed variation using sine wave
-    // sin(angle) ranges from -1 to +1
+    // Calculate speed variation using cosine wave to maintain mean RPM
+    // cos(angle) ranges from -1 to +1, with mean value of 0 over a full cycle
     // We want minimum speed at angle = 0 (current position when enabled)
     // So we use -cos(angle) which gives -1 at angle = 0
     float variation = -cosf(angle);
     
-    // Scale variation by strength
+    // Scale variation by strength, maintaining the same mean RPM
+    // Since cos has mean 0, currentSpeedRPM * (1 + variation * strength) 
+    // has mean currentSpeedRPM over a full rotation
     float speedMultiplier = 1.0f + (variation * speedVariationStrength);
     
     // Ensure we don't go below minimum or above maximum speed
@@ -831,20 +847,116 @@ float StepperController::getCurrentVariableSpeed() const {
     return currentSpeedRPM;
 }
 
+uint32_t StepperController::calculateRequiredAccelerationForVariableSpeed() const {
+    if (!speedVariationEnabled || speedVariationStrength == 0.0f) {
+        return 0; // No special acceleration needed
+    }
+    
+    // Calculate the maximum speed change that can occur
+    // Maximum variation is when going from minimum to maximum multiplier
+    float minMultiplier = 1.0f - speedVariationStrength;
+    float maxMultiplier = 1.0f + speedVariationStrength;
+    
+    float minSpeed = currentSpeedRPM * minMultiplier;
+    float maxSpeed = currentSpeedRPM * maxMultiplier;
+    
+    // Constrain to motor limits
+    minSpeed = constrain(minSpeed, minSpeedRPM, maxSpeedRPM);
+    maxSpeed = constrain(maxSpeed, minSpeedRPM, maxSpeedRPM);
+    
+    // Calculate the maximum speed change
+    float maxSpeedChange = maxSpeed - minSpeed;
+    
+    // Convert to steps per second
+    uint32_t maxSpeedChangeSteps = rpmToStepsPerSecond(maxSpeedChange);
+    
+    // Calculate time for half a rotation at current RPM
+    // Half rotation time = (0.5 rev / currentSpeedRPM) * 60 s/min = 30/currentSpeedRPM seconds
+    float halfRotationTime = 30.0f / currentSpeedRPM;
+    
+    // The maximum speed change occurs over half a rotation
+    // (from minimum to maximum or vice versa)
+    uint32_t requiredAcceleration = static_cast<uint32_t>(maxSpeedChangeSteps / halfRotationTime);
+    
+    // Add safety margin (50%) to ensure smooth operation
+    requiredAcceleration = static_cast<uint32_t>(requiredAcceleration * 1.5f);
+    
+    Serial.printf("Variable speed acceleration calculation:\n");
+    Serial.printf("  Base RPM: %.2f, Speed range: %.2f - %.2f RPM (Δ%.2f RPM)\n", 
+                  currentSpeedRPM, minSpeed, maxSpeed, maxSpeedChange);
+    Serial.printf("  Half rotation time: %.3f seconds\n", halfRotationTime);
+    Serial.printf("  Max speed change: %u steps/s over %.3fs\n", maxSpeedChangeSteps, halfRotationTime);
+    Serial.printf("  Required acceleration: %u steps/s² (with 50%% safety margin)\n", requiredAcceleration);
+    
+    return requiredAcceleration;
+}
+
+void StepperController::updateAccelerationForVariableSpeed() {
+    if (!stepper || !speedVariationEnabled) {
+        return;
+    }
+    
+    uint32_t requiredAcceleration = calculateRequiredAccelerationForVariableSpeed();
+    
+    if (requiredAcceleration == 0) {
+        // No variable speed active, no need to change acceleration
+        return;
+    }
+    
+    // Get current acceleration (FastAccelStepper doesn't provide a getter, 
+    // so we'll track it ourselves or use a reasonable minimum)
+    // For now, let's use the normal acceleration as baseline
+    uint32_t normalAcceleration = calculateAccelerationForTime(30.0f, 2.0f);
+    
+    // Only increase acceleration if we need more than what we currently have
+    if (requiredAcceleration > normalAcceleration) {
+        stepper->setAcceleration(requiredAcceleration);
+        stepper->applySpeedAcceleration();
+        
+        Serial.printf("Acceleration increased to %u steps/s² for variable speed operation\n", 
+                      requiredAcceleration);
+    } else {
+        Serial.printf("Current acceleration sufficient for variable speed (required: %u, keeping current)\n", 
+                      requiredAcceleration);
+    }
+}
+
 void StepperController::updateMotorSpeed() {
-    // Only update speed if motor is enabled, stepper is initialized, and variable speed is enabled
     if (!stepper || !motorEnabled || !speedVariationEnabled) {
         return;
     }
     
-    // Only update if motor is actually running (use cached state)
-    if (!cachedIsRunning) {
-        return;
-    }
+    // Calculate current variable speed
+    float currentVariableSpeed = calculateVariableSpeed();
     
-    // Calculate and apply variable speed
-    float variableSpeed = calculateVariableSpeed();
-    uint32_t stepsPerSecond = rpmToStepsPerSecond(variableSpeed);
+    // Apply the new speed
+    uint32_t stepsPerSecond = rpmToStepsPerSecond(currentVariableSpeed);
     stepper->setSpeedInHz(stepsPerSecond);
     stepper->applySpeedAcceleration();
+}
+
+// Helper method to verify mean RPM calculation (for testing/debugging)
+float StepperController::calculateMeanRPMOverRotation() const {
+    if (!speedVariationEnabled || speedVariationStrength == 0.0f) {
+        return currentSpeedRPM;
+    }
+    
+    // Sample the speed function over a full rotation to verify mean
+    const int samples = 360; // One sample per degree
+    float sum = 0.0f;
+    
+    for (int i = 0; i < samples; i++) {
+        float angle = (2.0f * PI * i) / samples;
+        
+        // Apply the same calculation as in calculateVariableSpeed()
+        float variation = -cosf(angle);
+        float speedMultiplier = 1.0f + (variation * speedVariationStrength);
+        float speed = currentSpeedRPM * speedMultiplier;
+        
+        // Apply same constraints as the real function
+        speed = constrain(speed, minSpeedRPM, maxSpeedRPM);
+        sum += speed;
+    }
+    
+    return sum / samples;
 }

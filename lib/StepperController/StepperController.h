@@ -142,7 +142,7 @@ private:
     void loadSettings();
     void configureDriver();
     void configureStallDetection(bool enableStealthChop = true);
-    uint32_t rpmToStepsPerSecond(float rpm);
+    uint32_t rpmToStepsPerSecond(float rpm) const;
     
     // Internal methods (called from command processing)
     void setSpeedInternal(float rpm, uint32_t commandId);
@@ -161,6 +161,9 @@ private:
     // Speed variation helper methods
     float calculateVariableSpeed() const;
     float getPositionAngle() const;
+    uint32_t calculateRequiredAccelerationForVariableSpeed() const;
+    void updateAccelerationForVariableSpeed();
+    float calculateMeanRPMOverRotation() const; // For testing/debugging mean RPM calculation
     
     // Helper methods for status reporting
     void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
