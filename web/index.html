@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BratenDreher Control</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE2IDJMMjQgMTZMMTYgMzBMOCAxNkwxNiAyWiIgZmlsbD0iIzMzNzNkYyIvPgo8L3N2Zz4K">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🔄 BratenDreher</h1>
+            <p class="subtitle">Stepper Motor Control via Bluetooth</p>
+        </header>
+
+        <!-- Connection Status -->
+        <div class="card connection-card">
+            <div class="connection-status">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="connectionStatus">Disconnected</span>
+            </div>
+            <div class="connection-buttons">
+                <button id="connectBtn" class="btn btn-primary">
+                    📶 Connect
+                </button>
+                <button id="disconnectBtn" class="btn btn-secondary" disabled>
+                    ❌ Disconnect
+                </button>
+            </div>
+        </div>
+
+        <!-- Motor Control -->
+        <div class="card control-card">
+            <h2>Motor Control</h2>
+            
+            <!-- Enable/Disable -->
+            <div class="control-group">
+                <label class="control-label">Motor Status</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="motorToggle" class="toggle-input">
+                    <label for="motorToggle" class="toggle-label">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text-off">OFF</span>
+                        <span class="toggle-text-on">ON</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Speed Control -->
+            <div class="control-group">
+                <label class="control-label" for="speedSlider">
+                    Speed: <span id="speedValue">1.0</span> RPM
+                </label>
+                <input type="range" 
+                       id="speedSlider" 
+                       class="speed-slider"
+                       min="0.1" 
+                       max="30" 
+                       step="0.1" 
+                       value="1.0">
+                <div class="speed-presets">
+                    <button class="preset-btn" data-speed="0.5">Very Slow</button>
+                    <button class="preset-btn" data-speed="2.0">Slow</button>
+                    <button class="preset-btn" data-speed="10.0">Medium</button>
+                    <button class="preset-btn" data-speed="30.0">Fast</button>
+                </div>
+            </div>
+
+            <!-- Direction Control -->
+            <div class="control-group">
+                <label class="control-label">Direction</label>
+                <div class="direction-buttons">
+                    <button id="clockwiseBtn" class="btn btn-direction active" data-direction="1">
+                        ↻ Clockwise
+                    </button>
+                    <button id="counterclockwiseBtn" class="btn btn-direction" data-direction="0">
+                        ↺ Counter-clockwise
+                    </button>
+                </div>
+            </div>
+
+            <!-- Emergency Stop -->
+            <div class="control-group">
+                <button id="emergencyStopBtn" class="btn btn-emergency">
+                    🛑 Emergency Stop
+                </button>
+            </div>
+
+            <!-- Advanced Settings -->
+            <div class="control-group advanced-settings">
+                <h3>Advanced Settings</h3>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label for="microstepsSlider">Microsteps: <span id="microstepsValue">32</span></label>
+                        <select id="microstepsSelect" class="setting-select">
+                            <option value="8">8</option>
+                            <option value="16">16</option>
+                            <option value="32" selected>32</option>
+                            <option value="64">64</option>
+                            <option value="128">128</option>
+                            <option value="256">256</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label for="currentSlider">Current: <span id="currentValue">30</span>%</label>
+                        <input type="range" 
+                               id="currentSlider" 
+                               class="setting-slider"
+                               min="10" 
+                               max="100" 
+                               step="5" 
+                               value="30">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Display -->
+        <div class="card status-card">
+            <h2>Status</h2>
+            <div class="status-grid">
+                <div class="status-item">
+                    <span class="status-label">Motor:</span>
+                    <span id="motorStatus" class="status-value">Stopped</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Speed:</span>
+                    <span id="currentSpeed" class="status-value">0.0 RPM</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Direction:</span>
+                    <span id="currentDirection" class="status-value">Clockwise</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Microsteps:</span>
+                    <span id="currentMicrosteps" class="status-value">32</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Current:</span>
+                    <span id="currentCurrent" class="status-value">30%</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Last Update:</span>
+                    <span id="lastUpdate" class="status-value">Never</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Display -->
+        <div class="card stats-card">
+            <h2>Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-value" id="totalRevolutions">0.000</span>
+                    <span class="stat-label">Total Revolutions</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="runTime">00:00:00</span>
+                    <span class="stat-label">Running Time</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="avgSpeed">0.000</span>
+                    <span class="stat-label">Avg Speed (RPM)</span>
+                </div>
+            </div>
+            <button id="resetStatsBtn" class="btn btn-secondary stats-reset">
+                📊 Reset Statistics
+            </button>
+        </div>
+
+        <!-- Info Card -->
+        <div class="card info-card">
+            <h2>Info</h2>
+            <div class="info-content">
+                <p><strong>Motor:</strong> NEMA 17 Stepper (FastAccelStepper + TMC2209)</p>
+                <p><strong>Gear Ratio:</strong> 1:10</p>
+                <p><strong>Speed Range:</strong> 0.1 - 30.0 RPM (0.5 RPS max)</p>
+                <p><strong>Steps per Revolution:</strong> 2000 (200 * 10)</p>
+                <p><strong>Max Torque:</strong> High due to gear reduction</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p>BratenDreher Control Interface</p>
+        <p class="version">Version 1.0</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
