@@ -562,16 +562,38 @@ class BratenDreherBLE {
             
             switch (status) {
                 case 'hardware_error':
-                    userMessage = 'Hardware Error: ' + (message || 'Stepper motor hardware not properly initialized');
+                    if (message.includes('Stepper not initialized')) {
+                        userMessage = 'Hardware Error: Stepper motor system not properly initialized';
+                    } else if (message.includes('Failed to start stepper movement')) {
+                        userMessage = 'Movement Error: Unable to start motor movement. Check motor connections and power.';
+                    } else if (message.includes('Failed to set speed')) {
+                        userMessage = 'Speed Error: Unable to set motor speed. Check stepper driver configuration.';
+                    } else {
+                        userMessage = 'Hardware Error: ' + (message || 'Stepper motor hardware issue');
+                    }
                     break;
                 case 'driver_not_responding':
                     userMessage = 'Driver Error: TMC2209 stepper driver is not responding. Check connections and power.';
                     break;
                 case 'invalid_parameter':
-                    userMessage = 'Invalid Setting: ' + (message || 'The parameter value is out of range');
+                    if (message.includes('Speed out of range')) {
+                        userMessage = 'Speed Error: ' + message;
+                    } else if (message.includes('Current out of range')) {
+                        userMessage = 'Current Error: ' + message;
+                    } else if (message.includes('microsteps')) {
+                        userMessage = 'Microsteps Error: ' + message;
+                    } else {
+                        userMessage = 'Invalid Setting: ' + (message || 'The parameter value is out of range');
+                    }
                     break;
                 case 'communication_error':
-                    userMessage = 'Communication Error: Failed to communicate with the stepper driver. Check wiring.';
+                    if (message.includes('verification failed')) {
+                        userMessage = 'Configuration Error: ' + message + '. TMC2209 may not be responding properly.';
+                    } else if (message.includes('not responding after')) {
+                        userMessage = 'Communication Error: TMC2209 driver stopped responding during configuration.';
+                    } else {
+                        userMessage = 'Communication Error: Failed to communicate with the stepper driver. Check wiring.';
+                    }
                     break;
                 default:
                     userMessage = 'Command Failed: ' + (message || 'Unknown error occurred');

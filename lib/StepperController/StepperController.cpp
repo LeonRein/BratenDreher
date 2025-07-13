@@ -85,10 +85,16 @@ bool StepperController::begin() {
     // Initially disabled
     stepperDriver.disable();
     
-    Serial.println("FastAccelStepper with TMC2209 initialized successfully");
-    Serial.printf("Steps per output revolution: %d\n", TOTAL_STEPS_PER_REVOLUTION);
-    Serial.printf("Speed range: %.1f - %.1f RPM\n", minSpeedRPM, maxSpeedRPM);
-    Serial.printf("Microsteps: %d, Run current: %d%%\n", microSteps, runCurrent);
+    // Check if TMC2209 driver is properly communicating
+    if (stepperDriver.isSetupAndCommunicating()) {
+        Serial.println("FastAccelStepper with TMC2209 initialized successfully");
+        Serial.printf("Steps per output revolution: %d\n", TOTAL_STEPS_PER_REVOLUTION);
+        Serial.printf("Speed range: %.1f - %.1f RPM\n", minSpeedRPM, maxSpeedRPM);
+        Serial.printf("Microsteps: %d, Run current: %d%%\n", microSteps, runCurrent);
+    } else {
+        Serial.println("WARNING: FastAccelStepper initialized but TMC2209 driver not responding");
+        Serial.println("Check TMC2209 wiring and power supply");
+    }
     
     return true;
 }
@@ -121,7 +127,12 @@ void StepperController::configureDriver() {
     stepperDriver.enableStealthChop();
     stepperDriver.setCoolStepDurationThreshold(5000);
     
-    Serial.printf("TMC2209 configured: %d microsteps, %d%% current\n", microSteps, runCurrent);
+    // Check if driver is communicating properly
+    if (stepperDriver.isSetupAndCommunicating()) {
+        Serial.printf("TMC2209 configured: %d microsteps, %d%% current\n", microSteps, runCurrent);
+    } else {
+        Serial.println("WARNING: TMC2209 driver not responding during configuration");
+    }
 }
 
 uint32_t StepperController::rpmToStepsPerSecond(float rpm) {
@@ -259,6 +270,7 @@ void StepperController::processCommand(const StepperCommandData& cmd) {
 
 void StepperController::resetCountersInternal(uint32_t commandId) {
     if (stepper) {
+        // FastAccelStepper setCurrentPosition returns void
         stepper->setCurrentPosition(0);
     }
     totalSteps = 0;
@@ -284,6 +296,8 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
     
     currentSpeedRPM = rpm;
     uint32_t stepsPerSecond = rpmToStepsPerSecond(rpm);
+    
+    // FastAccelStepper setSpeedInHz returns void - just call it
     stepper->setSpeedInHz(stepsPerSecond);
     
     Serial.printf("Speed set to %.2f RPM (%u steps/sec)\n", rpm, stepsPerSecond);
@@ -304,13 +318,25 @@ void StepperController::enableInternal(uint32_t commandId) {
     }
     
     motorEnabled = true;
+    
+    // Enable the TMC2209 driver
     stepperDriver.enable();
     
     // Start continuous movement in the correct direction
+    // FastAccelStepper run methods return MoveResultCode
+    MoveResultCode result;
     if (clockwise) {
-        stepper->runForward();
+        result = stepper->runForward();
     } else {
-        stepper->runBackward();
+        result = stepper->runBackward();
+    }
+    
+    if (result != MOVE_OK) {
+        motorEnabled = false;
+        stepperDriver.disable();
+        reportResult(commandId, CommandResult::HARDWARE_ERROR, 
+                    "Failed to start stepper movement (result code: " + String((int)result) + ")");
+        return;
     }
     
     if (isFirstStart) {
@@ -326,6 +352,7 @@ void StepperController::disableInternal(uint32_t commandId) {
     motorEnabled = false;
     
     if (stepper) {
+        // FastAccelStepper stopMove() returns void - just call it
         stepper->stopMove();
     }
     
@@ -339,6 +366,7 @@ void StepperController::emergencyStopInternal(uint32_t commandId) {
     motorEnabled = false;
     
     if (stepper) {
+        // FastAccelStepper forceStopAndNewPosition returns void
         stepper->forceStopAndNewPosition(stepper->getCurrentPosition());
     }
     
@@ -358,16 +386,20 @@ void StepperController::setMicroStepsInternal(int steps, uint32_t commandId) {
     
     microSteps = steps;
     
-    try {
-        stepperDriver.setMicrostepsPerStep(steps);
-        saveSettings();
-        
-        Serial.printf("Microsteps set to %d\n", steps);
-        reportResult(commandId, CommandResult::SUCCESS);
-    } catch (...) {
+    // Set microsteps on TMC2209
+    stepperDriver.setMicrostepsPerStep(steps);
+    
+    // Verify driver communication by checking if it's responding
+    if (!stepperDriver.isSetupAndCommunicating()) {
         reportResult(commandId, CommandResult::COMMUNICATION_ERROR, 
-                    "Failed to communicate with TMC2209 driver");
+                    "TMC2209 driver not responding after setting microsteps");
+        return;
     }
+    
+    saveSettings();
+    
+    Serial.printf("Microsteps set to %d\n", steps);
+    reportResult(commandId, CommandResult::SUCCESS);
 }
 
 void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
@@ -380,16 +412,20 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     
     runCurrent = current;
     
-    try {
-        stepperDriver.setRunCurrent(current);
-        saveSettings();
-        
-        Serial.printf("Run current set to %d%%\n", current);
-        reportResult(commandId, CommandResult::SUCCESS);
-    } catch (...) {
+    // Set the run current on TMC2209
+    stepperDriver.setRunCurrent(current);
+    
+    // Verify driver communication by checking if it's responding
+    if (!stepperDriver.isSetupAndCommunicating()) {
         reportResult(commandId, CommandResult::COMMUNICATION_ERROR, 
-                    "Failed to communicate with TMC2209 driver");
+                    "TMC2209 driver not responding after setting current");
+        return;
     }
+    
+    saveSettings();
+    
+    Serial.printf("Run current set to %d%%\n", current);
+    reportResult(commandId, CommandResult::SUCCESS);
 }
 
 void StepperController::reportResult(uint32_t commandId, CommandResult result, const String& errorMessage) {
