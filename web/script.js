@@ -66,6 +66,7 @@ class BratenDreherBLE {
         this.currentSpeed = document.getElementById('currentSpeed');
         this.currentDirection = document.getElementById('currentDirection');
         this.currentCurrent = document.getElementById('currentCurrent');
+        this.tmc2209Status = document.getElementById('tmc2209Status');
         this.lastUpdate = document.getElementById('lastUpdate');
         
         // Statistics elements
@@ -508,6 +509,16 @@ class BratenDreherBLE {
         this.currentSpeed.textContent = `${status.speed.toFixed(1)} RPM`;
         this.currentDirection.textContent = status.direction === 'cw' ? 'Clockwise' : 'Counter-clockwise';
         this.currentCurrent.textContent = `${status.current || this.current}%`;
+        
+        // Update TMC2209 status with fallback for backward compatibility
+        if (status.tmc2209Status !== undefined) {
+            this.tmc2209Status.textContent = status.tmc2209Status ? 'OK' : 'Error';
+            this.tmc2209Status.style.color = status.tmc2209Status ? '#2ecc71' : '#e74c3c';
+        } else {
+            this.tmc2209Status.textContent = 'Unknown';
+            this.tmc2209Status.style.color = '#f39c12';
+        }
+        
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
         
         // Update statistics

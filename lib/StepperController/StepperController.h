@@ -103,6 +103,7 @@ private:
     unsigned long startTime;
     unsigned long totalSteps;
     bool isFirstStart;
+    bool tmc2209Initialized;  // Track TMC2209 driver initialization status
     
     // Cached values for thread-safe reading
     mutable int32_t cachedCurrentPosition;
@@ -181,6 +182,7 @@ public:
     
     // Settings (thread-safe - read-only)
     int getRunCurrent() const { return runCurrent; }
+    bool isTMC2209Initialized() const { return tmc2209Initialized; }
     
     // Helper functions for acceleration calculation
     uint32_t calculateAccelerationForTime(float targetRPM, float timeSeconds);

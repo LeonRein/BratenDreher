@@ -4,7 +4,7 @@ StepperController::StepperController()
     : Task("Stepper_Task", 4096, 1, 1), // Task name, 4KB stack, priority 1, core 1
       stepper(nullptr), serialStream(Serial2), currentSpeedRPM(1.0f), minSpeedRPM(0.1f), maxSpeedRPM(30.0f),
       microSteps(16), runCurrent(30), motorEnabled(false), clockwise(true),  // Fixed to 16 microsteps
-      startTime(0), totalSteps(0), isFirstStart(true),
+      startTime(0), totalSteps(0), isFirstStart(true), tmc2209Initialized(false),
       cachedCurrentPosition(0), cachedIsRunning(false), nextCommandId(1) {
     
     // Create command queue for thread-safe operation
@@ -57,6 +57,14 @@ bool StepperController::begin() {
     // Configure driver with loaded settings
     configureDriver();
     
+    // Check TMC2209 initialization status after configuration
+    tmc2209Initialized = stepperDriver.isSetupAndCommunicating();
+    if (tmc2209Initialized) {
+        Serial.println("TMC2209 driver initialized and communicating successfully");
+    } else {
+        Serial.println("WARNING: TMC2209 driver initialization failed or not responding");
+    }
+    
     // Initialize FastAccelStepper engine
     engine.init();
     
@@ -88,7 +96,7 @@ bool StepperController::begin() {
     stepperDriver.disable();
     
     // Check if TMC2209 driver is properly communicating
-    if (stepperDriver.isSetupAndCommunicating()) {
+    if (tmc2209Initialized) {
         Serial.println("FastAccelStepper with TMC2209 initialized successfully");
         Serial.printf("Steps per output revolution: %d\n", TOTAL_STEPS_PER_REVOLUTION);
         Serial.printf("Speed range: %.1f - %.1f RPM\n", minSpeedRPM, maxSpeedRPM);
@@ -129,8 +137,11 @@ void StepperController::configureDriver() {
     stepperDriver.enableStealthChop();
     stepperDriver.setCoolStepDurationThreshold(5000);
     
+    // Update communication status after configuration
+    tmc2209Initialized = stepperDriver.isSetupAndCommunicating();
+    
     // Check if driver is communicating properly
-    if (stepperDriver.isSetupAndCommunicating()) {
+    if (tmc2209Initialized) {
         Serial.printf("TMC2209 configured: %d microsteps, %d%% current\n", microSteps, runCurrent);
     } else {
         Serial.println("WARNING: TMC2209 driver not responding during configuration");
@@ -387,8 +398,11 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     // Set the run current on TMC2209
     stepperDriver.setRunCurrent(current);
     
+    // Update TMC2209 communication status after setting current
+    tmc2209Initialized = stepperDriver.isSetupAndCommunicating();
+    
     // Verify driver communication by checking if it's responding
-    if (!stepperDriver.isSetupAndCommunicating()) {
+    if (!tmc2209Initialized) {
         reportResult(commandId, CommandResult::COMMUNICATION_ERROR, 
                     "TMC2209 driver not responding after setting current");
         return;

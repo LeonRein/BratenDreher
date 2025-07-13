@@ -137,6 +137,7 @@ python3 -m http.server 8000
   "runtime": 3024,
   "microsteps": 32,
   "current": 60,
+  "tmc2209Status": true,
   "timestamp": 123456
 }
 ```

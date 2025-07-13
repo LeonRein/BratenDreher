@@ -261,6 +261,7 @@ void BLEManager::sendStatus() {
     statusDoc["totalRevolutions"] = stepperController->getTotalRevolutions();
     statusDoc["runtime"] = stepperController->getRunTime();
     statusDoc["current"] = stepperController->getRunCurrent();
+    statusDoc["tmc2209Status"] = stepperController->isTMC2209Initialized();
     statusDoc["timestamp"] = millis();
     
     String statusString;
