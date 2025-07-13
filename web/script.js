@@ -12,6 +12,7 @@ class BratenDreherBLE {
         
         // State
         this.connected = false;
+        this.intentionalDisconnect = false; // Track if user intentionally disconnected
         this.motorSpeed = 1.0;
         this.motorDirection = true; // true = clockwise
         this.motorEnabled = false;
@@ -131,6 +132,7 @@ class BratenDreherBLE {
         try {
             console.log('Starting connection process...');
             console.log('Web Bluetooth available:', !!navigator.bluetooth);
+            this.intentionalDisconnect = false; // Reset flag when connecting
             this.updateConnectionStatus('Connecting...');
             
             // If we already have a device, try to reconnect to it first
@@ -219,6 +221,8 @@ class BratenDreherBLE {
     }
     
     async disconnect() {
+        console.log('User initiated disconnect');
+        this.intentionalDisconnect = true; // Mark as intentional
         if (this.device && this.device.gatt.connected) {
             await this.device.gatt.disconnect();
         }
@@ -232,19 +236,24 @@ class BratenDreherBLE {
         this.server = null;
         this.service = null;
         this.commandCharacteristic = null;
-        
+
         this.updateConnectionStatus('Disconnected');
         this.updateUI();
-        
+
         console.log('Disconnected from BratenDreher');
-        
-        // Attempt automatic reconnection after a delay
-        setTimeout(() => {
-            if (!this.connected && this.device) {
-                console.log('Attempting automatic reconnection...');
-                this.handleReconnect(true); // Pass true to indicate automatic reconnection
-            }
-        }, 3000);
+
+        // Only attempt automatic reconnection if it wasn't intentional
+        if (!this.intentionalDisconnect) {
+            setTimeout(() => {
+                if (!this.connected && this.device) {
+                    console.log('Attempting automatic reconnection...');
+                    this.handleReconnect(true); // Pass true to indicate automatic reconnection
+                }
+            }, 3000);
+        } else {
+            console.log('Intentional disconnect - no automatic reconnection');
+            this.intentionalDisconnect = false; // Reset flag
+        }
     }
 
     async ensureConnected() {
@@ -327,6 +336,7 @@ class BratenDreherBLE {
 
         try {
             console.log(`${automatic ? 'Automatic' : 'User initiated'} reconnection...`);
+            this.intentionalDisconnect = false; // Reset flag when reconnecting
             this.updateConnectionStatus('Reconnecting...', 'Attempting to reconnect to existing device...');
             await this.reconnect();
         } catch (error) {
