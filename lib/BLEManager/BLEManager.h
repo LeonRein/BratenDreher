@@ -6,11 +6,12 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include "Task.h"
 
 // Forward declaration
 class StepperController;
 
-class BLEManager {
+class BLEManager : public Task {
 private:
     // BLE Service and Characteristic UUIDs
     static const char* SERVICE_UUID;
@@ -31,6 +32,10 @@ private:
     // Status update timing
     unsigned long lastStatusUpdate;
     static const unsigned long STATUS_UPDATE_INTERVAL = 1000; // 1 second
+
+protected:
+    // Task implementation
+    void run() override;
     
 public:
     BLEManager();
@@ -43,11 +48,9 @@ public:
     bool isConnected() const { return deviceConnected; }
     
     // Status updates
+    void update();
     void updateStatus();
     void sendStatus();
-    
-    // Main loop
-    void update();
     
     // Handle incoming commands
     void handleCommand(const std::string& command);

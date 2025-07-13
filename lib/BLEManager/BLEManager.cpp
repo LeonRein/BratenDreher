@@ -28,8 +28,7 @@ public:
             bleManager->stepperController->emergencyStop();
         }
         
-        // Restart advertising immediately
-        delay(500); // Give time for cleanup
+        // Restart advertising immediately (safe in task context)
         pServer->startAdvertising();
         Serial.println("Restarted advertising after disconnect");
     }
@@ -56,7 +55,8 @@ public:
 };
 
 BLEManager::BLEManager() 
-    : server(nullptr), service(nullptr), commandCharacteristic(nullptr),
+    : Task("BLE_Task", 8192, 2, 0), // Task name, 8KB stack, priority 2, core 0
+      server(nullptr), service(nullptr), commandCharacteristic(nullptr),
       deviceConnected(false), oldDeviceConnected(false),
       stepperController(nullptr), lastStatusUpdate(0) {
 }
@@ -118,7 +118,9 @@ void BLEManager::setStepperController(StepperController* controller) {
 void BLEManager::handleCommand(const std::string& command) {
     if (!stepperController) return;
     
-    // Parse JSON command
+    Serial.printf("Processing command: %s (length: %d)\n", command.c_str(), command.length());
+    
+    // Parse JSON command with ArduinoJson
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, command);
     
@@ -133,7 +135,7 @@ void BLEManager::handleCommand(const std::string& command) {
         return;
     }
     
-    Serial.printf("Processing command: %s\n", type);
+    Serial.printf("Processing command type: %s\n", type);
     
     if (strcmp(type, "speed") == 0) {
         float speed = doc["value"];
@@ -186,7 +188,7 @@ void BLEManager::sendStatus() {
         return;
     }
     
-    // Create JSON status object
+    // Create JSON status using ArduinoJson
     JsonDocument statusDoc;
     statusDoc["type"] = "status";
     statusDoc["enabled"] = stepperController->isEnabled();
@@ -221,10 +223,26 @@ void BLEManager::updateStatus() {
     sendStatus();
 }
 
+void BLEManager::run() {
+    Serial.println("BLE Task started");
+    
+    // Initialize BLE manager
+    if (!begin("BratenDreher")) {
+        Serial.println("Failed to initialize BLE manager!");
+        return;
+    }
+    
+    Serial.println("BLE Manager initialized successfully!");
+    
+    while (true) {
+        update();
+        vTaskDelay(pdMS_TO_TICKS(10)); // 10ms delay
+    }
+}
+
 void BLEManager::update() {
     // Handle connection state changes
     if (!deviceConnected && oldDeviceConnected) {
-        delay(500); // Give the bluetooth stack time to get things ready
         server->startAdvertising(); // Restart advertising
         Serial.println("Start advertising");
         oldDeviceConnected = deviceConnected;
@@ -233,9 +251,7 @@ void BLEManager::update() {
     if (deviceConnected && !oldDeviceConnected) {
         oldDeviceConnected = deviceConnected;
         Serial.println("New client connection established");
-        // Send initial status after a short delay
-        delay(1000);
-        sendStatus();
+        // Send initial status in next update cycle
     }
     
     // Update status periodically

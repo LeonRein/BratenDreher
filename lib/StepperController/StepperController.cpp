@@ -1,7 +1,8 @@
 #include "StepperController.h"
 
 StepperController::StepperController() 
-    : stepper(nullptr), serialStream(Serial2), currentSpeedRPM(1.0f), minSpeedRPM(0.1f), maxSpeedRPM(30.0f),
+    : Task("Stepper_Task", 4096, 1, 1), // Task name, 4KB stack, priority 1, core 1
+      stepper(nullptr), serialStream(Serial2), currentSpeedRPM(1.0f), minSpeedRPM(0.1f), maxSpeedRPM(30.0f),
       microSteps(32), runCurrent(30), motorEnabled(false), clockwise(true),
       startTime(0), totalSteps(0), isFirstStart(true) {
 }
@@ -215,6 +216,23 @@ void StepperController::setRunCurrent(int current) {
     runCurrent = constrain(current, 10, 100);
     configureDriver();
     saveSettings();
+}
+
+void StepperController::run() {
+    Serial.println("Stepper Task started");
+    
+    // Initialize stepper controller
+    if (!begin()) {
+        Serial.println("Failed to initialize stepper controller!");
+        return;
+    }
+    
+    Serial.println("Stepper Controller initialized successfully!");
+    
+    while (true) {
+        update();
+        vTaskDelay(pdMS_TO_TICKS(1)); // 1ms delay for precise stepper control
+    }
 }
 
 void StepperController::update() {

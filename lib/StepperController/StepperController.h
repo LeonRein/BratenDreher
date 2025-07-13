@@ -5,8 +5,9 @@
 #include "FastAccelStepper.h"
 #include <TMC2209.h>
 #include <Preferences.h>
+#include "Task.h"
 
-class StepperController {
+class StepperController : public Task {
 private:
     // FastAccelStepper engine and stepper
     FastAccelStepperEngine engine;
@@ -52,6 +53,13 @@ private:
     void loadSettings();
     void configureDriver();
     uint32_t rpmToStepsPerSecond(float rpm);
+
+protected:
+    // Task implementation
+    void run() override;
+    
+    // Internal update method
+    void update();
     
 public:
     StepperController();
@@ -83,9 +91,6 @@ public:
     void setRunCurrent(int current);
     int getMicroSteps() const { return microSteps; }
     int getRunCurrent() const { return runCurrent; }
-    
-    // Update loop - FastAccelStepper handles everything internally
-    void update();
     
     // Reset statistics
     void resetCounters();

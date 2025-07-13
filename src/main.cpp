@@ -2,7 +2,7 @@
 #include "StepperController.h"
 #include "BLEManager.h"
 
-// Global objects
+// Global task objects
 StepperController stepperController;
 BLEManager bleManager;
 
@@ -12,54 +12,57 @@ unsigned long lastLedToggle = 0;
 bool ledState = false;
 
 void setup() {
-    delay(1000); // Give time for serial monitor to connect
+    // Initialize USB CDC for ESP32-S3
     Serial.begin(115200);
+    
+    // Wait for USB CDC connection (ESP32-S3 specific)
+    unsigned long startTime = millis();
+    while (!Serial && (millis() - startTime < 5000)) {
+        delay(100);
+    }
+    
+    delay(1000);
+    
+    Serial.println();
     Serial.println("=== BratenDreher Stepper Control ===");
-    Serial.println("Initializing system...");
+    Serial.println("ESP32-S3 USB CDC Serial initialized");
+    Serial.println("Initializing system with Task-based architecture...");
     
     // Initialize status LED
     pinMode(STATUS_LED_PIN, OUTPUT);
     digitalWrite(STATUS_LED_PIN, LOW);
     
-    // Initialize stepper controller
-    if (!stepperController.begin()) {
-        Serial.println("Failed to initialize stepper controller!");
+    // Connect BLE manager to stepper controller before starting tasks
+    bleManager.setStepperController(&stepperController);
+    
+    // Start tasks
+    if (!stepperController.start()) {
+        Serial.println("Failed to start Stepper Task!");
         while (1) {
-            // Flash LED rapidly to indicate error
             digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
             delay(100);
         }
     }
     
-    // Initialize BLE manager
-    if (!bleManager.begin("BratenDreher")) {
-        Serial.println("Failed to initialize BLE manager!");
+    if (!bleManager.start()) {
+        Serial.println("Failed to start BLE Task!");
         while (1) {
-            // Flash LED rapidly to indicate error
             digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
             delay(200);
         }
     }
     
-    // Connect BLE manager to stepper controller
-    bleManager.setStepperController(&stepperController);
-    
-    Serial.println("System initialized successfully!");
-    Serial.println("Ready for BLE connections...");
+    Serial.println("All tasks started successfully!");
+    Serial.println("System initialization complete.");
     
     // Turn on status LED to indicate ready state
     digitalWrite(STATUS_LED_PIN, HIGH);
 }
 
 void loop() {
-    // Update BLE manager
-    bleManager.update();
-    
-    // Update stepper controller
-    stepperController.update();
-    
-    // Status LED indication
+    // Main loop now only handles LED status indication
     unsigned long currentTime = millis();
+    
     if (bleManager.isConnected()) {
         // Solid LED when connected
         digitalWrite(STATUS_LED_PIN, HIGH);
@@ -72,6 +75,6 @@ void loop() {
         }
     }
     
-    // Small delay to prevent watchdog issues
-    delay(10);
+    // Watchdog feed and task monitoring
+    vTaskDelay(pdMS_TO_TICKS(100)); // 100ms delay, plenty for LED control
 }
