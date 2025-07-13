@@ -151,59 +151,70 @@ void BLEManager::handleCommand(const std::string& command) {
     
     if (strcmp(type, "speed") == 0) {
         float speed = doc["value"];
-        if (stepperController->setSpeed(speed)) {
-            Serial.printf("Speed command queued: %.2f RPM\n", speed);
+        uint32_t commandId = stepperController->setSpeed(speed);
+        if (commandId > 0) {
+            Serial.printf("Speed command queued: %.2f RPM (ID: %u)\n", speed, commandId);
         } else {
             Serial.println("Failed to queue speed command");
+            sendCommandResult(0, "error", "Failed to queue speed command");
         }
     }
     else if (strcmp(type, "direction") == 0) {
         bool clockwise = doc["value"];
-        if (stepperController->setDirection(clockwise)) {
-            Serial.printf("Direction command queued: %s\n", clockwise ? "clockwise" : "counter-clockwise");
+        uint32_t commandId = stepperController->setDirection(clockwise);
+        if (commandId > 0) {
+            Serial.printf("Direction command queued: %s (ID: %u)\n", clockwise ? "clockwise" : "counter-clockwise", commandId);
         } else {
             Serial.println("Failed to queue direction command");
+            sendCommandResult(0, "error", "Failed to queue direction command");
         }
     }
     else if (strcmp(type, "enable") == 0) {
         bool enable = doc["value"];
-        bool success = false;
+        uint32_t commandId = 0;
         if (enable) {
-            success = stepperController->enable();
+            commandId = stepperController->enable();
         } else {
-            success = stepperController->disable();
+            commandId = stepperController->disable();
         }
-        if (success) {
-            Serial.printf("Motor %s command queued\n", enable ? "enable" : "disable");
+        if (commandId > 0) {
+            Serial.printf("Motor %s command queued (ID: %u)\n", enable ? "enable" : "disable", commandId);
         } else {
             Serial.printf("Failed to queue motor %s command\n", enable ? "enable" : "disable");
+            sendCommandResult(0, "error", String("Failed to queue motor ") + (enable ? "enable" : "disable") + " command");
         }
     }
     else if (strcmp(type, "microsteps") == 0) {
         int microsteps = doc["value"];
         if (microsteps > 0) {
-            if (stepperController->setMicroSteps(microsteps)) {
-                Serial.printf("Microsteps command queued: %d\n", microsteps);
+            uint32_t commandId = stepperController->setMicroSteps(microsteps);
+            if (commandId > 0) {
+                Serial.printf("Microsteps command queued: %d (ID: %u)\n", microsteps, commandId);
             } else {
                 Serial.println("Failed to queue microsteps command");
+                sendCommandResult(0, "error", "Failed to queue microsteps command");
             }
         }
     }
     else if (strcmp(type, "current") == 0) {
         int current = doc["value"];
         if (current >= 10 && current <= 100) {
-            if (stepperController->setRunCurrent(current)) {
-                Serial.printf("Current command queued: %d%%\n", current);
+            uint32_t commandId = stepperController->setRunCurrent(current);
+            if (commandId > 0) {
+                Serial.printf("Current command queued: %d%% (ID: %u)\n", current, commandId);
             } else {
                 Serial.println("Failed to queue current command");
+                sendCommandResult(0, "error", "Failed to queue current command");
             }
         }
     }
     else if (strcmp(type, "reset") == 0) {
-        if (stepperController->resetCounters()) {
-            Serial.println("Reset counters command queued");
+        uint32_t commandId = stepperController->resetCounters();
+        if (commandId > 0) {
+            Serial.printf("Reset counters command queued (ID: %u)\n", commandId);
         } else {
             Serial.println("Failed to queue reset counters command");
+            sendCommandResult(0, "error", "Failed to queue reset counters command");
         }
     }
     else if (strcmp(type, "status_request") == 0) {
@@ -275,6 +286,9 @@ void BLEManager::update() {
     // Process any queued commands with timeout (non-blocking)
     processQueuedCommands();
     
+    // Process command results from StepperController
+    processCommandResults();
+    
     // Handle connection state changes
     if (!deviceConnected && oldDeviceConnected) {
         server->startAdvertising(); // Restart advertising
@@ -323,4 +337,63 @@ void BLEManager::processQueuedCommands() {
         Serial.printf("Processing queued command: %s\n", command.c_str());
         handleCommand(command);
     }
+}
+
+void BLEManager::processCommandResults() {
+    if (!stepperController) return;
+    
+    CommandResultData result;
+    // Process all available command results
+    while (stepperController->getCommandResult(result)) {
+        String status;
+        switch (result.result) {
+            case CommandResult::SUCCESS:
+                status = "success";
+                break;
+            case CommandResult::HARDWARE_ERROR:
+                status = "hardware_error";
+                break;
+            case CommandResult::INVALID_PARAMETER:
+                status = "invalid_parameter";
+                break;
+            case CommandResult::DRIVER_NOT_RESPONDING:
+                status = "driver_not_responding";
+                break;
+            case CommandResult::COMMUNICATION_ERROR:
+                status = "communication_error";
+                break;
+            default:
+                status = "unknown_error";
+                break;
+        }
+        
+        Serial.printf("Command %u result: %s", result.commandId, status.c_str());
+        if (result.errorMessage.length() > 0) {
+            Serial.printf(" - %s", result.errorMessage.c_str());
+        }
+        Serial.println();
+        
+        // Send result to client
+        sendCommandResult(result.commandId, status, result.errorMessage);
+    }
+}
+
+void BLEManager::sendCommandResult(uint32_t commandId, const String& status, const String& message) {
+    if (!commandCharacteristic || !deviceConnected) return;
+    
+    // Create JSON response
+    JsonDocument doc;
+    doc["type"] = "command_result";
+    doc["command_id"] = commandId;
+    doc["status"] = status;
+    if (message.length() > 0) {
+        doc["message"] = message;
+    }
+    
+    String response;
+    serializeJson(doc, response);
+    
+    // Send via BLE notification
+    commandCharacteristic->setValue(response.c_str());
+    commandCharacteristic->notify();
 }

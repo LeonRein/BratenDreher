@@ -21,6 +21,15 @@ enum class StepperCommand {
     RESET_COUNTERS
 };
 
+// Command result status
+enum class CommandResult {
+    SUCCESS,
+    HARDWARE_ERROR,
+    INVALID_PARAMETER,
+    DRIVER_NOT_RESPONDING,
+    COMMUNICATION_ERROR
+};
+
 // Command data structure
 struct StepperCommandData {
     StepperCommand command;
@@ -29,6 +38,14 @@ struct StepperCommandData {
         bool boolValue;      // for direction, enable/disable
         int intValue;        // for microsteps, current
     };
+    uint32_t commandId;      // unique ID for tracking command results
+};
+
+// Command result structure
+struct CommandResultData {
+    uint32_t commandId;
+    CommandResult result;
+    String errorMessage;     // detailed error description
 };
 
 class StepperController : public Task {
@@ -82,6 +99,11 @@ private:
     QueueHandle_t commandQueue;
     static const size_t COMMAND_QUEUE_SIZE = 20;
     
+    // Result queue for command status reporting
+    QueueHandle_t resultQueue;
+    static const size_t RESULT_QUEUE_SIZE = 20;
+    uint32_t nextCommandId;
+    
     // Helper methods
     bool initPreferences();
     void saveSettings();
@@ -90,14 +112,18 @@ private:
     uint32_t rpmToStepsPerSecond(float rpm);
     
     // Internal methods (called from command processing)
-    void setSpeedInternal(float rpm);
-    void setDirectionInternal(bool clockwise);
-    void enableInternal();
-    void disableInternal();
-    void emergencyStopInternal();
-    void setMicroStepsInternal(int steps);
-    void setRunCurrentInternal(int current);
-    void resetCountersInternal();
+    void setSpeedInternal(float rpm, uint32_t commandId);
+    void setDirectionInternal(bool clockwise, uint32_t commandId);
+    void enableInternal(uint32_t commandId);
+    void disableInternal(uint32_t commandId);
+    void emergencyStopInternal(uint32_t commandId);
+    void setMicroStepsInternal(int steps, uint32_t commandId);
+    void setRunCurrentInternal(int current, uint32_t commandId);
+    void resetCountersInternal(uint32_t commandId);
+    
+    // Helper methods for status reporting
+    void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
+    bool isDriverResponding();
 
 protected:
     // Task implementation
@@ -119,14 +145,17 @@ public:
     bool begin();
     
     // Motor control (thread-safe via command queue)
-    bool setSpeed(float rpm);
-    bool setDirection(bool clockwise);
-    bool enable();
-    bool disable();
-    bool emergencyStop();
-    bool setMicroSteps(int steps);
-    bool setRunCurrent(int current);
-    bool resetCounters();
+    uint32_t setSpeed(float rpm);
+    uint32_t setDirection(bool clockwise);
+    uint32_t enable();
+    uint32_t disable();
+    uint32_t emergencyStop();
+    uint32_t setMicroSteps(int steps);
+    uint32_t setRunCurrent(int current);
+    uint32_t resetCounters();
+    
+    // Command result retrieval (thread-safe)
+    bool getCommandResult(CommandResultData& result); // non-blocking, returns false if no result available
     
     // Getters
     float getSpeed() const { return currentSpeedRPM; }

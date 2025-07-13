@@ -11,8 +11,9 @@
 #include <string>
 #include "Task.h"
 
-// Forward declaration
+// Forward declaration (header will be included in .cpp file)
 class StepperController;
+struct CommandResultData;
 
 class BLEManager : public Task {
 private:
@@ -60,6 +61,8 @@ public:
     void update();
     void updateStatus();
     void sendStatus();
+    void processCommandResults(); // Process command results from StepperController
+    void sendCommandResult(uint32_t commandId, const String& status, const String& message = "");
     
     // Handle incoming commands
     bool queueCommand(const std::string& command);

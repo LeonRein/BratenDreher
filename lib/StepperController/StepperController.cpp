@@ -5,18 +5,27 @@ StepperController::StepperController()
       stepper(nullptr), serialStream(Serial2), currentSpeedRPM(1.0f), minSpeedRPM(0.1f), maxSpeedRPM(30.0f),
       microSteps(32), runCurrent(30), motorEnabled(false), clockwise(true),
       startTime(0), totalSteps(0), isFirstStart(true),
-      cachedCurrentPosition(0), cachedIsRunning(false) {
+      cachedCurrentPosition(0), cachedIsRunning(false), nextCommandId(1) {
     
     // Create command queue for thread-safe operation
     commandQueue = xQueueCreate(COMMAND_QUEUE_SIZE, sizeof(StepperCommandData));
     if (commandQueue == nullptr) {
         Serial.println("ERROR: Failed to create stepper command queue!");
     }
+    
+    // Create result queue for command status reporting
+    resultQueue = xQueueCreate(RESULT_QUEUE_SIZE, sizeof(CommandResultData));
+    if (resultQueue == nullptr) {
+        Serial.println("ERROR: Failed to create stepper result queue!");
+    }
 }
 
 StepperController::~StepperController() {
     if (commandQueue != nullptr) {
         vQueueDelete(commandQueue);
+    }
+    if (resultQueue != nullptr) {
+        vQueueDelete(resultQueue);
     }
 }
 
@@ -70,8 +79,8 @@ bool StepperController::begin() {
     // Set acceleration (steps/s²) - smooth acceleration for rotisserie
     stepper->setAcceleration(500);
     
-    // Set initial speed
-    setSpeed(currentSpeedRPM);
+    // Set initial speed using internal method (avoid command queue during initialization)
+    setSpeedInternal(currentSpeedRPM, 0); // Use commandId 0 for internal calls
     
     // Initially disabled
     stepperDriver.disable();
@@ -123,68 +132,6 @@ uint32_t StepperController::rpmToStepsPerSecond(float rpm) {
     return static_cast<uint32_t>(motorStepsPerSecond);
 }
 
-void StepperController::setSpeedInternal(float rpm) {
-    // Clamp speed to valid range
-    rpm = constrain(rpm, minSpeedRPM, maxSpeedRPM);
-    currentSpeedRPM = rpm;
-    
-    if (stepper && rpm > 0) {
-        uint32_t stepsPerSecond = rpmToStepsPerSecond(rpm);
-        stepper->setSpeedInHz(stepsPerSecond);
-        
-        Serial.printf("Speed set to %.2f RPM (%d steps/s)\n", rpm, stepsPerSecond);
-    }
-}
-
-void StepperController::setDirectionInternal(bool newClockwise) {
-    clockwise = newClockwise;
-    Serial.printf("Direction set to %s\n", clockwise ? "clockwise" : "counter-clockwise");
-}
-
-void StepperController::enableInternal() {
-    if (!stepper || motorEnabled) return;
-    
-    motorEnabled = true;
-    stepperDriver.enable();
-    
-    // Record start time if this is the first start
-    if (isFirstStart) {
-        startTime = millis();
-        isFirstStart = false;
-        totalSteps = 0;
-    }
-    
-    // Start continuous rotation in the set direction
-    if (clockwise) {
-        stepper->runForward();
-    } else {
-        stepper->runBackward();
-    }
-    
-    Serial.printf("Motor enabled - running %s at %.2f RPM\n", 
-                  clockwise ? "clockwise" : "counter-clockwise", currentSpeedRPM);
-}
-
-void StepperController::disableInternal() {
-    if (!stepper || !motorEnabled) return;
-    
-    motorEnabled = false;
-    stepper->stopMove();
-    stepperDriver.disable();
-    
-    Serial.println("Motor disabled");
-}
-
-void StepperController::emergencyStopInternal() {
-    if (!stepper) return;
-    
-    motorEnabled = false;
-    stepper->forceStopAndNewPosition(0);
-    stepperDriver.disable();
-    
-    Serial.println("Emergency stop executed");
-}
-
 float StepperController::getTotalRevolutions() const {
     // Use cached position to avoid thread safety issues with FastAccelStepper
     float motorRevolutions = abs(cachedCurrentPosition) / (float)(STEPS_PER_REVOLUTION * microSteps);
@@ -199,33 +146,6 @@ unsigned long StepperController::getRunTime() const {
 bool StepperController::isRunning() const {
     // Use cached running state to avoid thread safety issues
     return cachedIsRunning && motorEnabled;
-}
-
-void StepperController::setMicroStepsInternal(int steps) {
-    // Stop motor before changing microsteps
-    bool wasEnabled = motorEnabled;
-    if (motorEnabled) {
-        disable();
-    }
-    
-    microSteps = steps;
-    configureDriver();
-    
-    // Update speed calculation
-    setSpeed(currentSpeedRPM);
-    
-    // Re-enable if it was running
-    if (wasEnabled) {
-        enable();
-    }
-    
-    saveSettings();
-}
-
-void StepperController::setRunCurrentInternal(int current) {
-    runCurrent = constrain(current, 10, 100);
-    configureDriver();
-    saveSettings();
 }
 
 void StepperController::run() {
@@ -304,40 +224,40 @@ void StepperController::updateCache() {
 void StepperController::processCommand(const StepperCommandData& cmd) {
     switch (cmd.command) {
         case StepperCommand::SET_SPEED:
-            setSpeedInternal(cmd.floatValue);
+            setSpeedInternal(cmd.floatValue, cmd.commandId);
             break;
             
         case StepperCommand::SET_DIRECTION:
-            setDirectionInternal(cmd.boolValue);
+            setDirectionInternal(cmd.boolValue, cmd.commandId);
             break;
             
         case StepperCommand::ENABLE:
-            enableInternal();
+            enableInternal(cmd.commandId);
             break;
             
         case StepperCommand::DISABLE:
-            disableInternal();
+            disableInternal(cmd.commandId);
             break;
             
         case StepperCommand::EMERGENCY_STOP:
-            emergencyStopInternal();
+            emergencyStopInternal(cmd.commandId);
             break;
             
         case StepperCommand::SET_MICROSTEPS:
-            setMicroStepsInternal(cmd.intValue);
+            setMicroStepsInternal(cmd.intValue, cmd.commandId);
             break;
             
         case StepperCommand::SET_CURRENT:
-            setRunCurrentInternal(cmd.intValue);
+            setRunCurrentInternal(cmd.intValue, cmd.commandId);
             break;
             
         case StepperCommand::RESET_COUNTERS:
-            resetCountersInternal();
+            resetCountersInternal(cmd.commandId);
             break;
     }
 }
 
-void StepperController::resetCountersInternal() {
+void StepperController::resetCountersInternal(uint32_t commandId) {
     if (stepper) {
         stepper->setCurrentPosition(0);
     }
@@ -346,6 +266,183 @@ void StepperController::resetCountersInternal() {
     isFirstStart = false;
     
     Serial.println("Counters reset");
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
+    // Validate input
+    if (rpm < minSpeedRPM || rpm > maxSpeedRPM) {
+        reportResult(commandId, CommandResult::INVALID_PARAMETER, 
+                    "Speed out of range (" + String(minSpeedRPM) + "-" + String(maxSpeedRPM) + " RPM)");
+        return;
+    }
+    
+    // Check if driver is responding
+    if (!isDriverResponding()) {
+        reportResult(commandId, CommandResult::DRIVER_NOT_RESPONDING, 
+                    "TMC2209 driver not responding");
+        return;
+    }
+    
+    if (!stepper) {
+        reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
+        return;
+    }
+    
+    currentSpeedRPM = rpm;
+    uint32_t stepsPerSecond = rpmToStepsPerSecond(rpm);
+    stepper->setSpeedInHz(stepsPerSecond);
+    
+    Serial.printf("Speed set to %.2f RPM (%u steps/sec)\n", rpm, stepsPerSecond);
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+void StepperController::setDirectionInternal(bool clockwise, uint32_t commandId) {
+    this->clockwise = clockwise;
+    
+    Serial.printf("Direction set to %s\n", clockwise ? "clockwise" : "counter-clockwise");
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+void StepperController::enableInternal(uint32_t commandId) {
+    // Check if driver is responding
+    if (!isDriverResponding()) {
+        reportResult(commandId, CommandResult::DRIVER_NOT_RESPONDING, 
+                    "TMC2209 driver not responding");
+        return;
+    }
+    
+    if (!stepper) {
+        reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
+        return;
+    }
+    
+    motorEnabled = true;
+    stepperDriver.enable();
+    
+    // Start continuous movement in the correct direction
+    if (clockwise) {
+        stepper->runForward();
+    } else {
+        stepper->runBackward();
+    }
+    
+    if (isFirstStart) {
+        startTime = millis();
+        isFirstStart = false;
+    }
+    
+    Serial.println("Motor enabled and started");
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+void StepperController::disableInternal(uint32_t commandId) {
+    motorEnabled = false;
+    
+    if (stepper) {
+        stepper->stopMove();
+    }
+    
+    stepperDriver.disable();
+    
+    Serial.println("Motor disabled and stopped");
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+void StepperController::emergencyStopInternal(uint32_t commandId) {
+    motorEnabled = false;
+    
+    if (stepper) {
+        stepper->forceStopAndNewPosition(stepper->getCurrentPosition());
+    }
+    
+    stepperDriver.disable();
+    
+    Serial.println("EMERGENCY STOP executed");
+    reportResult(commandId, CommandResult::SUCCESS);
+}
+
+void StepperController::setMicroStepsInternal(int steps, uint32_t commandId) {
+    // Validate microsteps (must be power of 2, typically 1, 2, 4, 8, 16, 32, 64, 128, 256)
+    if (steps <= 0 || (steps & (steps - 1)) != 0 || steps > 256) {
+        reportResult(commandId, CommandResult::INVALID_PARAMETER, 
+                    "Invalid microsteps value (must be power of 2, 1-256)");
+        return;
+    }
+    
+    // Check if driver is responding
+    if (!isDriverResponding()) {
+        reportResult(commandId, CommandResult::DRIVER_NOT_RESPONDING, 
+                    "TMC2209 driver not responding");
+        return;
+    }
+    
+    microSteps = steps;
+    
+    try {
+        stepperDriver.setMicrostepsPerStep(steps);
+        saveSettings();
+        
+        Serial.printf("Microsteps set to %d\n", steps);
+        reportResult(commandId, CommandResult::SUCCESS);
+    } catch (...) {
+        reportResult(commandId, CommandResult::COMMUNICATION_ERROR, 
+                    "Failed to communicate with TMC2209 driver");
+    }
+}
+
+void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
+    // Validate current (10-100%)
+    if (current < 10 || current > 100) {
+        reportResult(commandId, CommandResult::INVALID_PARAMETER, 
+                    "Current out of range (10-100%)");
+        return;
+    }
+    
+    // Check if driver is responding
+    if (!isDriverResponding()) {
+        reportResult(commandId, CommandResult::DRIVER_NOT_RESPONDING, 
+                    "TMC2209 driver not responding");
+        return;
+    }
+    
+    runCurrent = current;
+    
+    try {
+        stepperDriver.setRunCurrent(current);
+        saveSettings();
+        
+        Serial.printf("Run current set to %d%%\n", current);
+        reportResult(commandId, CommandResult::SUCCESS);
+    } catch (...) {
+        reportResult(commandId, CommandResult::COMMUNICATION_ERROR, 
+                    "Failed to communicate with TMC2209 driver");
+    }
+}
+
+void StepperController::reportResult(uint32_t commandId, CommandResult result, const String& errorMessage) {
+    if (resultQueue == nullptr) return;
+    
+    CommandResultData resultData;
+    resultData.commandId = commandId;
+    resultData.result = result;
+    resultData.errorMessage = errorMessage;
+    
+    // Try to send result, but don't block if queue is full
+    xQueueSend(resultQueue, &resultData, 0);
+}
+
+bool StepperController::isDriverResponding() {
+    // Try to read a register from the TMC2209 to check if it's responding
+    try {
+        // Read the driver version register - this should work if driver is connected
+        uint8_t version = stepperDriver.getVersion();
+        // Version should be non-zero for a responding TMC2209
+        return (version != 0);
+    } catch (...) {
+        // Any exception means driver is not responding
+        return false;
+    }
 }
 
 void StepperController::saveSettings() {
@@ -363,21 +460,14 @@ void StepperController::saveSettings() {
 }
 
 void StepperController::loadSettings() {
-    // Open in read-only mode since namespace should already be created
     if (preferences.begin("stepper", true)) {
-        currentSpeedRPM = preferences.getFloat("speed", 1.0f);
-        clockwise = preferences.getBool("clockwise", true);
-        microSteps = preferences.getInt("microsteps", 32);
-        runCurrent = preferences.getInt("current", 30);
-        
+        currentSpeedRPM = preferences.getFloat("speed", currentSpeedRPM);
+        clockwise = preferences.getBool("clockwise", clockwise);
+        microSteps = preferences.getInt("microsteps", microSteps);
+        runCurrent = preferences.getInt("current", runCurrent);
         preferences.end();
         
-        // Validate loaded values
-        currentSpeedRPM = constrain(currentSpeedRPM, minSpeedRPM, maxSpeedRPM);
-        runCurrent = constrain(runCurrent, 10, 100);
-        
-        Serial.println("Settings loaded from flash");
-        Serial.printf("Loaded: Speed=%.2f RPM, Direction=%s, Microsteps=%d, Current=%d%%\n",
+        Serial.printf("Settings loaded from flash: %.2f RPM, %s, %d microsteps, %d%% current\n",
                       currentSpeedRPM, clockwise ? "CW" : "CCW", microSteps, runCurrent);
     } else {
         Serial.println("Failed to open preferences for loading, using defaults");
@@ -386,79 +476,125 @@ void StepperController::loadSettings() {
 }
 
 // Thread-safe public interface using command queue
-bool StepperController::setSpeed(float rpm) {
-    if (commandQueue == nullptr) return false;
+uint32_t StepperController::setSpeed(float rpm) {
+    if (commandQueue == nullptr) return 0;
     
+    uint32_t commandId = nextCommandId++;
     StepperCommandData cmd;
     cmd.command = StepperCommand::SET_SPEED;
     cmd.floatValue = rpm;
+    cmd.commandId = commandId;
     
-    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
 }
 
-bool StepperController::setDirection(bool clockwise) {
-    if (commandQueue == nullptr) return false;
+uint32_t StepperController::setDirection(bool clockwise) {
+    if (commandQueue == nullptr) return 0;
     
+    uint32_t commandId = nextCommandId++;
     StepperCommandData cmd;
     cmd.command = StepperCommand::SET_DIRECTION;
     cmd.boolValue = clockwise;
+    cmd.commandId = commandId;
     
-    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
 }
 
-bool StepperController::enable() {
-    if (commandQueue == nullptr) return false;
+uint32_t StepperController::enable() {
+    if (commandQueue == nullptr) return 0;
     
+    uint32_t commandId = nextCommandId++;
     StepperCommandData cmd;
     cmd.command = StepperCommand::ENABLE;
+    cmd.commandId = commandId;
     
-    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
 }
 
-bool StepperController::disable() {
-    if (commandQueue == nullptr) return false;
+uint32_t StepperController::disable() {
+    if (commandQueue == nullptr) return 0;
     
+    uint32_t commandId = nextCommandId++;
     StepperCommandData cmd;
     cmd.command = StepperCommand::DISABLE;
+    cmd.commandId = commandId;
     
-    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
 }
 
-bool StepperController::emergencyStop() {
-    if (commandQueue == nullptr) return false;
+uint32_t StepperController::emergencyStop() {
+    if (commandQueue == nullptr) return 0;
     
+    uint32_t commandId = nextCommandId++;
     StepperCommandData cmd;
     cmd.command = StepperCommand::EMERGENCY_STOP;
+    cmd.commandId = commandId;
     
     // Emergency stop has higher priority - try to send immediately
-    return xQueueSend(commandQueue, &cmd, 0) == pdTRUE;
+    if (xQueueSend(commandQueue, &cmd, 0) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
 }
 
-bool StepperController::setMicroSteps(int steps) {
-    if (commandQueue == nullptr) return false;
+uint32_t StepperController::setMicroSteps(int steps) {
+    if (commandQueue == nullptr) return 0;
     
+    uint32_t commandId = nextCommandId++;
     StepperCommandData cmd;
     cmd.command = StepperCommand::SET_MICROSTEPS;
     cmd.intValue = steps;
+    cmd.commandId = commandId;
     
-    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
 }
 
-bool StepperController::setRunCurrent(int current) {
-    if (commandQueue == nullptr) return false;
+uint32_t StepperController::setRunCurrent(int current) {
+    if (commandQueue == nullptr) return 0;
     
+    uint32_t commandId = nextCommandId++;
     StepperCommandData cmd;
     cmd.command = StepperCommand::SET_CURRENT;
     cmd.intValue = current;
+    cmd.commandId = commandId;
     
-    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
 }
 
-bool StepperController::resetCounters() {
-    if (commandQueue == nullptr) return false;
+uint32_t StepperController::resetCounters() {
+    if (commandQueue == nullptr) return 0;
     
+    uint32_t commandId = nextCommandId++;
     StepperCommandData cmd;
     cmd.command = StepperCommand::RESET_COUNTERS;
+    cmd.commandId = commandId;
     
-    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
+}
+
+bool StepperController::getCommandResult(CommandResultData& result) {
+    if (resultQueue == nullptr) return false;
+    
+    return xQueueReceive(resultQueue, &result, 0) == pdTRUE; // Non-blocking
 }

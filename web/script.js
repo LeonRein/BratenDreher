@@ -488,6 +488,8 @@ class BratenDreherBLE {
             
             if (message.type === 'status') {
                 this.handleStatusUpdate(message);
+            } else if (message.type === 'command_result') {
+                this.handleCommandResult(message);
             } else {
                 console.log('Unknown message type:', message.type);
             }
@@ -541,6 +543,45 @@ class BratenDreherBLE {
             this.current = status.current;
             this.currentSlider.value = status.current;
             this.currentValue.textContent = status.current;
+        }
+    }
+    
+    handleCommandResult(result) {
+        console.log('Command result:', result);
+        
+        const commandId = result.command_id;
+        const status = result.status;
+        const message = result.message || '';
+        
+        if (status === 'success') {
+            // Command was successful - could show brief success indicator
+            console.log(`Command ${commandId} executed successfully`);
+        } else {
+            // Command failed - show error to user
+            let userMessage = '';
+            
+            switch (status) {
+                case 'hardware_error':
+                    userMessage = 'Hardware Error: ' + (message || 'Stepper motor hardware not properly initialized');
+                    break;
+                case 'driver_not_responding':
+                    userMessage = 'Driver Error: TMC2209 stepper driver is not responding. Check connections and power.';
+                    break;
+                case 'invalid_parameter':
+                    userMessage = 'Invalid Setting: ' + (message || 'The parameter value is out of range');
+                    break;
+                case 'communication_error':
+                    userMessage = 'Communication Error: Failed to communicate with the stepper driver. Check wiring.';
+                    break;
+                default:
+                    userMessage = 'Command Failed: ' + (message || 'Unknown error occurred');
+                    break;
+            }
+            
+            this.showError(userMessage);
+            
+            // Log technical details for debugging
+            console.error(`Command ${commandId} failed: ${status} - ${message}`);
         }
     }
     
