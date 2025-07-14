@@ -233,9 +233,6 @@ private:
     void publishStatusUpdate(StatusUpdateType type, bool value);
     void publishStatusUpdate(StatusUpdateType type, int value);
     void publishStatusUpdate(StatusUpdateType type, uint32_t value);
-    void publishPositionUpdate();
-    void publishStallUpdate();
-    void publishVariableSpeedUpdate();
     
     // Speed variation control
     void updateMotorSpeed();
@@ -253,7 +250,6 @@ protected:
     
     // Periodic status updates
     void publishPeriodicStatusUpdates();
-    void checkAndUpdateStallStatus();
     
 public:
     StepperController();

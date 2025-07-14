@@ -330,48 +330,84 @@ bool StepperController::isUpdateDue(unsigned long nextUpdate) {
 }
 
 void StepperController::publishPeriodicStatusUpdates() {
-    // Publish position and runtime status
-    publishPositionUpdate();
+    if (statusUpdateQueue == nullptr) return;
     
-    // Check and update stall status
-    checkAndUpdateStallStatus();
+    // Accumulate all status variables first
+    float totalRevolutions = 0.0f;
+    bool isRunning = false;
+    unsigned long runtime = 0;
+    bool currentStallDetected = stallDetected;
+    int currentStallCount = (int)stallCount;
+    float currentVariableSpeed = 0.0f;
     
-    // Publish variable speed update if enabled
-    if (speedVariationEnabled) {
-        publishVariableSpeedUpdate();
+    // Collect position and runtime data
+    if (stepper) {
+        totalRevolutions = static_cast<float>(stepper->getCurrentPosition()) / (STEPS_PER_REVOLUTION * microSteps * GEAR_RATIO);
+        isRunning = stepper->isRunning() && motorEnabled;
     }
-}
-
-void StepperController::checkAndUpdateStallStatus() {
-    // Check for stall detection via DIAG pin and publish stall status
+    
+    if (!isFirstStart && startTime > 0) {
+        runtime = (millis() - startTime) / 1000;
+    }
+    
+    // Collect variable speed data if enabled
+    if (speedVariationEnabled) {
+        currentVariableSpeed = calculateVariableSpeed();
+    } else {
+        currentVariableSpeed = currentSpeedRPM;
+    }
+    
+    // Update stall detection state (moved from checkAndUpdateStallStatus)
     bool diagPinHigh = digitalRead(DIAG);
-    bool currentIsRunning = (stepper && stepper->isRunning());
+    bool motorIsRunning = (stepper && stepper->isRunning());
     
     // DIAG pin goes high when StallGuard triggers (motor stalled)
     // Only check for stalls when motor is enabled and should be running
-    if (motorEnabled && currentIsRunning) {
+    if (motorEnabled && motorIsRunning) {
         if (diagPinHigh && !stallDetected) {
             // New stall detected
             stallDetected = true;
             lastStallTime = millis();
             stallCount++;
+            currentStallDetected = stallDetected;
+            currentStallCount = (int)stallCount;
             Serial.printf("STALL DETECTED! Count: %d, Time: %lu\n", stallCount, lastStallTime);
             Serial.println("Consider: reducing speed, increasing current, or checking load");
         } else if (!diagPinHigh && stallDetected) {
             // Stall cleared
             stallDetected = false;
+            currentStallDetected = stallDetected;
             Serial.println("Stall condition cleared");
         }
-    } else if (!motorEnabled || !currentIsRunning) {
+    } else if (!motorEnabled || !motorIsRunning) {
         // Clear stall status when motor is stopped
         if (stallDetected) {
             stallDetected = false;
+            currentStallDetected = stallDetected;
             Serial.println("Stall status cleared (motor stopped)");
         }
     }
     
-    // Publish stall status update
-    publishStallUpdate();
+    // Push all status updates to queue in batch
+    StatusUpdateData revolutionsData(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, totalRevolutions);
+    xQueueSend(statusUpdateQueue, &revolutionsData, 0);
+    
+    StatusUpdateData runningData(StatusUpdateType::IS_RUNNING_UPDATE, isRunning);
+    xQueueSend(statusUpdateQueue, &runningData, 0);
+    
+    StatusUpdateData runtimeData(StatusUpdateType::RUNTIME_UPDATE, runtime);
+    xQueueSend(statusUpdateQueue, &runtimeData, 0);
+    
+    StatusUpdateData stallDetectedData(StatusUpdateType::STALL_DETECTED_UPDATE, currentStallDetected);
+    xQueueSend(statusUpdateQueue, &stallDetectedData, 0);
+    
+    StatusUpdateData stallCountData(StatusUpdateType::STALL_COUNT_UPDATE, currentStallCount);
+    xQueueSend(statusUpdateQueue, &stallCountData, 0);
+    
+    if (speedVariationEnabled) {
+        StatusUpdateData variableSpeedData(StatusUpdateType::CURRENT_VARIABLE_SPEED_UPDATE, currentVariableSpeed);
+        xQueueSend(statusUpdateQueue, &variableSpeedData, 0);
+    }
 }
 
 void StepperController::processCommand(const StepperCommandData& cmd) {
@@ -703,65 +739,6 @@ void StepperController::publishStatusUpdate(StatusUpdateType type, uint32_t valu
     if (statusUpdateQueue == nullptr) return;
     
     StatusUpdateData statusData(type, value);
-    xQueueSend(statusUpdateQueue, &statusData, 0);
-}
-
-void StepperController::publishPositionUpdate() {
-    if (statusUpdateQueue == nullptr) return;
-    
-    // Publish total revolutions
-    if (stepper) {
-        float totalRevolutions = static_cast<float>(stepper->getCurrentPosition()) / (STEPS_PER_REVOLUTION * microSteps * GEAR_RATIO);
-        StatusUpdateData revolutionsData(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, totalRevolutions);
-        xQueueSend(statusUpdateQueue, &revolutionsData, 0);
-        
-        // Publish running status
-        bool isRunning = stepper->isRunning() && motorEnabled;
-        StatusUpdateData runningData(StatusUpdateType::IS_RUNNING_UPDATE, isRunning);
-        xQueueSend(statusUpdateQueue, &runningData, 0);
-    } else {
-        StatusUpdateData revolutionsData(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, 0.0f);
-        xQueueSend(statusUpdateQueue, &revolutionsData, 0);
-        
-        StatusUpdateData runningData(StatusUpdateType::IS_RUNNING_UPDATE, false);
-        xQueueSend(statusUpdateQueue, &runningData, 0);
-    }
-    
-    // Publish runtime
-    unsigned long runtime;
-    if (!isFirstStart && startTime > 0) {
-        runtime = (millis() - startTime) / 1000;
-    } else {
-        runtime = 0;
-    }
-    StatusUpdateData runtimeData(StatusUpdateType::RUNTIME_UPDATE, runtime);
-    xQueueSend(statusUpdateQueue, &runtimeData, 0);
-}
-
-void StepperController::publishStallUpdate() {
-    if (statusUpdateQueue == nullptr) return;
-    
-    // Publish stall detected status
-    StatusUpdateData stallDetectedData(StatusUpdateType::STALL_DETECTED_UPDATE, stallDetected);
-    xQueueSend(statusUpdateQueue, &stallDetectedData, 0);
-    
-    // Publish stall count
-    StatusUpdateData stallCountData(StatusUpdateType::STALL_COUNT_UPDATE, (int)stallCount);
-    xQueueSend(statusUpdateQueue, &stallCountData, 0);
-}
-
-void StepperController::publishVariableSpeedUpdate() {
-    if (statusUpdateQueue == nullptr) return;
-    
-    // Calculate current variable speed using private member access
-    float currentVariableSpeed;
-    if (speedVariationEnabled) {
-        currentVariableSpeed = calculateVariableSpeed();
-    } else {
-        currentVariableSpeed = currentSpeedRPM;
-    }
-    
-    StatusUpdateData statusData(StatusUpdateType::CURRENT_VARIABLE_SPEED_UPDATE, currentVariableSpeed);
     xQueueSend(statusUpdateQueue, &statusData, 0);
 }
 
