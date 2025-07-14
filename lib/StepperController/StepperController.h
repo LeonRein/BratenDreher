@@ -171,6 +171,8 @@ private:
     float speedVariationStrength;    // 0.0 to 1.0 (0% to 100% variation)
     float speedVariationPhase;       // Phase offset in radians (0 to 2*PI)
     int32_t speedVariationStartPosition; // Position where variation was enabled
+    float speedVariationK;           // Internal k parameter (derived from strength)
+    float speedVariationK0;          // Compensation factor k0 = sqrt(1 - k²)
     
     // State tracking
     bool motorEnabled;
@@ -227,7 +229,7 @@ private:
     float getPositionAngle() const;
     uint32_t calculateRequiredAccelerationForVariableSpeed() const;
     void updateAccelerationForVariableSpeed();
-    float calculateMeanRPMOverRotation() const; // For testing/debugging mean RPM calculation
+    void updateSpeedVariationParameters(); // Helper to calculate k and k0
     
     // Helper methods for status reporting
     void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
