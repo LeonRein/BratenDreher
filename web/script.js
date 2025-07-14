@@ -476,6 +476,13 @@ class VariableSpeedControl extends Control {
             this.setDisplayState('VALID');
             
             const enabled = statusUpdate.speedVariationEnabled;
+            
+            // Update the checkbox state to match the server state
+            if (this.element) {
+                this.element.checked = enabled;
+            }
+            
+            // Update the UI based on the new state
             this.updateVariableSpeedUI();
             
             this.variableSpeedStatus.textContent = enabled ? 'ON' : 'OFF';
