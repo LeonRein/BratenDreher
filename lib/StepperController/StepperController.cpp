@@ -113,8 +113,53 @@ bool StepperController::begin() {
     stepper->setAcceleration(defaultAcceleration);
     currentAcceleration = defaultAcceleration;  // Track the set acceleration
     
+    // Publish initial acceleration status
+    StatusUpdateData accelData;
+    accelData.type = StatusUpdateType::ACCELERATION_CHANGED;
+    accelData.timestamp = millis();
+    accelData.uint32Value = defaultAcceleration;
+    xQueueSend(statusUpdateQueue, &accelData, 0);
+    
     // Set initial speed using internal method (avoid command queue during initialization)
     setSpeedInternal(currentSpeedRPM, 0); // Use commandId 0 for internal calls
+    
+    // Publish initial status updates for loaded settings
+    StatusUpdateData directionData;
+    directionData.type = StatusUpdateType::DIRECTION_CHANGED;
+    directionData.timestamp = millis();
+    directionData.boolValue = clockwise;
+    xQueueSend(statusUpdateQueue, &directionData, 0);
+    
+    StatusUpdateData currentData;
+    currentData.type = StatusUpdateType::CURRENT_CHANGED;
+    currentData.timestamp = millis();
+    currentData.intValue = runCurrent;
+    xQueueSend(statusUpdateQueue, &currentData, 0);
+    
+    StatusUpdateData enabledData;
+    enabledData.type = StatusUpdateType::ENABLED_CHANGED;
+    enabledData.timestamp = millis();
+    enabledData.boolValue = false; // Initially disabled
+    xQueueSend(statusUpdateQueue, &enabledData, 0);
+    
+    // Publish initial variable speed settings
+    StatusUpdateData varEnabledData;
+    varEnabledData.type = StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED;
+    varEnabledData.timestamp = millis();
+    varEnabledData.boolValue = speedVariationEnabled;
+    xQueueSend(statusUpdateQueue, &varEnabledData, 0);
+    
+    StatusUpdateData varStrengthData;
+    varStrengthData.type = StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED;
+    varStrengthData.timestamp = millis();
+    varStrengthData.floatValue = speedVariationStrength;
+    xQueueSend(statusUpdateQueue, &varStrengthData, 0);
+    
+    StatusUpdateData varPhaseData;
+    varPhaseData.type = StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED;
+    varPhaseData.timestamp = millis();
+    varPhaseData.floatValue = speedVariationPhase;
+    xQueueSend(statusUpdateQueue, &varPhaseData, 0);
     
     // Initially disabled
     stepperDriver.disable();
@@ -977,6 +1022,9 @@ void StepperController::disableSpeedVariationInternal(uint32_t commandId) {
         uint32_t baseStepsPerSecond = rpmToStepsPerSecond(currentSpeedRPM);
         stepper->setSpeedInHz(baseStepsPerSecond);
         stepper->applySpeedAcceleration();
+        
+        // Publish status update for speed change back to base speed
+        publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
     }
     
     Serial.println("Speed variation disabled, returned to constant speed");
@@ -1101,6 +1149,9 @@ void StepperController::updateAccelerationForVariableSpeed() {
     stepper->setAcceleration(requiredAcceleration);
     currentAcceleration = requiredAcceleration;  // Track the set acceleration
     stepper->applySpeedAcceleration();
+    
+    // Publish status update for acceleration change to inform the web UI
+    publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, requiredAcceleration);
     
     Serial.printf("Acceleration set to %u steps/s² for variable speed operation\n", 
                   requiredAcceleration);
