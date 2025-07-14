@@ -791,6 +791,13 @@ void StepperController::publishStatusUpdate(StatusUpdateType type, uint32_t valu
     xQueueSend(statusUpdateQueue, &statusData, 0);
 }
 
+void StepperController::publishStatusUpdate(StatusUpdateType type, unsigned long value) {
+    if (statusUpdateQueue == nullptr) return;
+    
+    StatusUpdateData statusData(type, value);
+    xQueueSend(statusUpdateQueue, &statusData, 0);
+}
+
 void StepperController::saveSettings() {
     if (preferences.begin("stepper", false)) {
         preferences.putFloat("speed", currentSpeedRPM);
@@ -1066,7 +1073,7 @@ void StepperController::requestAllStatusInternal(uint32_t commandId) {
     publishStatusUpdate(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, (float)totalRevolutions);
     
     unsigned long runtimeSeconds = isFirstStart ? 0 : (millis() - startTime) / 1000;
-    publishStatusUpdate(StatusUpdateType::RUNTIME_UPDATE, (unsigned long)runtimeSeconds);
+    publishStatusUpdate(StatusUpdateType::RUNTIME_UPDATE, runtimeSeconds);
     
     bool isCurrentlyRunning = stepper ? stepper->isRunning() : false;
     publishStatusUpdate(StatusUpdateType::IS_RUNNING_UPDATE, isCurrentlyRunning);

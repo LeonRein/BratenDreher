@@ -235,6 +235,7 @@ private:
     void publishStatusUpdate(StatusUpdateType type, bool value);
     void publishStatusUpdate(StatusUpdateType type, int value);
     void publishStatusUpdate(StatusUpdateType type, uint32_t value);
+    void publishStatusUpdate(StatusUpdateType type, unsigned long value);
     
     // Speed variation control
     void updateMotorSpeed();
