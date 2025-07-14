@@ -362,11 +362,6 @@ class BratenDreherBLE {
             this.updateConnectionStatus('Connected');
             this.updateUI();
             
-            // Request initial status
-            setTimeout(() => {
-                this.requestStatus();
-            }, 1000);
-            
             // Initialize variable speed UI
             this.updateVariableSpeedUI();
             
@@ -598,11 +593,6 @@ class BratenDreherBLE {
         }
     }
     
-    // Request status update
-    async requestStatus() {
-        return await this.sendCommand('status_request', true);
-    }
-    
     async setSpeed(speed) {
         speed = Math.max(0.1, Math.min(30.0, speed)); // Clamp to valid range
         this.motorSpeed = speed;
@@ -730,7 +720,8 @@ class BratenDreherBLE {
             
             console.log('Message received:', message);
             
-            if (message.type === 'status') {
+            if (message.type === 'status_update') {
+                // Granular status update (new system)
                 this.handleStatusUpdate(message);
             } else if (message.type === 'command_result') {
                 this.handleCommandResult(message);
@@ -742,151 +733,152 @@ class BratenDreherBLE {
         }
     }
     
-    handleStatusUpdate(status) {
-        console.log('Status update:', status);
+    handleStatusUpdate(statusUpdate) {
+        console.log('Status update:', statusUpdate);
         
-        // Update internal state from device status
-        this.motorEnabled = status.enabled;
-        this.motorSpeed = status.speed;
-        this.motorDirection = status.direction === 'cw';
-        
-        // Update UI controls to match device state
-        this.motorToggle.checked = status.enabled;
-        this.speedSlider.value = status.speed;
-        this.speedValue.textContent = status.speed.toFixed(1);
-        
-        // Update direction buttons
-        this.clockwiseBtn.classList.toggle('active', status.direction === 'cw');
-        this.counterclockwiseBtn.classList.toggle('active', status.direction !== 'cw');
-        
-        // Update status display
-        this.motorStatus.textContent = status.enabled ? 
-            (status.running ? 'Running' : 'Enabled') : 'Stopped';
-        this.currentSpeed.textContent = `${status.speed.toFixed(1)} RPM`;
-        
-        // Convert acceleration from steps/s² to time format for display
-        const accelerationTimeDisplay = status.acceleration ? 
-            this.accelerationToTime(status.acceleration).toFixed(1) : '5.0';
-        this.currentAcceleration.textContent = `${accelerationTimeDisplay}s to max`;
-        
-        this.currentDirection.textContent = status.direction === 'cw' ? 'Clockwise' : 'Counter-clockwise';
-        this.currentCurrent.textContent = `${status.current || this.current}%`;
-        
-        // Update TMC2209 status with fallback for backward compatibility
-        if (status.tmc2209Status !== undefined) {
-            this.tmc2209Status.textContent = status.tmc2209Status ? 'OK' : 'Error';
-            this.tmc2209Status.style.color = status.tmc2209Status ? '#2ecc71' : '#e74c3c';
-        } else {
-            this.tmc2209Status.textContent = 'Unknown';
-            this.tmc2209Status.style.color = '#f39c12';
-        }
-        
-        // Update stall status with fallback for backward compatibility
-        if (status.stallDetected !== undefined) {
-            this.stallStatus.textContent = status.stallDetected ? 'STALL!' : 'OK';
-            this.stallStatus.style.color = status.stallDetected ? '#e74c3c' : '#2ecc71';
-            this.stallStatus.style.fontWeight = status.stallDetected ? 'bold' : 'normal';
-        } else {
-            this.stallStatus.textContent = 'Unknown';
-            this.stallStatus.style.color = '#f39c12';
-        }
-        
-        // Update stall count
-        if (status.stallCount !== undefined) {
-            this.stallCount.textContent = status.stallCount;
-            this.stallCount.style.color = status.stallCount > 0 ? '#e67e22' : '#2ecc71';
-        } else {
-            this.stallCount.textContent = 'N/A';
-            this.stallCount.style.color = '#95a5a6';
-        }
-        
+        // Update timestamp
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
         
-        // Update statistics
-        if (status.totalRevolutions !== undefined) {
-            this.totalRevolutions.textContent = status.totalRevolutions.toFixed(3);
+        // Restore visual feedback opacity since we're getting updates from device
+        this.restoreOpacity();
+        
+        // Process each field that was included in the update
+        if (statusUpdate.speed !== undefined) {
+            this.motorSpeed = statusUpdate.speed;
+            this.speedSlider.value = statusUpdate.speed;
+            this.speedValue.textContent = statusUpdate.speed.toFixed(1);
+            this.currentSpeed.textContent = `${statusUpdate.speed.toFixed(1)} RPM`;
+            
+            // Update preset button active state
+            this.presetBtns.forEach(btn => {
+                const presetSpeed = parseFloat(btn.dataset.speed);
+                btn.classList.toggle('active', Math.abs(presetSpeed - statusUpdate.speed) < 0.05);
+            });
         }
         
-        if (status.runtime !== undefined) {
-            this.runTime.textContent = this.formatTime(status.runtime);
+        if (statusUpdate.direction !== undefined) {
+            this.motorDirection = statusUpdate.direction === 'cw';
+            this.clockwiseBtn.classList.toggle('active', statusUpdate.direction === 'cw');
+            this.counterclockwiseBtn.classList.toggle('active', statusUpdate.direction !== 'cw');
+            this.currentDirection.textContent = statusUpdate.direction === 'cw' ? 'Clockwise' : 'Counter-clockwise';
         }
         
-        // Calculate average speed
-        if (status.runtime > 0 && status.totalRevolutions > 0) {
-            const avgSpeed = (status.totalRevolutions * 60) / status.runtime; // RPM
-            this.avgSpeed.textContent = avgSpeed.toFixed(1);
-        } else {
-            this.avgSpeed.textContent = '0.0';
+        if (statusUpdate.enabled !== undefined) {
+            this.motorEnabled = statusUpdate.enabled;
+            this.motorToggle.checked = statusUpdate.enabled;
+            // Update motor status (will be refined if running status is also provided)
+            this.motorStatus.textContent = statusUpdate.enabled ? 'Enabled' : 'Stopped';
         }
         
-        // Update current if different
-        if (status.current && status.current !== this.current) {
-            this.current = status.current;
-            this.currentSlider.value = status.current;
-            this.currentValue.textContent = status.current;
+        if (statusUpdate.running !== undefined) {
+            // Refine motor status if we have running information
+            if (this.motorEnabled) {
+                this.motorStatus.textContent = statusUpdate.running ? 'Running' : 'Enabled';
+            }
         }
         
-        // Update acceleration time slider if different (e.g., when variable speed changes it)
-        if (status.acceleration !== undefined) {
+        if (statusUpdate.current !== undefined && statusUpdate.current !== this.current) {
+            this.current = statusUpdate.current;
+            this.currentSlider.value = statusUpdate.current;
+            this.currentValue.textContent = statusUpdate.current;
+            this.currentCurrent.textContent = `${statusUpdate.current}%`;
+        }
+        
+        if (statusUpdate.acceleration !== undefined) {
+            const accelerationTimeDisplay = this.accelerationToTime(statusUpdate.acceleration).toFixed(1);
+            this.currentAcceleration.textContent = `${accelerationTimeDisplay}s to max`;
+            
+            // Update acceleration slider if significantly different
             const currentSliderTime = parseInt(this.accelerationTimeSlider.value);
-            const deviceAccelerationTime = this.accelerationToTime(status.acceleration);
-            const deviceTime = Math.round(deviceAccelerationTime);
-            
-            // Check if this is a round-trip issue: convert current slider value to acceleration 
-            // and see if it matches what the device reported
-            const currentSliderAcceleration = this.timeToAcceleration(currentSliderTime);
-            const accelerationDifference = Math.abs(currentSliderAcceleration - status.acceleration);
-            const accelerationToleranceValue = status.acceleration * 0.02; // 2% tolerance
-            const significantDifference = accelerationDifference > accelerationToleranceValue;
-            
-            // Only update if there's a significant difference AND time difference > 1 second
-            if (significantDifference && Math.abs(currentSliderTime - deviceTime) > 1) {
+            const deviceTime = Math.round(this.accelerationToTime(statusUpdate.acceleration));
+            if (Math.abs(currentSliderTime - deviceTime) > 1) {
                 this.accelerationTimeSlider.value = deviceTime;
                 this.accelerationTimeValue.textContent = deviceTime;
             }
         }
         
-        // Update preset button active state based on current speed
-        this.presetBtns.forEach(btn => {
-            const presetSpeed = parseFloat(btn.dataset.speed);
-            btn.classList.toggle('active', Math.abs(presetSpeed - status.speed) < 0.05);
-        });
+        if (statusUpdate.tmc2209Status !== undefined) {
+            this.tmc2209Status.textContent = statusUpdate.tmc2209Status ? 'OK' : 'Error';
+            this.tmc2209Status.style.color = statusUpdate.tmc2209Status ? '#2ecc71' : '#e74c3c';
+        }
         
-        // Update variable speed status
-        if (status.speedVariationEnabled !== undefined) {
-            this.variableSpeedEnabled = status.speedVariationEnabled;
-            this.variableSpeedToggle.checked = status.speedVariationEnabled;
+        if (statusUpdate.stallDetected !== undefined) {
+            this.stallStatus.textContent = statusUpdate.stallDetected ? 'STALL!' : 'OK';
+            this.stallStatus.style.color = statusUpdate.stallDetected ? '#e74c3c' : '#2ecc71';
+            this.stallStatus.style.fontWeight = statusUpdate.stallDetected ? 'bold' : 'normal';
+        }
+        
+        if (statusUpdate.stallCount !== undefined) {
+            this.stallCount.textContent = statusUpdate.stallCount;
+            this.stallCount.style.color = statusUpdate.stallCount > 0 ? '#e67e22' : '#2ecc71';
+        }
+        
+        if (statusUpdate.totalRevolutions !== undefined) {
+            this.totalRevolutions.textContent = statusUpdate.totalRevolutions.toFixed(3);
+        }
+        
+        if (statusUpdate.runtime !== undefined) {
+            this.runTime.textContent = this.formatTime(statusUpdate.runtime);
+        }
+        
+        // Calculate average speed if we have both runtime and revolutions
+        // Note: We need to maintain state for this calculation since partial updates
+        // might not always include both values
+        if (statusUpdate.runtime !== undefined || statusUpdate.totalRevolutions !== undefined) {
+            // Get current values from UI (our state)
+            const currentRevolutions = parseFloat(this.totalRevolutions.textContent) || 0;
+            const currentRuntimeText = this.runTime.textContent;
+            let currentRuntime = 0;
+            
+            // Parse runtime from HH:MM:SS format
+            if (currentRuntimeText && currentRuntimeText !== '00:00:00') {
+                const timeParts = currentRuntimeText.split(':');
+                currentRuntime = parseInt(timeParts[0]) * 3600 + parseInt(timeParts[1]) * 60 + parseInt(timeParts[2]);
+            }
+            
+            if (currentRuntime > 0 && currentRevolutions > 0) {
+                const avgSpeed = (currentRevolutions * 60) / currentRuntime; // RPM
+                this.avgSpeed.textContent = avgSpeed.toFixed(1);
+            } else {
+                this.avgSpeed.textContent = '0.0';
+            }
+        }
+        
+        // Variable speed updates
+        if (statusUpdate.speedVariationEnabled !== undefined) {
+            this.variableSpeedEnabled = statusUpdate.speedVariationEnabled;
+            this.variableSpeedToggle.checked = statusUpdate.speedVariationEnabled;
             this.updateVariableSpeedUI();
             
-            this.variableSpeedStatus.textContent = status.speedVariationEnabled ? 'ON' : 'OFF';
-            this.variableSpeedStatus.style.color = status.speedVariationEnabled ? '#2ecc71' : '#6b7280';
+            this.variableSpeedStatus.textContent = statusUpdate.speedVariationEnabled ? 'ON' : 'OFF';
+            this.variableSpeedStatus.style.color = statusUpdate.speedVariationEnabled ? '#2ecc71' : '#6b7280';
             
-            // Show/hide current variable speed display
-            if (status.speedVariationEnabled && status.currentVariableSpeed !== undefined) {
-                this.currentVariableSpeedItem.style.display = 'flex';
-                this.currentVariableSpeed.textContent = `${status.currentVariableSpeed.toFixed(1)} RPM`;
-            } else {
+            // Hide variable speed display if disabled
+            if (!statusUpdate.speedVariationEnabled) {
                 this.currentVariableSpeedItem.style.display = 'none';
             }
         }
         
-        // Update variable speed strength and phase from device
-        if (status.speedVariationStrength !== undefined) {
-            this.variableSpeedStrength = Math.round(status.speedVariationStrength * 100);
+        if (statusUpdate.speedVariationStrength !== undefined) {
+            this.variableSpeedStrength = Math.round(statusUpdate.speedVariationStrength * 100);
             this.strengthSlider.value = this.variableSpeedStrength;
             this.strengthValue.textContent = this.variableSpeedStrength;
         }
         
-        if (status.speedVariationPhase !== undefined) {
+        if (statusUpdate.speedVariationPhase !== undefined) {
             // Convert from radians to degrees and then to -180 to 180 range
-            let phaseDegrees = Math.round((status.speedVariationPhase * 180) / Math.PI);
-            // Convert from 0-360 to -180 to 180 range
+            let phaseDegrees = Math.round((statusUpdate.speedVariationPhase * 180) / Math.PI);
             if (phaseDegrees > 180) {
                 phaseDegrees -= 360;
             }
             this.variableSpeedPhase = phaseDegrees;
             this.phaseSlider.value = this.variableSpeedPhase;
             this.phaseValue.textContent = this.variableSpeedPhase;
+        }
+        
+        if (statusUpdate.currentVariableSpeed !== undefined && this.variableSpeedEnabled) {
+            this.currentVariableSpeedItem.style.display = 'flex';
+            this.currentVariableSpeed.textContent = `${statusUpdate.currentVariableSpeed.toFixed(1)} RPM`;
         }
     }
     
@@ -1074,6 +1066,16 @@ class BratenDreherBLE {
                 }
             }, 300);
         }, 5000);
+    }
+    
+    // Helper method to restore visual feedback opacity after device updates
+    restoreOpacity() {
+        // Restore opacity for all control elements that might have pending feedback
+        this.speedValue.style.opacity = '1';
+        this.currentValue.style.opacity = '1';
+        this.accelerationTimeValue.style.opacity = '1';
+        this.strengthValue.style.opacity = '1';
+        this.phaseValue.style.opacity = '1';
     }
 }
 
