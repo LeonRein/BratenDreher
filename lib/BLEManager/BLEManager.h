@@ -9,6 +9,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <string>
+#include <ArduinoJson.h>
 #include "Task.h"
 
 // Forward declaration (header will be included in .cpp file)
