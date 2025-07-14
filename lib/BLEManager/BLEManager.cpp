@@ -316,25 +316,25 @@ void BLEManager::sendStatus() {
     // Use fixed-size JSON document to prevent heap issues (compatible with ArduinoJson v6)
     JsonDocument statusDoc;
     statusDoc["type"] = "status";
-    statusDoc["enabled"] = stepperController->isEnabled();
-    statusDoc["speed"] = stepperController->getSpeed();
-    statusDoc["acceleration"] = stepperController->getCurrentAcceleration();
-    statusDoc["direction"] = stepperController->isClockwise() ? "cw" : "ccw";
-    statusDoc["running"] = stepperController->isRunning();
-    statusDoc["totalRevolutions"] = stepperController->getTotalRevolutions();
-    statusDoc["runtime"] = stepperController->getRunTime();
-    statusDoc["current"] = stepperController->getRunCurrent();
-    statusDoc["tmc2209Status"] = stepperController->isTMC2209Initialized();
-    statusDoc["stallDetected"] = stepperController->isStallDetected();
-    statusDoc["stallCount"] = stepperController->getStallCount();
+    statusDoc["enabled"] = cachedStatus.enabled;
+    statusDoc["speed"] = cachedStatus.speed;
+    statusDoc["acceleration"] = cachedStatus.acceleration;
+    statusDoc["direction"] = cachedStatus.clockwise ? "cw" : "ccw";
+    statusDoc["running"] = cachedStatus.isRunning;
+    statusDoc["totalRevolutions"] = cachedStatus.totalRevolutions;
+    statusDoc["runtime"] = cachedStatus.runTime;
+    statusDoc["current"] = cachedStatus.current;
+    statusDoc["tmc2209Status"] = cachedStatus.tmc2209Status;
+    statusDoc["stallDetected"] = cachedStatus.stallDetected;
+    statusDoc["stallCount"] = cachedStatus.stallCount;
     statusDoc["timestamp"] = millis();
     
     // Add variable speed information
-    statusDoc["speedVariationEnabled"] = stepperController->isSpeedVariationEnabled();
-    statusDoc["speedVariationStrength"] = stepperController->getSpeedVariationStrength();
-    statusDoc["speedVariationPhase"] = stepperController->getSpeedVariationPhase();
-    if (stepperController->isSpeedVariationEnabled()) {
-        statusDoc["currentVariableSpeed"] = stepperController->getCurrentVariableSpeed();
+    statusDoc["speedVariationEnabled"] = cachedStatus.speedVariationEnabled;
+    statusDoc["speedVariationStrength"] = cachedStatus.speedVariationStrength;
+    statusDoc["speedVariationPhase"] = cachedStatus.speedVariationPhase;
+    if (cachedStatus.speedVariationEnabled) {
+        statusDoc["currentVariableSpeed"] = cachedStatus.currentVariableSpeed;
     }
     
     String statusString;
@@ -387,6 +387,9 @@ void BLEManager::update() {
     
     // Process command results from StepperController
     processCommandResults();
+    
+    // Process status updates from StepperController
+    processStatusUpdates();
     
     // Handle connection state changes
     if (!deviceConnected && oldDeviceConnected) {
@@ -506,6 +509,63 @@ void BLEManager::processCommandResults() {
         
         // Send result to client
         sendCommandResult(result.commandId, status, String(result.errorMessage));
+    }
+}
+
+void BLEManager::processStatusUpdates() {
+    if (!stepperController) return;
+    
+    StatusUpdateData statusUpdate;
+    // Process all available status updates
+    while (stepperController->getStatusUpdate(statusUpdate)) {
+        // Update cached status based on the type of update
+        switch (statusUpdate.type) {
+            case StatusUpdateType::SPEED_CHANGED:
+                cachedStatus.speed = statusUpdate.floatValue;
+                break;
+            case StatusUpdateType::DIRECTION_CHANGED:
+                cachedStatus.clockwise = statusUpdate.boolValue;
+                break;
+            case StatusUpdateType::ENABLED_CHANGED:
+                cachedStatus.enabled = statusUpdate.boolValue;
+                break;
+            case StatusUpdateType::CURRENT_CHANGED:
+                cachedStatus.current = statusUpdate.intValue;
+                break;
+            case StatusUpdateType::ACCELERATION_CHANGED:
+                cachedStatus.acceleration = statusUpdate.uint32Value;
+                break;
+            case StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED:
+                cachedStatus.speedVariationEnabled = statusUpdate.boolValue;
+                break;
+            case StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED:
+                cachedStatus.speedVariationStrength = statusUpdate.floatValue;
+                break;
+            case StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED:
+                cachedStatus.speedVariationPhase = statusUpdate.floatValue;
+                break;
+            case StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE:
+                cachedStatus.totalRevolutions = statusUpdate.floatValue;
+                break;
+            case StatusUpdateType::RUNTIME_UPDATE:
+                cachedStatus.runTime = statusUpdate.ulongValue;
+                break;
+            case StatusUpdateType::IS_RUNNING_UPDATE:
+                cachedStatus.isRunning = statusUpdate.boolValue;
+                break;
+            case StatusUpdateType::STALL_DETECTED_UPDATE:
+                cachedStatus.stallDetected = statusUpdate.boolValue;
+                break;
+            case StatusUpdateType::STALL_COUNT_UPDATE:
+                cachedStatus.stallCount = (uint16_t)statusUpdate.intValue;
+                break;
+            case StatusUpdateType::TMC2209_STATUS_UPDATE:
+                cachedStatus.tmc2209Status = statusUpdate.boolValue;
+                break;
+            case StatusUpdateType::CURRENT_VARIABLE_SPEED_UPDATE:
+                cachedStatus.currentVariableSpeed = statusUpdate.floatValue;
+                break;
+        }
     }
 }
 

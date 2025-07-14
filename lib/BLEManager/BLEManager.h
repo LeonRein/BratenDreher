@@ -49,6 +49,25 @@ private:
     QueueHandle_t commandQueue;
     static const size_t MAX_QUEUE_SIZE = 10;
     static const size_t MAX_COMMAND_LENGTH = 256;
+    
+    // Cached status from StepperController for thread-safe access
+    struct {
+        float speed = 1.0f;
+        uint32_t acceleration = 0;
+        bool enabled = false;
+        bool clockwise = true;
+        int current = 30;
+        bool speedVariationEnabled = false;
+        float speedVariationStrength = 0.0f;
+        float speedVariationPhase = 0.0f;
+        float totalRevolutions = 0.0f;
+        unsigned long runTime = 0;
+        bool isRunning = false;
+        bool stallDetected = false;
+        uint16_t stallCount = 0;
+        bool tmc2209Status = false;
+        float currentVariableSpeed = 1.0f;
+    } cachedStatus;
 
 protected:
     // Task implementation
@@ -70,6 +89,7 @@ public:
     void updateStatus();
     void sendStatus();
     void processCommandResults(); // Process command results from StepperController
+    void processStatusUpdates(); // Process status updates from StepperController
     void sendCommandResult(uint32_t commandId, const String& status, const String& message = "");
     
     // Handle incoming commands

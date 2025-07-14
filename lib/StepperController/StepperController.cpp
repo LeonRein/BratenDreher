@@ -8,7 +8,7 @@ StepperController::StepperController()
       stallDetected(false), lastStallTime(0), stallCount(0),
       currentAcceleration(0),  // Will be set during initialization
       speedVariationEnabled(false), speedVariationStrength(0.0f), speedVariationPhase(0.0f), speedVariationStartPosition(0),
-      cachedCurrentPosition(0), cachedIsRunning(false), cachedStallDetected(false), nextCommandId(1) {
+      nextCommandId(1) {
     
     // Create command queue for thread-safe operation
     commandQueue = xQueueCreate(COMMAND_QUEUE_SIZE, sizeof(StepperCommandData));
@@ -21,6 +21,12 @@ StepperController::StepperController()
     if (resultQueue == nullptr) {
         Serial.println("ERROR: Failed to create stepper result queue!");
     }
+    
+    // Create status update queue for thread-safe status communication
+    statusUpdateQueue = xQueueCreate(STATUS_UPDATE_QUEUE_SIZE, sizeof(StatusUpdateData));
+    if (statusUpdateQueue == nullptr) {
+        Serial.println("ERROR: Failed to create stepper status update queue!");
+    }
 }
 
 StepperController::~StepperController() {
@@ -29,6 +35,9 @@ StepperController::~StepperController() {
     }
     if (resultQueue != nullptr) {
         vQueueDelete(resultQueue);
+    }
+    if (statusUpdateQueue != nullptr) {
+        vQueueDelete(statusUpdateQueue);
     }
 }
 
@@ -62,6 +71,14 @@ bool StepperController::begin() {
     
     // Check TMC2209 initialization status after configuration
     tmc2209Initialized = stepperDriver.isSetupAndCommunicating();
+    
+    // Publish initial TMC2209 status
+    StatusUpdateData statusData;
+    statusData.type = StatusUpdateType::TMC2209_STATUS_UPDATE;
+    statusData.timestamp = millis();
+    statusData.boolValue = tmc2209Initialized;
+    xQueueSend(statusUpdateQueue, &statusData, 0);
+    
     if (tmc2209Initialized) {
         Serial.println("TMC2209 driver initialized and communicating successfully");
     } else {
@@ -152,7 +169,17 @@ void StepperController::configureDriver() {
     stepperDriver.setStallGuardThreshold(10); // Sensitivity: 0 (most sensitive) to 255 (least sensitive)
     
     // Update communication status after configuration
-    tmc2209Initialized = stepperDriver.isSetupAndCommunicating();
+    bool newTmc2209Status = stepperDriver.isSetupAndCommunicating();
+    
+    // Publish TMC2209 status update if communication status changed
+    if (newTmc2209Status != tmc2209Initialized) {
+        StatusUpdateData statusData;
+        statusData.type = StatusUpdateType::TMC2209_STATUS_UPDATE;
+        statusData.timestamp = millis();
+        statusData.boolValue = newTmc2209Status;
+        xQueueSend(statusUpdateQueue, &statusData, 0);
+    }
+    tmc2209Initialized = newTmc2209Status;
     
     // Check if driver is communicating properly
     if (tmc2209Initialized) {
@@ -181,6 +208,20 @@ void StepperController::configureStallDetection(bool enableStealthChop) {
     
     // Configure StallGuard threshold (can be adjusted based on load)
     stepperDriver.setStallGuardThreshold(10);
+    
+    // Check communication status after configuration
+    bool newTmc2209Status = stepperDriver.isSetupAndCommunicating();
+    
+    // Publish TMC2209 status update if communication status changed
+    if (newTmc2209Status != tmc2209Initialized) {
+        StatusUpdateData statusData;
+        statusData.type = StatusUpdateType::TMC2209_STATUS_UPDATE;
+        statusData.timestamp = millis();
+        statusData.boolValue = newTmc2209Status;
+        xQueueSend(statusUpdateQueue, &statusData, 0);
+        tmc2209Initialized = newTmc2209Status;
+    }
+    
     Serial.println("StallGuard configured for stall detection");
 }
 
@@ -191,6 +232,20 @@ void StepperController::setStallGuardThreshold(uint8_t threshold) {
     }
     
     stepperDriver.setStallGuardThreshold(threshold);
+    
+    // Check communication status after setting threshold
+    bool newTmc2209Status = stepperDriver.isSetupAndCommunicating();
+    
+    // Publish TMC2209 status update if communication status changed
+    if (newTmc2209Status != tmc2209Initialized) {
+        StatusUpdateData statusData;
+        statusData.type = StatusUpdateType::TMC2209_STATUS_UPDATE;
+        statusData.timestamp = millis();
+        statusData.boolValue = newTmc2209Status;
+        xQueueSend(statusUpdateQueue, &statusData, 0);
+        tmc2209Initialized = newTmc2209Status;
+    }
+    
     Serial.printf("StallGuard threshold set to %d (0=most sensitive, 255=least sensitive)\n", threshold);
 }
 
@@ -200,22 +255,6 @@ uint32_t StepperController::rpmToStepsPerSecond(float rpm) const {
     float motorRPM = rpm * GEAR_RATIO;
     float motorStepsPerSecond = (motorRPM * STEPS_PER_REVOLUTION * microSteps) / 60.0f;
     return static_cast<uint32_t>(motorStepsPerSecond);
-}
-
-float StepperController::getTotalRevolutions() const {
-    // Use cached position to avoid thread safety issues with FastAccelStepper
-    float motorRevolutions = abs(cachedCurrentPosition) / (float)(STEPS_PER_REVOLUTION * microSteps);
-    return motorRevolutions / GEAR_RATIO; // Convert to output shaft revolutions
-}
-
-unsigned long StepperController::getRunTime() const {
-    if (isFirstStart) return 0;
-    return (millis() - startTime) / 1000; // Convert to seconds
-}
-
-bool StepperController::isRunning() const {
-    // Use cached running state to avoid thread safety issues
-    return cachedIsRunning && motorEnabled;
 }
 
 void StepperController::run() {
@@ -231,13 +270,13 @@ void StepperController::run() {
     
     // Initialize timing variables
     StepperCommandData cmd;
-    unsigned long nextCacheUpdate = millis() + CACHE_UPDATE_INTERVAL;
     unsigned long nextSpeedUpdate = millis() + MOTOR_SPEED_UPDATE_INTERVAL;
+    unsigned long nextPeriodicUpdate = millis() + STATUS_UPDATE_INTERVAL; // Rename for periodic status updates
     
     // Main event loop
     while (true) {
         // Calculate smart timeout for queue operations (use the earliest upcoming event)
-        unsigned long nextEvent = min(nextCacheUpdate, nextSpeedUpdate);
+        unsigned long nextEvent = min(nextPeriodicUpdate, nextSpeedUpdate);
         TickType_t timeout = calculateQueueTimeout(nextEvent);
         
         // Block on queue until command arrives or any update is due
@@ -247,10 +286,10 @@ void StepperController::run() {
         
         unsigned long currentTime = millis();
         
-        // Perform cache update if due
-        if (isCacheUpdateDue(nextCacheUpdate)) {
-            updateCache();
-            nextCacheUpdate = currentTime + CACHE_UPDATE_INTERVAL;
+        // Perform periodic status updates if due
+        if (isUpdateDue(nextPeriodicUpdate)) {
+            publishPeriodicStatusUpdates();
+            nextPeriodicUpdate = currentTime + STATUS_UPDATE_INTERVAL;
         }
         
         // Update motor speed if due (more frequent for smooth variation)
@@ -279,10 +318,6 @@ TickType_t StepperController::calculateQueueTimeout(unsigned long nextUpdate) {
     return timeUntilUpdate > 0 ? pdMS_TO_TICKS(timeUntilUpdate) : 0;
 }
 
-bool StepperController::isCacheUpdateDue(unsigned long nextCacheUpdate) {
-    return isUpdateDue(nextCacheUpdate);
-}
-
 bool StepperController::isUpdateDue(unsigned long nextUpdate) {
     unsigned long currentTime = millis();
     
@@ -294,22 +329,27 @@ bool StepperController::isUpdateDue(unsigned long nextUpdate) {
     return currentTime >= nextUpdate;
 }
 
-void StepperController::updateCache() {
-    // Update cached values for thread-safe reading
-    if (stepper) {
-        cachedCurrentPosition = stepper->getCurrentPosition();
-        cachedIsRunning = stepper->isRunning();
-    } else {
-        cachedCurrentPosition = 0;
-        cachedIsRunning = false;
-    }
+void StepperController::publishPeriodicStatusUpdates() {
+    // Publish position and runtime status
+    publishPositionUpdate();
     
-    // Check for stall detection via DIAG pin
+    // Check and update stall status
+    checkAndUpdateStallStatus();
+    
+    // Publish variable speed update if enabled
+    if (speedVariationEnabled) {
+        publishVariableSpeedUpdate();
+    }
+}
+
+void StepperController::checkAndUpdateStallStatus() {
+    // Check for stall detection via DIAG pin and publish stall status
     bool diagPinHigh = digitalRead(DIAG);
+    bool currentIsRunning = (stepper && stepper->isRunning());
     
     // DIAG pin goes high when StallGuard triggers (motor stalled)
     // Only check for stalls when motor is enabled and should be running
-    if (motorEnabled && cachedIsRunning) {
+    if (motorEnabled && currentIsRunning) {
         if (diagPinHigh && !stallDetected) {
             // New stall detected
             stallDetected = true;
@@ -322,7 +362,7 @@ void StepperController::updateCache() {
             stallDetected = false;
             Serial.println("Stall condition cleared");
         }
-    } else if (!motorEnabled || !cachedIsRunning) {
+    } else if (!motorEnabled || !currentIsRunning) {
         // Clear stall status when motor is stopped
         if (stallDetected) {
             stallDetected = false;
@@ -330,7 +370,8 @@ void StepperController::updateCache() {
         }
     }
     
-    cachedStallDetected = stallDetected;
+    // Publish stall status update
+    publishStallUpdate();
 }
 
 void StepperController::processCommand(const StepperCommandData& cmd) {
@@ -442,6 +483,10 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
     }
     
     Serial.printf("Speed set to %.2f RPM (%u steps/sec)\n", rpm, stepsPerSecond);
+    
+    // Publish status update for speed change
+    publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, rpm);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -454,6 +499,10 @@ void StepperController::setDirectionInternal(bool clockwise, uint32_t commandId)
     }
     
     Serial.printf("Direction set to %s\n", clockwise ? "clockwise" : "counter-clockwise");
+    
+    // Publish status update for direction change
+    publishStatusUpdate(StatusUpdateType::DIRECTION_CHANGED, clockwise);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -491,6 +540,10 @@ void StepperController::enableInternal(uint32_t commandId) {
     }
     
     Serial.println("Motor enabled and started");
+    
+    // Publish status update for enabled state change
+    publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, true);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -505,6 +558,10 @@ void StepperController::disableInternal(uint32_t commandId) {
     stepperDriver.disable();
     
     Serial.println("Motor disabled and stopped");
+    
+    // Publish status update for enabled state change
+    publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -519,6 +576,10 @@ void StepperController::emergencyStopInternal(uint32_t commandId) {
     stepperDriver.disable();
     
     Serial.println("EMERGENCY STOP executed");
+    
+    // Publish status update for enabled state change
+    publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -536,7 +597,17 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     stepperDriver.setRunCurrent(current);
     
     // Update TMC2209 communication status after setting current
-    tmc2209Initialized = stepperDriver.isSetupAndCommunicating();
+    bool newTmc2209Status = stepperDriver.isSetupAndCommunicating();
+    
+    // Publish TMC2209 status update if communication status changed
+    if (newTmc2209Status != tmc2209Initialized) {
+        StatusUpdateData statusData;
+        statusData.type = StatusUpdateType::TMC2209_STATUS_UPDATE;
+        statusData.timestamp = millis();
+        statusData.boolValue = newTmc2209Status;
+        xQueueSend(statusUpdateQueue, &statusData, 0);
+        tmc2209Initialized = newTmc2209Status;
+    }
     
     // Verify driver communication by checking if it's responding
     if (!tmc2209Initialized) {
@@ -548,6 +619,10 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     saveSettings();
     
     Serial.printf("Run current set to %d%%\n", current);
+    
+    // Publish status update for current change
+    publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, current);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -571,6 +646,10 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
     stepper->applySpeedAcceleration();
     
     Serial.printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
+    
+    // Publish status update for acceleration change
+    publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, accelerationStepsPerSec2);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -590,6 +669,100 @@ bool StepperController::getCommandResult(CommandResultData& result) {
     if (resultQueue == nullptr) return false;
     
     return xQueueReceive(resultQueue, &result, 0) == pdTRUE; // Non-blocking
+}
+
+bool StepperController::getStatusUpdate(StatusUpdateData& status) {
+    if (statusUpdateQueue == nullptr) return false;
+    
+    return xQueueReceive(statusUpdateQueue, &status, 0) == pdTRUE; // Non-blocking
+}
+
+void StepperController::publishStatusUpdate(StatusUpdateType type, float value) {
+    if (statusUpdateQueue == nullptr) return;
+    
+    StatusUpdateData statusData(type, value);
+    // Don't block if queue is full - just drop the update
+    xQueueSend(statusUpdateQueue, &statusData, 0);
+}
+
+void StepperController::publishStatusUpdate(StatusUpdateType type, bool value) {
+    if (statusUpdateQueue == nullptr) return;
+    
+    StatusUpdateData statusData(type, value);
+    xQueueSend(statusUpdateQueue, &statusData, 0);
+}
+
+void StepperController::publishStatusUpdate(StatusUpdateType type, int value) {
+    if (statusUpdateQueue == nullptr) return;
+    
+    StatusUpdateData statusData(type, value);
+    xQueueSend(statusUpdateQueue, &statusData, 0);
+}
+
+void StepperController::publishStatusUpdate(StatusUpdateType type, uint32_t value) {
+    if (statusUpdateQueue == nullptr) return;
+    
+    StatusUpdateData statusData(type, value);
+    xQueueSend(statusUpdateQueue, &statusData, 0);
+}
+
+void StepperController::publishPositionUpdate() {
+    if (statusUpdateQueue == nullptr) return;
+    
+    // Publish total revolutions
+    if (stepper) {
+        float totalRevolutions = static_cast<float>(stepper->getCurrentPosition()) / (STEPS_PER_REVOLUTION * microSteps * GEAR_RATIO);
+        StatusUpdateData revolutionsData(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, totalRevolutions);
+        xQueueSend(statusUpdateQueue, &revolutionsData, 0);
+        
+        // Publish running status
+        bool isRunning = stepper->isRunning() && motorEnabled;
+        StatusUpdateData runningData(StatusUpdateType::IS_RUNNING_UPDATE, isRunning);
+        xQueueSend(statusUpdateQueue, &runningData, 0);
+    } else {
+        StatusUpdateData revolutionsData(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, 0.0f);
+        xQueueSend(statusUpdateQueue, &revolutionsData, 0);
+        
+        StatusUpdateData runningData(StatusUpdateType::IS_RUNNING_UPDATE, false);
+        xQueueSend(statusUpdateQueue, &runningData, 0);
+    }
+    
+    // Publish runtime
+    unsigned long runtime;
+    if (!isFirstStart && startTime > 0) {
+        runtime = (millis() - startTime) / 1000;
+    } else {
+        runtime = 0;
+    }
+    StatusUpdateData runtimeData(StatusUpdateType::RUNTIME_UPDATE, runtime);
+    xQueueSend(statusUpdateQueue, &runtimeData, 0);
+}
+
+void StepperController::publishStallUpdate() {
+    if (statusUpdateQueue == nullptr) return;
+    
+    // Publish stall detected status
+    StatusUpdateData stallDetectedData(StatusUpdateType::STALL_DETECTED_UPDATE, stallDetected);
+    xQueueSend(statusUpdateQueue, &stallDetectedData, 0);
+    
+    // Publish stall count
+    StatusUpdateData stallCountData(StatusUpdateType::STALL_COUNT_UPDATE, (int)stallCount);
+    xQueueSend(statusUpdateQueue, &stallCountData, 0);
+}
+
+void StepperController::publishVariableSpeedUpdate() {
+    if (statusUpdateQueue == nullptr) return;
+    
+    // Calculate current variable speed using private member access
+    float currentVariableSpeed;
+    if (speedVariationEnabled) {
+        currentVariableSpeed = calculateVariableSpeed();
+    } else {
+        currentVariableSpeed = currentSpeedRPM;
+    }
+    
+    StatusUpdateData statusData(StatusUpdateType::CURRENT_VARIABLE_SPEED_UPDATE, currentVariableSpeed);
+    xQueueSend(statusUpdateQueue, &statusData, 0);
 }
 
 void StepperController::saveSettings() {
@@ -770,6 +943,10 @@ void StepperController::setSpeedVariationInternal(float strength, uint32_t comma
     }
     
     Serial.printf("Speed variation strength set to %.2f (%.0f%%)\n", strength, strength * 100.0f);
+    
+    // Publish status update for speed variation strength change
+    publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, strength);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -782,6 +959,10 @@ void StepperController::setSpeedVariationPhaseInternal(float phase, uint32_t com
     
     Serial.printf("Speed variation phase set to %.2f radians (%.0f degrees)\n", 
                   phase, phase * 180.0f / PI);
+    
+    // Publish status update for speed variation phase change
+    publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED, phase);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -804,6 +985,10 @@ void StepperController::enableSpeedVariationInternal(uint32_t commandId) {
     Serial.printf("Speed variation enabled at position %ld (strength: %.0f%%, phase: 0°)\n", 
                   speedVariationStartPosition, speedVariationStrength * 100.0f);
     Serial.println("Current position will be the slowest point in the cycle");
+    
+    // Publish status update for speed variation enabled change
+    publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, true);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -819,6 +1004,10 @@ void StepperController::disableSpeedVariationInternal(uint32_t commandId) {
     
     Serial.println("Speed variation disabled, returned to constant speed");
     Serial.println("Note: Acceleration remains at current setting for normal operation");
+    
+    // Publish status update for speed variation enabled change
+    publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, false);
+    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -859,7 +1048,8 @@ float StepperController::getPositionAngle() const {
     if (!stepper) return 0.0f;
     
     // Calculate position relative to where speed variation was enabled
-    int32_t relativePosition = cachedCurrentPosition - speedVariationStartPosition;
+    int32_t currentPosition = stepper->getCurrentPosition();
+    int32_t relativePosition = currentPosition - speedVariationStartPosition;
     
     // Convert position to angle in one full output revolution
     // One full output revolution = TOTAL_STEPS_PER_REVOLUTION * microSteps
@@ -869,13 +1059,6 @@ float StepperController::getPositionAngle() const {
     float angle = (2.0f * PI * relativePosition) / stepsPerOutputRevolution;
     
     return angle;
-}
-
-float StepperController::getCurrentVariableSpeed() const {
-    if (speedVariationEnabled) {
-        return calculateVariableSpeed();
-    }
-    return currentSpeedRPM;
 }
 
 uint32_t StepperController::calculateRequiredAccelerationForVariableSpeed() const {

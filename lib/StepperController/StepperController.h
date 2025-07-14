@@ -35,6 +35,26 @@ enum class CommandResult {
     COMMUNICATION_ERROR
 };
 
+// Status update types for inter-task communication
+enum class StatusUpdateType {
+    SPEED_CHANGED,
+    DIRECTION_CHANGED,
+    ENABLED_CHANGED,
+    CURRENT_CHANGED,
+    ACCELERATION_CHANGED,
+    SPEED_VARIATION_ENABLED_CHANGED,
+    SPEED_VARIATION_STRENGTH_CHANGED,
+    SPEED_VARIATION_PHASE_CHANGED,
+    // Periodic updates - now separate for each value
+    TOTAL_REVOLUTIONS_UPDATE,
+    RUNTIME_UPDATE,
+    IS_RUNNING_UPDATE,
+    STALL_DETECTED_UPDATE,
+    STALL_COUNT_UPDATE,
+    TMC2209_STATUS_UPDATE,
+    CURRENT_VARIABLE_SPEED_UPDATE
+};
+
 // Command data structure
 struct StepperCommandData {
     StepperCommand command;
@@ -67,6 +87,44 @@ struct CommandResultData {
     }
 };
 
+// Status update structure
+struct StatusUpdateData {
+    StatusUpdateType type;
+    union {
+        float floatValue;    // for speed, acceleration, revolutions, etc.
+        bool boolValue;      // for direction, enabled, etc.
+        int intValue;        // for current, counts
+        uint32_t uint32Value; // for acceleration
+        unsigned long ulongValue; // for runtime, timestamps
+    };
+    uint32_t timestamp;      // millis() when status was updated
+    
+    // Helper constructors
+    StatusUpdateData() : type(StatusUpdateType::SPEED_CHANGED), timestamp(0) {
+        floatValue = 0.0f;
+    }
+    
+    StatusUpdateData(StatusUpdateType t, float value) : type(t), timestamp(millis()) {
+        floatValue = value;
+    }
+    
+    StatusUpdateData(StatusUpdateType t, bool value) : type(t), timestamp(millis()) {
+        boolValue = value;
+    }
+    
+    StatusUpdateData(StatusUpdateType t, int value) : type(t), timestamp(millis()) {
+        intValue = value;
+    }
+    
+    StatusUpdateData(StatusUpdateType t, uint32_t value) : type(t), timestamp(millis()) {
+        uint32Value = value;
+    }
+    
+    StatusUpdateData(StatusUpdateType t, unsigned long value) : type(t), timestamp(millis()) {
+        ulongValue = value;
+    }
+};
+
 class StepperController : public Task {
 private:
     // FastAccelStepper engine and stepper
@@ -94,8 +152,8 @@ private:
     static const int TOTAL_STEPS_PER_REVOLUTION = STEPS_PER_REVOLUTION * GEAR_RATIO;
     
     // Timing configuration
-    static const unsigned long CACHE_UPDATE_INTERVAL = 500;      // Cache update every 500ms
-    static const unsigned long MOTOR_SPEED_UPDATE_INTERVAL = 50; // Speed update every 50ms for smooth variation
+    static const unsigned long STATUS_UPDATE_INTERVAL = 500;        // Status update every 500ms
+    static const unsigned long MOTOR_SPEED_UPDATE_INTERVAL = 50;    // Speed update every 50ms for smooth variation
     
     // Speed settings (in RPM) - max 30 RPM for the final output (0.5 RPS)
     float currentSpeedRPM;
@@ -126,11 +184,6 @@ private:
     unsigned long lastStallTime;
     uint16_t stallCount;
     
-    // Cached values for thread-safe reading
-    mutable int32_t cachedCurrentPosition;
-    mutable bool cachedIsRunning;
-    mutable bool cachedStallDetected;
-    
     // Command queue for thread-safe operation
     QueueHandle_t commandQueue;
     static const size_t COMMAND_QUEUE_SIZE = 20;
@@ -139,6 +192,10 @@ private:
     QueueHandle_t resultQueue;
     static const size_t RESULT_QUEUE_SIZE = 20;
     uint32_t nextCommandId;
+    
+    // Status update queue for thread-safe status communication
+    QueueHandle_t statusUpdateQueue;
+    static const size_t STATUS_UPDATE_QUEUE_SIZE = 30;
     
     // Helper methods
     bool initPreferences();
@@ -172,6 +229,13 @@ private:
     
     // Helper methods for status reporting
     void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
+    void publishStatusUpdate(StatusUpdateType type, float value);
+    void publishStatusUpdate(StatusUpdateType type, bool value);
+    void publishStatusUpdate(StatusUpdateType type, int value);
+    void publishStatusUpdate(StatusUpdateType type, uint32_t value);
+    void publishPositionUpdate();
+    void publishStallUpdate();
+    void publishVariableSpeedUpdate();
     
     // Speed variation control
     void updateMotorSpeed();
@@ -182,12 +246,14 @@ protected:
     
     // Internal methods
     void processCommand(const StepperCommandData& cmd);
-    void updateCache();
     
     // Helper methods for run() timing
     TickType_t calculateQueueTimeout(unsigned long nextUpdate);
-    bool isCacheUpdateDue(unsigned long nextCacheUpdate);
     bool isUpdateDue(unsigned long nextUpdate);
+    
+    // Periodic status updates
+    void publishPeriodicStatusUpdates();
+    void checkAndUpdateStallStatus();
     
 public:
     StepperController();
@@ -216,33 +282,8 @@ public:
     // Command result retrieval (thread-safe)
     bool getCommandResult(CommandResultData& result); // non-blocking, returns false if no result available
     
-    // Getters
-    float getSpeed() const { return currentSpeedRPM; }
-    uint32_t getCurrentAcceleration() const { return currentAcceleration; }
-    bool isEnabled() const { return motorEnabled; }
-    bool isClockwise() const { return clockwise; }
-    float getMinSpeed() const { return minSpeedRPM; }
-    float getMaxSpeed() const { return maxSpeedRPM; }
-    
-    // Statistics (thread-safe - read-only)
-    float getTotalRevolutions() const;
-    unsigned long getRunTime() const; // in seconds
-    bool isRunning() const;
-    
-    // Settings (thread-safe - read-only)
-    int getRunCurrent() const { return runCurrent; }
-    bool isTMC2209Initialized() const { return tmc2209Initialized; }
-    
-    // Stall detection (thread-safe - read-only)
-    bool isStallDetected() const { return cachedStallDetected; }
-    uint16_t getStallCount() const { return stallCount; }
-    unsigned long getLastStallTime() const { return lastStallTime; }
-    
-    // Speed variation getters (thread-safe - read-only)
-    bool isSpeedVariationEnabled() const { return speedVariationEnabled; }
-    float getSpeedVariationStrength() const { return speedVariationStrength; }
-    float getSpeedVariationPhase() const { return speedVariationPhase; }
-    float getCurrentVariableSpeed() const;  // Get current speed including variation
+    // Status update retrieval (thread-safe)
+    bool getStatusUpdate(StatusUpdateData& status); // non-blocking, returns false if no update available
     
     // Stall detection configuration
     void setStallGuardThreshold(uint8_t threshold); // 0 = most sensitive, 255 = least sensitive
