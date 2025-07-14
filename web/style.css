@@ -157,6 +157,12 @@ body {
     transform: translateY(-1px);
 }
 
+/* Disabled State */
+.disabled {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+}
+
 /* Control Groups */
 .control-group {
     margin-bottom: 24px;

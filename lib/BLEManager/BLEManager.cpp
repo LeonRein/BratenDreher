@@ -17,6 +17,10 @@ public:
     void onConnect(BLEServer* pServer) override {
         bleManager->deviceConnected = true;
         // No Serial print in time-critical callback
+        
+        // Send all current status to the newly connected client
+        // Note: This is called from BLE task context, so it's safe to call sendAllCurrentStatus
+        bleManager->sendAllCurrentStatus();
     }
     
     void onDisconnect(BLEServer* pServer) override {
@@ -239,8 +243,14 @@ void BLEManager::handleCommand(const std::string& command) {
         }
     }
     else if (strcmp(type, "status_request") == 0) {
-        // Status requests are no longer needed - real-time updates are provided automatically
-        Serial.println("Info: Status request received, but real-time updates are already active");
+        // Request all current status from StepperController
+        Serial.println("Status request received, requesting all current status...");
+        uint32_t commandId = stepperController->requestAllStatus();
+        if (commandId > 0) {
+            sendCommandResult(commandId, "success", "Status request sent");
+        } else {
+            sendCommandResult(0, "error", "Failed to send status request");
+        }
     }
     else if (strcmp(type, "acceleration") == 0) {
         // Set acceleration directly in steps/s²
@@ -568,6 +578,23 @@ void BLEManager::sendCommandResult(uint32_t commandId, const String& status, con
         vTaskDelay(pdMS_TO_TICKS(5));
     } catch (...) {
         Serial.println("ERROR: Failed to send command result notification");
+    }
+}
+
+void BLEManager::sendAllCurrentStatus() {
+    if (!stepperController || !deviceConnected) {
+        return;
+    }
+    
+    Serial.println("Requesting all current status from StepperController...");
+    
+    // Use the thread-safe command queue to request all status information
+    uint32_t commandId = stepperController->requestAllStatus();
+    
+    if (commandId > 0) {
+        Serial.printf("Status request sent with command ID: %u\n", commandId);
+    } else {
+        Serial.println("Failed to send status request to StepperController");
     }
 }
 

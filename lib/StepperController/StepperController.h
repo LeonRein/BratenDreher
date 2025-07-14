@@ -23,7 +23,8 @@ enum class StepperCommand {
     SET_SPEED_VARIATION,
     SET_SPEED_VARIATION_PHASE,
     ENABLE_SPEED_VARIATION,
-    DISABLE_SPEED_VARIATION
+    DISABLE_SPEED_VARIATION,
+    REQUEST_ALL_STATUS  // Request all current status values
 };
 
 // Command result status
@@ -219,6 +220,7 @@ private:
     void setSpeedVariationPhaseInternal(float phase, uint32_t commandId);
     void enableSpeedVariationInternal(uint32_t commandId);
     void disableSpeedVariationInternal(uint32_t commandId);
+    void requestAllStatusInternal(uint32_t commandId);
     
     // Speed variation helper methods
     float calculateVariableSpeed() const;
@@ -274,6 +276,9 @@ public:
     uint32_t setSpeedVariationPhase(float phase);         // Set phase offset (0.0 to 2*PI)
     uint32_t enableSpeedVariation();                      // Enable variable speed (current position becomes slowest)
     uint32_t disableSpeedVariation();                     // Disable variable speed
+    
+    // Status request (thread-safe via command queue)
+    uint32_t requestAllStatus();                           // Request all current status to be published
     
     // Command result retrieval (thread-safe)
     bool getCommandResult(CommandResultData& result); // non-blocking, returns false if no result available

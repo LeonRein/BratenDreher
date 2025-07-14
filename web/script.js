@@ -12,6 +12,10 @@ class Control {
         };
         this.timer = null;
         this.parent = null; // Will be set by BratenDreherBLE
+        this.displayState = 'DISABLED'; // Current display state: DISABLED, OUTDATED, VALID
+        
+        // Initialize with disabled state
+        this.setDisplayState('DISABLED');
     }
 
     setParent(parent) {
@@ -46,18 +50,13 @@ class Control {
             this.valueElement.textContent = displayValue;
         }
         
-        // Visual feedback that change is pending
-        this.setPendingState(true);
-        
         // Debounce the command sending
         if (this.timer) {
             clearTimeout(this.timer);
         }
         
         this.timer = setTimeout(() => {
-            this.sendCommand(rawValue).then(() => {
-                this.setPendingState(false);
-            });
+            this.sendCommand(rawValue);
         }, this.options.debounceTime);
     }
 
@@ -102,22 +101,54 @@ class Control {
             } else if (this.element && this.element.type === 'checkbox') {
                 this.element.checked = value;
             }
+            
+            // Mark that we've received valid status
+            this.setDisplayState('VALID');
         }
         
         // Subclasses can override this method to add additional specialized handling
     }
 
-    // Set pending visual state
-    setPendingState(pending) {
-        if (this.valueElement) {
-            this.valueElement.style.opacity = pending ? '0.7' : '1';
-        }
-    }
-
-    // Enable/disable control based on connection state
-    setEnabled(enabled) {
-        if (this.element) {
-            this.element.disabled = !enabled;
+    // Unified display state management
+    setDisplayState(state) {
+        this.displayState = state;
+        
+        switch (state) {
+            case 'DISABLED':
+                // Device not connected - fully disabled with low opacity
+                if (this.element) {
+                    this.element.disabled = true;
+                    this.element.style.opacity = '0.4';
+                    this.element.classList.add('disabled');
+                }
+                if (this.valueElement) {
+                    this.valueElement.style.opacity = '0.4';
+                }
+                break;
+                
+            case 'OUTDATED':
+                // Device connected but no valid data yet - enabled but muted
+                if (this.element) {
+                    this.element.disabled = false;
+                    this.element.style.opacity = '0.7';
+                    this.element.classList.remove('disabled');
+                }
+                if (this.valueElement) {
+                    this.valueElement.style.opacity = '0.7';
+                }
+                break;
+                
+            case 'VALID':
+                // Device connected with valid data - fully enabled and visible
+                if (this.element) {
+                    this.element.disabled = false;
+                    this.element.style.opacity = '1';
+                    this.element.classList.remove('disabled');
+                }
+                if (this.valueElement) {
+                    this.valueElement.style.opacity = '1';
+                }
+                break;
         }
     }
 
@@ -135,6 +166,32 @@ class SpeedControl extends Control {
     constructor(element, valueElement, presetButtons, options = {}) {
         super(element, valueElement, options);
         this.presetButtons = presetButtons;
+        
+        // Now that presetButtons is set, update display state to properly initialize them
+        this.setDisplayState(this.displayState);
+    }
+
+    setDisplayState(state) {
+        // Override to handle preset buttons
+        super.setDisplayState(state);
+        
+        // Safety check - presetButtons might not be set during construction
+        if (!this.presetButtons) {
+            return;
+        }
+        
+        const opacity = state === 'DISABLED' ? '0.4' : 
+                       state === 'OUTDATED' ? '0.7' : '1';
+                       
+        this.presetButtons.forEach(btn => {
+            btn.disabled = state === 'DISABLED';
+            btn.style.opacity = opacity;
+            if (state === 'DISABLED') {
+                btn.classList.add('disabled');
+            } else {
+                btn.classList.remove('disabled');
+            }
+        });
     }
 
     handleStatusUpdate(statusUpdate) {
@@ -143,10 +200,14 @@ class SpeedControl extends Control {
         
         // Add specialized handling
         if (statusUpdate.speed !== undefined) {
+            // Set valid state since we received speed data
+            this.setDisplayState('VALID');
+            
             // Update current speed display
             const currentSpeedElement = this.parent.currentSpeed;
             if (currentSpeedElement) {
                 currentSpeedElement.textContent = `${statusUpdate.speed.toFixed(1)} RPM`;
+                currentSpeedElement.style.opacity = '1';
             }
             
             // Update preset button active state
@@ -165,33 +226,106 @@ class DirectionControl extends Control {
         this.clockwiseBtn = clockwiseBtn;
         this.counterclockwiseBtn = counterclockwiseBtn;
         this.currentDirectionElement = currentDirectionElement;
+        
+        // Initialize with disabled state
+        this.setDisplayState('DISABLED');
+    }
+
+    setDisplayState(state) {
+        // Override to handle direction buttons and current direction element
+        this.displayState = state;
+        
+        switch (state) {
+            case 'DISABLED':
+                // Device not connected - fully disabled with low opacity
+                if (this.clockwiseBtn) {
+                    this.clockwiseBtn.disabled = true;
+                    this.clockwiseBtn.style.opacity = '0.4';
+                    this.clockwiseBtn.classList.add('disabled');
+                }
+                if (this.counterclockwiseBtn) {
+                    this.counterclockwiseBtn.disabled = true;
+                    this.counterclockwiseBtn.style.opacity = '0.4';
+                    this.counterclockwiseBtn.classList.add('disabled');
+                }
+                if (this.currentDirectionElement) {
+                    this.currentDirectionElement.style.opacity = '0.4';
+                }
+                break;
+                
+            case 'OUTDATED':
+                // Device connected but no valid data yet - enabled but muted
+                if (this.clockwiseBtn) {
+                    this.clockwiseBtn.disabled = false;
+                    this.clockwiseBtn.style.opacity = '0.7';
+                    this.clockwiseBtn.classList.remove('disabled');
+                }
+                if (this.counterclockwiseBtn) {
+                    this.counterclockwiseBtn.disabled = false;
+                    this.counterclockwiseBtn.style.opacity = '0.7';
+                    this.counterclockwiseBtn.classList.remove('disabled');
+                }
+                if (this.currentDirectionElement) {
+                    this.currentDirectionElement.style.opacity = '0.7';
+                }
+                break;
+                
+            case 'VALID':
+                // Device connected with valid data - fully enabled and visible
+                if (this.clockwiseBtn) {
+                    this.clockwiseBtn.disabled = false;
+                    this.clockwiseBtn.style.opacity = '1';
+                    this.clockwiseBtn.classList.remove('disabled');
+                }
+                if (this.counterclockwiseBtn) {
+                    this.counterclockwiseBtn.disabled = false;
+                    this.counterclockwiseBtn.style.opacity = '1';
+                    this.counterclockwiseBtn.classList.remove('disabled');
+                }
+                if (this.currentDirectionElement) {
+                    this.currentDirectionElement.style.opacity = '1';
+                }
+                break;
+        }
     }
 
     bindEvents() {
-        this.clockwiseBtn.addEventListener('click', () => this.setDirection(true));
-        this.counterclockwiseBtn.addEventListener('click', () => this.setDirection(false));
+        if (this.clockwiseBtn) {
+            this.clockwiseBtn.addEventListener('click', () => this.setDirection(true));
+        }
+        if (this.counterclockwiseBtn) {
+            this.counterclockwiseBtn.addEventListener('click', () => this.setDirection(false));
+        }
     }
 
     async setDirection(clockwise) {
         // Update UI immediately for responsive feedback
-        this.clockwiseBtn.classList.toggle('active', clockwise);
-        this.counterclockwiseBtn.classList.toggle('active', !clockwise);
+        if (this.clockwiseBtn) {
+            this.clockwiseBtn.classList.toggle('active', clockwise);
+        }
+        if (this.counterclockwiseBtn) {
+            this.counterclockwiseBtn.classList.toggle('active', !clockwise);
+        }
         
         return await this.parent.sendCommand('direction', clockwise);
     }
 
     handleStatusUpdate(statusUpdate) {
         if (statusUpdate.direction !== undefined) {
+            // Set valid state since we received direction data
+            this.setDisplayState('VALID');
+            
             const clockwise = statusUpdate.direction === 'cw';
-            this.clockwiseBtn.classList.toggle('active', clockwise);
-            this.counterclockwiseBtn.classList.toggle('active', !clockwise);
-            this.currentDirectionElement.textContent = clockwise ? 'Clockwise' : 'Counter-clockwise';
+            if (this.clockwiseBtn) {
+                this.clockwiseBtn.classList.toggle('active', clockwise);
+            }
+            if (this.counterclockwiseBtn) {
+                this.counterclockwiseBtn.classList.toggle('active', !clockwise);
+            }
+            if (this.currentDirectionElement) {
+                this.currentDirectionElement.textContent = clockwise ? 'Clockwise' : 'Counter-clockwise';
+            }
         }
-    }
-
-    setEnabled(enabled) {
-        this.clockwiseBtn.disabled = !enabled;
-        this.counterclockwiseBtn.disabled = !enabled;
     }
 }
 
@@ -202,18 +336,35 @@ class MotorStatusControl extends Control {
         this.motorStatusElement = motorStatusElement;
     }
 
+    setDisplayState(state) {
+        // Override to include motor status element
+        super.setDisplayState(state);
+        
+        if (this.motorStatusElement) {
+            const opacity = state === 'DISABLED' ? '0.4' : 
+                           state === 'OUTDATED' ? '0.7' : '1';
+            this.motorStatusElement.style.opacity = opacity;
+        }
+    }
+
     handleStatusUpdate(statusUpdate) {
         // Call parent to handle standard status key mapping
         super.handleStatusUpdate(statusUpdate);
         
         // Add specialized handling
         if (statusUpdate.enabled !== undefined) {
+            // Set valid state since we received enabled data
+            this.setDisplayState('VALID');
+            
             const enabled = statusUpdate.enabled;
             // Update motor status (will be refined if running status is also provided)
             this.motorStatusElement.textContent = enabled ? 'Enabled' : 'Stopped';
         }
         
         if (statusUpdate.running !== undefined) {
+            // Set valid state since we received running data
+            this.setDisplayState('VALID');
+            
             // Refine motor status if we have running information
             const enabled = this.element.checked; // Get from UI state
             if (enabled) {
@@ -230,8 +381,22 @@ class AccelerationControl extends Control {
         this.currentAccelerationElement = currentAccelerationElement;
     }
 
+    setDisplayState(state) {
+        // Override to include current acceleration element
+        super.setDisplayState(state);
+        
+        if (this.currentAccelerationElement) {
+            const opacity = state === 'DISABLED' ? '0.4' : 
+                           state === 'OUTDATED' ? '0.7' : '1';
+            this.currentAccelerationElement.style.opacity = opacity;
+        }
+    }
+
     handleStatusUpdate(statusUpdate) {
         if (statusUpdate.acceleration !== undefined) {
+            // Set valid state since we received acceleration data
+            this.setDisplayState('VALID');
+            
             const accelerationTimeDisplay = this.parent.accelerationToTime(statusUpdate.acceleration).toFixed(1);
             this.currentAccelerationElement.textContent = `${accelerationTimeDisplay}s to max`;
             
@@ -254,6 +419,24 @@ class VariableSpeedControl extends Control {
         this.variableSpeedStatus = variableSpeedStatus;
         this.currentVariableSpeedItem = currentVariableSpeedItem;
         this.currentVariableSpeed = currentVariableSpeed;
+        
+        // Initialize with disabled state
+        this.setDisplayState('DISABLED');
+    }
+
+    setDisplayState(state) {
+        // Override to handle variable speed elements
+        super.setDisplayState(state);
+        
+        const opacity = state === 'DISABLED' ? '0.4' : 
+                       state === 'OUTDATED' ? '0.7' : '1';
+                       
+        if (this.variableSpeedStatus) {
+            this.variableSpeedStatus.style.opacity = opacity;
+        }
+        if (this.currentVariableSpeed) {
+            this.currentVariableSpeed.style.opacity = opacity;
+        }
     }
 
     bindEvents() {
@@ -289,6 +472,9 @@ class VariableSpeedControl extends Control {
         // No parent call needed - this control doesn't use standard status key mapping
         
         if (statusUpdate.speedVariationEnabled !== undefined) {
+            // Set valid state since we received speed variation data
+            this.setDisplayState('VALID');
+            
             const enabled = statusUpdate.speedVariationEnabled;
             this.updateVariableSpeedUI();
             
@@ -302,6 +488,9 @@ class VariableSpeedControl extends Control {
         }
 
         if (statusUpdate.currentVariableSpeed !== undefined) {
+            // Set valid state since we received variable speed data
+            this.setDisplayState('VALID');
+            
             const variableSpeedEnabled = this.element.checked;
             if (variableSpeedEnabled) {
                 this.currentVariableSpeedItem.style.display = 'flex';
@@ -318,21 +507,51 @@ class TMCStatusControl extends Control {
         this.statusElement = statusElement;
         this.stallStatusElement = stallStatusElement;
         this.stallCountElement = stallCountElement;
+        
+        // Initialize with disabled state
+        this.setDisplayState('DISABLED');
+    }
+
+    setDisplayState(state) {
+        // Override to handle TMC status elements
+        this.displayState = state;
+        
+        const opacity = state === 'DISABLED' ? '0.4' : 
+                       state === 'OUTDATED' ? '0.7' : '1';
+        
+        if (this.statusElement) {
+            this.statusElement.style.opacity = opacity;
+        }
+        if (this.stallStatusElement) {
+            this.stallStatusElement.style.opacity = opacity;
+        }
+        if (this.stallCountElement) {
+            this.stallCountElement.style.opacity = opacity;
+        }
     }
 
     handleStatusUpdate(statusUpdate) {
         if (statusUpdate.tmc2209Status !== undefined) {
+            // Set valid state since we received TMC status data
+            this.setDisplayState('VALID');
+            
             this.statusElement.textContent = statusUpdate.tmc2209Status ? 'OK' : 'Error';
             this.statusElement.style.color = statusUpdate.tmc2209Status ? '#2ecc71' : '#e74c3c';
         }
         
         if (statusUpdate.stallDetected !== undefined) {
+            // Set valid state since we received stall data
+            this.setDisplayState('VALID');
+            
             this.stallStatusElement.textContent = statusUpdate.stallDetected ? 'STALL!' : 'OK';
             this.stallStatusElement.style.color = statusUpdate.stallDetected ? '#e74c3c' : '#2ecc71';
             this.stallStatusElement.style.fontWeight = statusUpdate.stallDetected ? 'bold' : 'normal';
         }
         
         if (statusUpdate.stallCount !== undefined) {
+            // Set valid state since we received stall count data
+            this.setDisplayState('VALID');
+            
             this.stallCountElement.textContent = statusUpdate.stallCount;
             this.stallCountElement.style.color = statusUpdate.stallCount > 0 ? '#e67e22' : '#2ecc71';
         }
@@ -346,14 +565,41 @@ class StatisticsControl extends Control {
         this.totalRevolutionsElement = totalRevolutionsElement;
         this.runTimeElement = runTimeElement;
         this.avgSpeedElement = avgSpeedElement;
+        
+        // Initialize with disabled state
+        this.setDisplayState('DISABLED');
+    }
+
+    setDisplayState(state) {
+        // Override to handle statistics elements
+        this.displayState = state;
+        
+        const opacity = state === 'DISABLED' ? '0.4' : 
+                       state === 'OUTDATED' ? '0.7' : '1';
+        
+        if (this.totalRevolutionsElement) {
+            this.totalRevolutionsElement.style.opacity = opacity;
+        }
+        if (this.runTimeElement) {
+            this.runTimeElement.style.opacity = opacity;
+        }
+        if (this.avgSpeedElement) {
+            this.avgSpeedElement.style.opacity = opacity;
+        }
     }
 
     handleStatusUpdate(statusUpdate) {
         if (statusUpdate.totalRevolutions !== undefined) {
+            // Set valid state since we received statistics data
+            this.setDisplayState('VALID');
+            
             this.totalRevolutionsElement.textContent = statusUpdate.totalRevolutions.toFixed(3);
         }
         
         if (statusUpdate.runtime !== undefined) {
+            // Set valid state since we received runtime data
+            this.setDisplayState('VALID');
+            
             this.runTimeElement.textContent = this.formatTime(statusUpdate.runtime);
         }
         
@@ -425,6 +671,9 @@ class BratenDreherBLE {
         
         // Initialize variable speed UI state
         this.updateVariableSpeedUI();
+        
+        // Initialize UI state
+        this.updateUI();
         
         // Check Web Bluetooth support
         if (!navigator.bluetooth) {
@@ -626,6 +875,10 @@ class BratenDreherBLE {
             
             // Initialize variable speed UI
             this.updateVariableSpeedUI();
+            
+            // Request all current status to synchronize the UI
+            console.log('Requesting current status...');
+            await this.sendCommand('status_request', null);
             
             console.log('Successfully connected to BratenDreher');
             
@@ -948,11 +1201,9 @@ class BratenDreherBLE {
     handleStatusUpdate(statusUpdate) {
         console.log('Status update:', statusUpdate);
         
-        // Update timestamp
+        // Update timestamp and make it fully visible since we're receiving data
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
-        
-        // Restore visual feedback opacity since we're getting updates from device
-        this.restoreOpacity();
+        this.lastUpdate.style.opacity = '1';
         
         // Update all controls using the unified handleStatusUpdate method
         this.controls.forEach(control => {
@@ -1061,9 +1312,10 @@ class BratenDreherBLE {
     }
     
     updateUI() {
-        // Enable/disable all controls based on connection state
+        // Set display state for all controls based on connection state
+        const state = this.connected ? 'OUTDATED' : 'DISABLED';
         this.controls.forEach(control => {
-            control.setEnabled(this.connected);
+            control.setDisplayState(state);
         });
         
         // Handle other UI elements that aren't managed by Control system
@@ -1073,14 +1325,29 @@ class BratenDreherBLE {
             this.resetStallBtn
         ];
         
+        const opacity = this.connected ? '0.7' : '0.4'; // Outdated state for non-controls
+        const disabled = !this.connected;
+        
         otherControls.forEach(control => {
             if (control) {
-                control.disabled = !this.connected;
+                control.disabled = disabled;
+                control.style.opacity = opacity;
+                if (disabled) {
+                    control.classList.add('disabled');
+                } else {
+                    control.classList.remove('disabled');
+                }
             }
         });
         
         this.presetBtns.forEach(btn => {
-            btn.disabled = !this.connected;
+            btn.disabled = disabled;
+            btn.style.opacity = opacity;
+            if (disabled) {
+                btn.classList.add('disabled');
+            } else {
+                btn.classList.remove('disabled');
+            }
         });
     }
     
@@ -1137,16 +1404,20 @@ class BratenDreherBLE {
             }, 300);
         }, 5000);
     }
-    
-    // Helper method to restore visual feedback opacity after device updates
-    restoreOpacity() {
-        // Restore opacity for all controls that might have pending feedback
-        this.controls.forEach(control => {
-            control.setPendingState(false);
-        });
-    }
 
     initializeControls() {
+        // Initialize status display elements that aren't controlled by specific controls
+        const statusElements = [
+            this.currentSpeed,
+            this.lastUpdate
+        ];
+        
+        statusElements.forEach(element => {
+            if (element) {
+                element.style.opacity = '0.4'; // Initial disabled state
+            }
+        });
+
         // Speed control with preset button management
         this.controls.set('speed', new SpeedControl(
             this.speedSlider,

@@ -508,6 +508,10 @@ void StepperController::processCommand(const StepperCommandData& cmd) {
         case StepperCommand::DISABLE_SPEED_VARIATION:
             disableSpeedVariationInternal(cmd.commandId);
             break;
+            
+        case StepperCommand::REQUEST_ALL_STATUS:
+            requestAllStatusInternal(cmd.commandId);
+            break;
     }
 }
 
@@ -1036,6 +1040,46 @@ void StepperController::disableSpeedVariationInternal(uint32_t commandId) {
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
+void StepperController::requestAllStatusInternal(uint32_t commandId) {
+    Serial.println("Publishing all current status values...");
+    
+    // Publish all current status values through the status update queue
+    publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
+    publishStatusUpdate(StatusUpdateType::DIRECTION_CHANGED, clockwise);
+    publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, motorEnabled);
+    publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, runCurrent);
+    publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, currentAcceleration);
+    
+    // Speed variation status
+    publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, speedVariationEnabled);
+    publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, speedVariationStrength);
+    publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED, speedVariationPhase);
+    
+    // Current variable speed (if variation is enabled)
+    if (speedVariationEnabled) {
+        float currentVariableSpeed = calculateVariableSpeed();
+        publishStatusUpdate(StatusUpdateType::CURRENT_VARIABLE_SPEED_UPDATE, currentVariableSpeed);
+    }
+    
+    // Statistics and runtime info
+    unsigned long totalRevolutions = totalSteps / TOTAL_STEPS_PER_REVOLUTION;
+    publishStatusUpdate(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, (float)totalRevolutions);
+    
+    unsigned long runtimeSeconds = isFirstStart ? 0 : (millis() - startTime) / 1000;
+    publishStatusUpdate(StatusUpdateType::RUNTIME_UPDATE, (unsigned long)runtimeSeconds);
+    
+    bool isCurrentlyRunning = stepper ? stepper->isRunning() : false;
+    publishStatusUpdate(StatusUpdateType::IS_RUNNING_UPDATE, isCurrentlyRunning);
+    
+    // TMC2209 and stall detection
+    publishStatusUpdate(StatusUpdateType::TMC2209_STATUS_UPDATE, tmc2209Initialized);
+    publishStatusUpdate(StatusUpdateType::STALL_DETECTED_UPDATE, stallDetected);
+    publishStatusUpdate(StatusUpdateType::STALL_COUNT_UPDATE, (int)stallCount);
+    
+    reportResult(commandId, CommandResult::SUCCESS);
+    Serial.println("All status values published to queue");
+}
+
 float StepperController::calculateVariableSpeed() const {
     if (!speedVariationEnabled || speedVariationStrength == 0.0f) {
         return currentSpeedRPM;
@@ -1248,6 +1292,20 @@ uint32_t StepperController::disableSpeedVariation() {
     uint32_t commandId = nextCommandId++;
     StepperCommandData cmd;
     cmd.command = StepperCommand::DISABLE_SPEED_VARIATION;
+    cmd.commandId = commandId;
+    
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
+}
+
+uint32_t StepperController::requestAllStatus() {
+    if (commandQueue == nullptr) return 0;
+    
+    uint32_t commandId = nextCommandId++;
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::REQUEST_ALL_STATUS;
     cmd.commandId = commandId;
     
     if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
