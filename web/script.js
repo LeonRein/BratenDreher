@@ -20,6 +20,11 @@ class Control {
 
     // Set up event listeners
     bindEvents() {
+        // Skip binding if no element (for display-only controls)
+        if (!this.element) {
+            return;
+        }
+        
         if (this.element.type === 'range') {
             this.element.addEventListener('input', (e) => this.handleInput(e));
         } else if (this.element.type === 'checkbox') {
@@ -77,32 +82,29 @@ class Control {
         return await this.parent.sendCommand(this.options.commandType, transformedValue, this.options.additionalParams || {});
     }
 
-    // Update control state from status updates
-    updateFromStatus(statusUpdate) {
-        if (!this.options.statusKey || statusUpdate[this.options.statusKey] === undefined) {
-            return;
-        }
-
-        let value = statusUpdate[this.options.statusKey];
-        
-        // Apply status transform if available (for converting backend values to UI values)
-        if (this.options.statusTransform) {
-            value = this.options.statusTransform(value);
-        }
-        
-        if (this.element.type === 'range') {
-            this.element.value = value;
-            if (this.valueElement) {
-                this.valueElement.textContent = this.options.displayTransform(value);
-            }
-        } else if (this.element.type === 'checkbox') {
-            this.element.checked = value;
-        }
-    }
-
-    // Handle additional status update processing - to be overridden by subclasses
+    // Handle status updates - can be overridden by subclasses for complex logic
     handleStatusUpdate(statusUpdate) {
-        // Default implementation does nothing - subclasses can override
+        // First, handle standard status key mapping (for simple controls)
+        if (this.options.statusKey && statusUpdate[this.options.statusKey] !== undefined) {
+            let value = statusUpdate[this.options.statusKey];
+            
+            // Apply status transform if available (for converting backend values to UI values)
+            if (this.options.statusTransform) {
+                value = this.options.statusTransform(value);
+            }
+            
+            // Update UI element based on type
+            if (this.element && this.element.type === 'range') {
+                this.element.value = value;
+                if (this.valueElement) {
+                    this.valueElement.textContent = this.options.displayTransform(value);
+                }
+            } else if (this.element && this.element.type === 'checkbox') {
+                this.element.checked = value;
+            }
+        }
+        
+        // Subclasses can override this method to add additional specialized handling
     }
 
     // Set pending visual state
@@ -114,7 +116,9 @@ class Control {
 
     // Enable/disable control based on connection state
     setEnabled(enabled) {
-        this.element.disabled = !enabled;
+        if (this.element) {
+            this.element.disabled = !enabled;
+        }
     }
 
     // Clear any pending timers
@@ -134,6 +138,10 @@ class SpeedControl extends Control {
     }
 
     handleStatusUpdate(statusUpdate) {
+        // Call parent to handle standard status key mapping
+        super.handleStatusUpdate(statusUpdate);
+        
+        // Add specialized handling
         if (statusUpdate.speed !== undefined) {
             // Update current speed display
             const currentSpeedElement = this.parent.currentSpeed;
@@ -195,6 +203,10 @@ class MotorStatusControl extends Control {
     }
 
     handleStatusUpdate(statusUpdate) {
+        // Call parent to handle standard status key mapping
+        super.handleStatusUpdate(statusUpdate);
+        
+        // Add specialized handling
         if (statusUpdate.enabled !== undefined) {
             const enabled = statusUpdate.enabled;
             // Update motor status (will be refined if running status is also provided)
@@ -274,6 +286,8 @@ class VariableSpeedControl extends Control {
     }
 
     handleStatusUpdate(statusUpdate) {
+        // No parent call needed - this control doesn't use standard status key mapping
+        
         if (statusUpdate.speedVariationEnabled !== undefined) {
             const enabled = statusUpdate.speedVariationEnabled;
             this.updateVariableSpeedUI();
@@ -940,9 +954,8 @@ class BratenDreherBLE {
         // Restore visual feedback opacity since we're getting updates from device
         this.restoreOpacity();
         
-        // Update all controls using both the base Control system and specialized handlers
+        // Update all controls using the unified handleStatusUpdate method
         this.controls.forEach(control => {
-            control.updateFromStatus(statusUpdate);
             control.handleStatusUpdate(statusUpdate);
         });
     }
