@@ -15,6 +15,7 @@
 // Forward declaration (header will be included in .cpp file)
 class StepperController;
 struct CommandResultData;
+struct StatusUpdateData;
 
 class BLEManager : public Task {
 private:
