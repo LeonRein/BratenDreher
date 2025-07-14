@@ -17,6 +17,10 @@ public:
     void onConnect(BLEServer* pServer) override {
         bleManager->deviceConnected = true;
         // No Serial print in time-critical callback
+        
+        // Send all current status to the newly connected client
+        // Note: This is called from BLE task context, so it's safe to call sendAllCurrentStatus
+        bleManager->sendAllCurrentStatus();
     }
     
     void onDisconnect(BLEServer* pServer) override {
@@ -57,16 +61,13 @@ BLEManager::BLEManager()
       server(nullptr), service(nullptr), commandCharacteristic(nullptr),
       serverCallbacks(nullptr), commandCallbacks(nullptr),
       deviceConnected(false), oldDeviceConnected(false),
-      stepperController(nullptr), lastStatusUpdate(0) {
+      stepperController(nullptr) {
     
     // Create FreeRTOS queue for commands
     commandQueue = xQueueCreate(MAX_QUEUE_SIZE, MAX_COMMAND_LENGTH);
     if (commandQueue == nullptr) {
         Serial.println("ERROR: Failed to create command queue!");
     }
-    
-    // Print memory status for debugging
-    Serial.printf("BLE Task created. Free heap: %u bytes\n", ESP.getFreeHeap());
 }
 
 BLEManager::~BLEManager() {
@@ -242,7 +243,14 @@ void BLEManager::handleCommand(const std::string& command) {
         }
     }
     else if (strcmp(type, "status_request") == 0) {
-        sendStatus();
+        // Request all current status from StepperController
+        Serial.println("Status request received, requesting all current status...");
+        uint32_t commandId = stepperController->requestAllStatus();
+        if (commandId > 0) {
+            sendCommandResult(commandId, "success", "Status request sent");
+        } else {
+            sendCommandResult(0, "error", "Failed to send status request");
+        }
     }
     else if (strcmp(type, "acceleration") == 0) {
         // Set acceleration directly in steps/s²
@@ -307,64 +315,6 @@ void BLEManager::handleCommand(const std::string& command) {
     }
 }
 
-void BLEManager::sendStatus() {
-    if (!commandCharacteristic || !stepperController || !deviceConnected) {
-        Serial.println("Cannot send status: characteristic, controller, or connection not available");
-        return;
-    }
-    
-    // Use fixed-size JSON document to prevent heap issues (compatible with ArduinoJson v6)
-    JsonDocument statusDoc;
-    statusDoc["type"] = "status";
-    statusDoc["enabled"] = stepperController->isEnabled();
-    statusDoc["speed"] = stepperController->getSpeed();
-    statusDoc["acceleration"] = stepperController->getCurrentAcceleration();
-    statusDoc["direction"] = stepperController->isClockwise() ? "cw" : "ccw";
-    statusDoc["running"] = stepperController->isRunning();
-    statusDoc["totalRevolutions"] = stepperController->getTotalRevolutions();
-    statusDoc["runtime"] = stepperController->getRunTime();
-    statusDoc["current"] = stepperController->getRunCurrent();
-    statusDoc["tmc2209Status"] = stepperController->isTMC2209Initialized();
-    statusDoc["stallDetected"] = stepperController->isStallDetected();
-    statusDoc["stallCount"] = stepperController->getStallCount();
-    statusDoc["timestamp"] = millis();
-    
-    // Add variable speed information
-    statusDoc["speedVariationEnabled"] = stepperController->isSpeedVariationEnabled();
-    statusDoc["speedVariationStrength"] = stepperController->getSpeedVariationStrength();
-    statusDoc["speedVariationPhase"] = stepperController->getSpeedVariationPhase();
-    if (stepperController->isSpeedVariationEnabled()) {
-        statusDoc["currentVariableSpeed"] = stepperController->getCurrentVariableSpeed();
-    }
-    
-    String statusString;
-    size_t result = serializeJson(statusDoc, statusString);
-    if (result == 0) {
-        Serial.println("ERROR: Failed to serialize status JSON");
-        return;
-    }
-    
-    // Check if the message is too long for BLE
-    if (statusString.length() > 500) {
-        Serial.printf("Warning: Status message is long (%d bytes)\n", statusString.length());
-    }
-    
-    try {
-        commandCharacteristic->setValue(statusString.c_str());
-        commandCharacteristic->notify();
-        Serial.printf("Status sent: %s\n", statusString.c_str());
-        
-        // Small delay to prevent overwhelming BLE stack
-        vTaskDelay(pdMS_TO_TICKS(10));
-    } catch (...) {
-        Serial.println("Failed to send status notification");
-    }
-}
-
-void BLEManager::updateStatus() {
-    sendStatus();
-}
-
 void BLEManager::run() {
     Serial.println("BLE Task started");
     
@@ -388,6 +338,9 @@ void BLEManager::update() {
     // Process command results from StepperController
     processCommandResults();
     
+    // Process status updates from StepperController (simple batching)
+    processStatusUpdates();
+    
     // Handle connection state changes
     if (!deviceConnected && oldDeviceConnected) {
         server->startAdvertising(); // Restart advertising
@@ -398,29 +351,6 @@ void BLEManager::update() {
     if (deviceConnected && !oldDeviceConnected) {
         oldDeviceConnected = deviceConnected;
         Serial.println("BLE client connected");
-        // Send initial status in next update cycle
-    }
-    
-    // Update status periodically
-    unsigned long currentTime = millis();
-    if (currentTime - lastStatusUpdate >= STATUS_UPDATE_INTERVAL) {
-        updateStatus();
-        lastStatusUpdate = currentTime;
-        
-        // Monitor memory usage every 30 seconds (only when connected)
-        static unsigned long lastMemoryCheck = 0;
-        if (deviceConnected && (currentTime - lastMemoryCheck) >= 30000) {
-            uint32_t freeHeap = ESP.getFreeHeap();
-            uint32_t minFreeHeap = ESP.getMinFreeHeap();
-            Serial.printf("Memory status - Free: %u bytes, Min free: %u bytes\n", freeHeap, minFreeHeap);
-            
-            // Warn if memory is getting low
-            if (freeHeap < 20000) {
-                Serial.println("WARNING: Low memory detected!");
-            }
-            
-            lastMemoryCheck = currentTime;
-        }
     }
     
     // Small delay to prevent busy waiting when no commands are queued
@@ -509,6 +439,111 @@ void BLEManager::processCommandResults() {
     }
 }
 
+void BLEManager::processStatusUpdates() {
+    if (!stepperController || !commandCharacteristic || !deviceConnected) return;
+    
+    StatusUpdateData statusUpdate;
+    
+    // Check if there are any status updates available
+    if (stepperController->getStatusUpdate(statusUpdate)) {
+        // Create JSON document and add the first update
+        JsonDocument statusDoc;
+        statusDoc["type"] = "status_update";
+        statusDoc["timestamp"] = millis();
+        
+        // Add the first status update
+        addStatusToJson(statusDoc, statusUpdate);
+        
+        // Process all remaining status updates in the queue
+        while (stepperController->getStatusUpdate(statusUpdate)) {
+            addStatusToJson(statusDoc, statusUpdate);
+            
+            // Check if we're approaching size limit
+            String tempString;
+            size_t tempSize = serializeJson(statusDoc, tempString);
+            if (tempSize >= MAX_BLE_PACKET_SIZE) {
+                Serial.printf("Warning: Status update approaching size limit (%d bytes), sending now\n", tempSize);
+                break;
+            }
+        }
+        
+        // Send the batched updates
+        sendStatusUpdate(statusDoc);
+    }
+}
+
+void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate) {
+    switch (statusUpdate.type) {
+        case StatusUpdateType::SPEED_CHANGED:
+            doc["speed"] = statusUpdate.floatValue;
+            break;
+        case StatusUpdateType::DIRECTION_CHANGED:
+            doc["direction"] = statusUpdate.boolValue ? "cw" : "ccw";
+            break;
+        case StatusUpdateType::ENABLED_CHANGED:
+            doc["enabled"] = statusUpdate.boolValue;
+            break;
+        case StatusUpdateType::CURRENT_CHANGED:
+            doc["current"] = statusUpdate.intValue;
+            break;
+        case StatusUpdateType::ACCELERATION_CHANGED:
+            doc["acceleration"] = statusUpdate.uint32Value;
+            break;
+        case StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED:
+            doc["speedVariationEnabled"] = statusUpdate.boolValue;
+            break;
+        case StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED:
+            doc["speedVariationStrength"] = statusUpdate.floatValue;
+            break;
+        case StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED:
+            doc["speedVariationPhase"] = statusUpdate.floatValue;
+            break;
+        case StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE:
+            doc["totalRevolutions"] = statusUpdate.floatValue;
+            break;
+        case StatusUpdateType::RUNTIME_UPDATE:
+            doc["runtime"] = statusUpdate.ulongValue;
+            break;
+        case StatusUpdateType::IS_RUNNING_UPDATE:
+            doc["running"] = statusUpdate.boolValue;
+            break;
+        case StatusUpdateType::STALL_DETECTED_UPDATE:
+            doc["stallDetected"] = statusUpdate.boolValue;
+            break;
+        case StatusUpdateType::STALL_COUNT_UPDATE:
+            doc["stallCount"] = statusUpdate.intValue;
+            break;
+        case StatusUpdateType::TMC2209_STATUS_UPDATE:
+            doc["tmc2209Status"] = statusUpdate.boolValue;
+            break;
+        case StatusUpdateType::CURRENT_VARIABLE_SPEED_UPDATE:
+            doc["currentVariableSpeed"] = statusUpdate.floatValue;
+            break;
+    }
+}
+
+void BLEManager::sendStatusUpdate(JsonDocument& statusDoc) {
+    String statusString;
+    size_t result = serializeJson(statusDoc, statusString);
+    if (result == 0) {
+        Serial.println("ERROR: Failed to serialize status JSON");
+        return;
+    }
+    
+    Serial.printf("Sending status update (%d bytes): %s\n", 
+                  statusString.length(), statusString.c_str());
+    
+    try {
+        commandCharacteristic->setValue(statusString.c_str());
+        commandCharacteristic->notify();
+        
+        // Small delay to prevent overwhelming BLE stack
+        vTaskDelay(pdMS_TO_TICKS(10));
+    } catch (...) {
+        Serial.println("Failed to send status update notification");
+    }
+}
+
 void BLEManager::sendCommandResult(uint32_t commandId, const String& status, const String& message) {
     if (!commandCharacteristic || !deviceConnected) return;
     
@@ -545,3 +580,22 @@ void BLEManager::sendCommandResult(uint32_t commandId, const String& status, con
         Serial.println("ERROR: Failed to send command result notification");
     }
 }
+
+void BLEManager::sendAllCurrentStatus() {
+    if (!stepperController || !deviceConnected) {
+        return;
+    }
+    
+    Serial.println("Requesting all current status from StepperController...");
+    
+    // Use the thread-safe command queue to request all status information
+    uint32_t commandId = stepperController->requestAllStatus();
+    
+    if (commandId > 0) {
+        Serial.printf("Status request sent with command ID: %u\n", commandId);
+    } else {
+        Serial.println("Failed to send status request to StepperController");
+    }
+}
+
+// ...existing code...

@@ -1,3 +1,645 @@
+class Control {
+    constructor(element, valueElement, options = {}) {
+        this.element = element;
+        this.valueElement = valueElement;
+        this.options = {
+            debounceTime: 300,
+            commandType: null,
+            valueTransform: (value) => value, // Function to transform input value before sending
+            displayTransform: (value) => value, // Function to transform value for display
+            statusKey: null, // Key to look for in status updates
+            ...options
+        };
+        this.timer = null;
+        this.parent = null; // Will be set by BratenDreherBLE
+        this.displayState = 'DISABLED'; // Current display state: DISABLED, OUTDATED, VALID
+        
+        // Initialize with disabled state
+        this.setDisplayState('DISABLED');
+    }
+
+    setParent(parent) {
+        this.parent = parent;
+    }
+
+    // Set up event listeners
+    bindEvents() {
+        // Skip binding if no element (for display-only controls)
+        if (!this.element) {
+            return;
+        }
+        
+        if (this.element.type === 'range') {
+            this.element.addEventListener('input', (e) => this.handleInput(e));
+        } else if (this.element.type === 'checkbox') {
+            this.element.addEventListener('change', (e) => this.handleChange(e));
+        } else {
+            this.element.addEventListener('click', (e) => this.handleClick(e));
+        }
+    }
+
+    handleInput(event) {
+        const rawValue = this.element.type === 'range' ? 
+            parseFloat(event.target.value) : 
+            event.target.value;
+        
+        const displayValue = this.options.displayTransform(rawValue);
+        
+        // Update display immediately
+        if (this.valueElement) {
+            this.valueElement.textContent = displayValue;
+        }
+        
+        // Debounce the command sending
+        if (this.timer) {
+            clearTimeout(this.timer);
+        }
+        
+        this.timer = setTimeout(() => {
+            this.sendCommand(rawValue);
+        }, this.options.debounceTime);
+    }
+
+    handleChange(event) {
+        const value = event.target.checked;
+        this.sendCommand(value);
+    }
+
+    handleClick(event) {
+        if (this.options.clickValue !== undefined) {
+            this.sendCommand(this.options.clickValue);
+        }
+    }
+
+    async sendCommand(rawValue) {
+        if (!this.parent || !this.options.commandType) {
+            console.error('Control not properly configured for command sending');
+            return false;
+        }
+
+        const transformedValue = this.options.valueTransform(rawValue);
+        return await this.parent.sendCommand(this.options.commandType, transformedValue, this.options.additionalParams || {});
+    }
+
+    // Handle status updates - can be overridden by subclasses for complex logic
+    handleStatusUpdate(statusUpdate) {
+        // First, handle standard status key mapping (for simple controls)
+        if (this.options.statusKey && statusUpdate[this.options.statusKey] !== undefined) {
+            let value = statusUpdate[this.options.statusKey];
+            
+            // Apply status transform if available (for converting backend values to UI values)
+            if (this.options.statusTransform) {
+                value = this.options.statusTransform(value);
+            }
+            
+            // Update UI element based on type
+            if (this.element && this.element.type === 'range') {
+                this.element.value = value;
+                if (this.valueElement) {
+                    this.valueElement.textContent = this.options.displayTransform(value);
+                }
+            } else if (this.element && this.element.type === 'checkbox') {
+                this.element.checked = value;
+            }
+            
+            // Mark that we've received valid status
+            this.setDisplayState('VALID');
+        }
+        
+        // Subclasses can override this method to add additional specialized handling
+    }
+
+    // Unified display state management
+    setDisplayState(state) {
+        this.displayState = state;
+        
+        switch (state) {
+            case 'DISABLED':
+                // Device not connected - fully disabled with low opacity
+                if (this.element) {
+                    this.element.disabled = true;
+                    this.element.style.opacity = '0.4';
+                    this.element.classList.add('disabled');
+                }
+                if (this.valueElement) {
+                    this.valueElement.style.opacity = '0.4';
+                }
+                break;
+                
+            case 'OUTDATED':
+                // Device connected but no valid data yet - enabled but muted
+                if (this.element) {
+                    this.element.disabled = false;
+                    this.element.style.opacity = '0.7';
+                    this.element.classList.remove('disabled');
+                }
+                if (this.valueElement) {
+                    this.valueElement.style.opacity = '0.7';
+                }
+                break;
+                
+            case 'VALID':
+                // Device connected with valid data - fully enabled and visible
+                if (this.element) {
+                    this.element.disabled = false;
+                    this.element.style.opacity = '1';
+                    this.element.classList.remove('disabled');
+                }
+                if (this.valueElement) {
+                    this.valueElement.style.opacity = '1';
+                }
+                break;
+        }
+    }
+
+    // Clear any pending timers
+    clearTimer() {
+        if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = null;
+        }
+    }
+}
+
+// Specialized control for speed with preset button management
+class SpeedControl extends Control {
+    constructor(element, valueElement, presetButtons, options = {}) {
+        super(element, valueElement, options);
+        this.presetButtons = presetButtons;
+        
+        // Now that presetButtons is set, update display state to properly initialize them
+        this.setDisplayState(this.displayState);
+    }
+
+    setDisplayState(state) {
+        // Override to handle preset buttons
+        super.setDisplayState(state);
+        
+        // Safety check - presetButtons might not be set during construction
+        if (!this.presetButtons) {
+            return;
+        }
+        
+        const opacity = state === 'DISABLED' ? '0.4' : 
+                       state === 'OUTDATED' ? '0.7' : '1';
+                       
+        this.presetButtons.forEach(btn => {
+            btn.disabled = state === 'DISABLED';
+            btn.style.opacity = opacity;
+            if (state === 'DISABLED') {
+                btn.classList.add('disabled');
+            } else {
+                btn.classList.remove('disabled');
+            }
+        });
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        // Call parent to handle standard status key mapping
+        super.handleStatusUpdate(statusUpdate);
+        
+        // Add specialized handling
+        if (statusUpdate.speed !== undefined) {
+            // Set valid state since we received speed data
+            this.setDisplayState('VALID');
+            
+            // Update current speed display
+            const currentSpeedElement = this.parent.currentSpeed;
+            if (currentSpeedElement) {
+                currentSpeedElement.textContent = `${statusUpdate.speed.toFixed(1)} RPM`;
+                currentSpeedElement.style.opacity = '1';
+            }
+            
+            // Update preset button active state
+            this.presetButtons.forEach(btn => {
+                const presetSpeed = parseFloat(btn.dataset.speed);
+                btn.classList.toggle('active', Math.abs(presetSpeed - statusUpdate.speed) < 0.05);
+            });
+        }
+    }
+}
+
+// Specialized control for direction with button state management
+class DirectionControl extends Control {
+    constructor(clockwiseBtn, counterclockwiseBtn, currentDirectionElement, options = {}) {
+        super(null, null, options); // No main element for this control
+        this.clockwiseBtn = clockwiseBtn;
+        this.counterclockwiseBtn = counterclockwiseBtn;
+        this.currentDirectionElement = currentDirectionElement;
+        
+        // Initialize with disabled state
+        this.setDisplayState('DISABLED');
+    }
+
+    setDisplayState(state) {
+        // Override to handle direction buttons and current direction element
+        this.displayState = state;
+        
+        switch (state) {
+            case 'DISABLED':
+                // Device not connected - fully disabled with low opacity
+                if (this.clockwiseBtn) {
+                    this.clockwiseBtn.disabled = true;
+                    this.clockwiseBtn.style.opacity = '0.4';
+                    this.clockwiseBtn.classList.add('disabled');
+                }
+                if (this.counterclockwiseBtn) {
+                    this.counterclockwiseBtn.disabled = true;
+                    this.counterclockwiseBtn.style.opacity = '0.4';
+                    this.counterclockwiseBtn.classList.add('disabled');
+                }
+                if (this.currentDirectionElement) {
+                    this.currentDirectionElement.style.opacity = '0.4';
+                }
+                break;
+                
+            case 'OUTDATED':
+                // Device connected but no valid data yet - enabled but muted
+                if (this.clockwiseBtn) {
+                    this.clockwiseBtn.disabled = false;
+                    this.clockwiseBtn.style.opacity = '0.7';
+                    this.clockwiseBtn.classList.remove('disabled');
+                }
+                if (this.counterclockwiseBtn) {
+                    this.counterclockwiseBtn.disabled = false;
+                    this.counterclockwiseBtn.style.opacity = '0.7';
+                    this.counterclockwiseBtn.classList.remove('disabled');
+                }
+                if (this.currentDirectionElement) {
+                    this.currentDirectionElement.style.opacity = '0.7';
+                }
+                break;
+                
+            case 'VALID':
+                // Device connected with valid data - fully enabled and visible
+                if (this.clockwiseBtn) {
+                    this.clockwiseBtn.disabled = false;
+                    this.clockwiseBtn.style.opacity = '1';
+                    this.clockwiseBtn.classList.remove('disabled');
+                }
+                if (this.counterclockwiseBtn) {
+                    this.counterclockwiseBtn.disabled = false;
+                    this.counterclockwiseBtn.style.opacity = '1';
+                    this.counterclockwiseBtn.classList.remove('disabled');
+                }
+                if (this.currentDirectionElement) {
+                    this.currentDirectionElement.style.opacity = '1';
+                }
+                break;
+        }
+    }
+
+    bindEvents() {
+        if (this.clockwiseBtn) {
+            this.clockwiseBtn.addEventListener('click', () => this.setDirection(true));
+        }
+        if (this.counterclockwiseBtn) {
+            this.counterclockwiseBtn.addEventListener('click', () => this.setDirection(false));
+        }
+    }
+
+    async setDirection(clockwise) {
+        // Update UI immediately for responsive feedback
+        if (this.clockwiseBtn) {
+            this.clockwiseBtn.classList.toggle('active', clockwise);
+        }
+        if (this.counterclockwiseBtn) {
+            this.counterclockwiseBtn.classList.toggle('active', !clockwise);
+        }
+        
+        return await this.parent.sendCommand('direction', clockwise);
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        if (statusUpdate.direction !== undefined) {
+            // Set valid state since we received direction data
+            this.setDisplayState('VALID');
+            
+            const clockwise = statusUpdate.direction === 'cw';
+            if (this.clockwiseBtn) {
+                this.clockwiseBtn.classList.toggle('active', clockwise);
+            }
+            if (this.counterclockwiseBtn) {
+                this.counterclockwiseBtn.classList.toggle('active', !clockwise);
+            }
+            if (this.currentDirectionElement) {
+                this.currentDirectionElement.textContent = clockwise ? 'Clockwise' : 'Counter-clockwise';
+            }
+        }
+    }
+}
+
+// Specialized control for motor status with multiple status indicators
+class MotorStatusControl extends Control {
+    constructor(element, motorStatusElement, options = {}) {
+        super(element, null, options);
+        this.motorStatusElement = motorStatusElement;
+    }
+
+    setDisplayState(state) {
+        // Override to include motor status element
+        super.setDisplayState(state);
+        
+        if (this.motorStatusElement) {
+            const opacity = state === 'DISABLED' ? '0.4' : 
+                           state === 'OUTDATED' ? '0.7' : '1';
+            this.motorStatusElement.style.opacity = opacity;
+        }
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        // Call parent to handle standard status key mapping
+        super.handleStatusUpdate(statusUpdate);
+        
+        // Add specialized handling
+        if (statusUpdate.enabled !== undefined) {
+            // Set valid state since we received enabled data
+            this.setDisplayState('VALID');
+            
+            const enabled = statusUpdate.enabled;
+            // Update motor status (will be refined if running status is also provided)
+            this.motorStatusElement.textContent = enabled ? 'Enabled' : 'Stopped';
+        }
+        
+        if (statusUpdate.running !== undefined) {
+            // Set valid state since we received running data
+            this.setDisplayState('VALID');
+            
+            // Refine motor status if we have running information
+            const enabled = this.element.checked; // Get from UI state
+            if (enabled) {
+                this.motorStatusElement.textContent = statusUpdate.running ? 'Running' : 'Enabled';
+            }
+        }
+    }
+}
+
+// Specialized control for acceleration with time conversion
+class AccelerationControl extends Control {
+    constructor(element, valueElement, currentAccelerationElement, options = {}) {
+        super(element, valueElement, options);
+        this.currentAccelerationElement = currentAccelerationElement;
+    }
+
+    setDisplayState(state) {
+        // Override to include current acceleration element
+        super.setDisplayState(state);
+        
+        if (this.currentAccelerationElement) {
+            const opacity = state === 'DISABLED' ? '0.4' : 
+                           state === 'OUTDATED' ? '0.7' : '1';
+            this.currentAccelerationElement.style.opacity = opacity;
+        }
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        if (statusUpdate.acceleration !== undefined) {
+            // Set valid state since we received acceleration data
+            this.setDisplayState('VALID');
+            
+            const accelerationTimeDisplay = this.parent.accelerationToTime(statusUpdate.acceleration).toFixed(1);
+            this.currentAccelerationElement.textContent = `${accelerationTimeDisplay}s to max`;
+            
+            // Update acceleration slider if significantly different
+            const currentSliderTime = parseInt(this.element.value);
+            const deviceTime = Math.round(this.parent.accelerationToTime(statusUpdate.acceleration));
+            if (Math.abs(currentSliderTime - deviceTime) > 1) {
+                this.element.value = deviceTime;
+                this.valueElement.textContent = deviceTime;
+            }
+        }
+    }
+}
+
+// Specialized control for variable speed with UI management
+class VariableSpeedControl extends Control {
+    constructor(element, variableSpeedControls, variableSpeedStatus, currentVariableSpeedItem, currentVariableSpeed, options = {}) {
+        super(element, null, options);
+        this.variableSpeedControls = variableSpeedControls;
+        this.variableSpeedStatus = variableSpeedStatus;
+        this.currentVariableSpeedItem = currentVariableSpeedItem;
+        this.currentVariableSpeed = currentVariableSpeed;
+        
+        // Initialize with disabled state
+        this.setDisplayState('DISABLED');
+    }
+
+    setDisplayState(state) {
+        // Override to handle variable speed elements
+        super.setDisplayState(state);
+        
+        const opacity = state === 'DISABLED' ? '0.4' : 
+                       state === 'OUTDATED' ? '0.7' : '1';
+                       
+        if (this.variableSpeedStatus) {
+            this.variableSpeedStatus.style.opacity = opacity;
+        }
+        if (this.currentVariableSpeed) {
+            this.currentVariableSpeed.style.opacity = opacity;
+        }
+    }
+
+    bindEvents() {
+        this.element.addEventListener('change', (e) => {
+            this.setVariableSpeedEnabled(e.target.checked);
+        });
+    }
+
+    async setVariableSpeedEnabled(enabled) {
+        // Update UI immediately for responsive feedback
+        this.element.checked = enabled;
+        
+        // Update UI controls
+        this.updateVariableSpeedUI();
+        
+        if (enabled) {
+            return await this.parent.sendCommand('enable_speed_variation', true);
+        } else {
+            return await this.parent.sendCommand('disable_speed_variation', true);
+        }
+    }
+
+    updateVariableSpeedUI() {
+        const enabled = this.element.checked;
+        if (enabled) {
+            this.variableSpeedControls.classList.remove('disabled');
+        } else {
+            this.variableSpeedControls.classList.add('disabled');
+        }
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        // No parent call needed - this control doesn't use standard status key mapping
+        
+        if (statusUpdate.speedVariationEnabled !== undefined) {
+            // Set valid state since we received speed variation data
+            this.setDisplayState('VALID');
+            
+            const enabled = statusUpdate.speedVariationEnabled;
+            
+            // Update the checkbox state to match the server state
+            if (this.element) {
+                this.element.checked = enabled;
+            }
+            
+            // Update the UI based on the new state
+            this.updateVariableSpeedUI();
+            
+            this.variableSpeedStatus.textContent = enabled ? 'ON' : 'OFF';
+            this.variableSpeedStatus.style.color = enabled ? '#2ecc71' : '#6b7280';
+            
+            // Hide variable speed display if disabled
+            if (!enabled) {
+                this.currentVariableSpeedItem.style.display = 'none';
+            }
+        }
+
+        if (statusUpdate.currentVariableSpeed !== undefined) {
+            // Set valid state since we received variable speed data
+            this.setDisplayState('VALID');
+            
+            const variableSpeedEnabled = this.element.checked;
+            if (variableSpeedEnabled) {
+                this.currentVariableSpeedItem.style.display = 'flex';
+                this.currentVariableSpeed.textContent = `${statusUpdate.currentVariableSpeed.toFixed(1)} RPM`;
+            }
+        }
+    }
+}
+
+// Specialized control for TMC2209 status
+class TMCStatusControl extends Control {
+    constructor(statusElement, stallStatusElement, stallCountElement, options = {}) {
+        super(null, null, options); // No main element
+        this.statusElement = statusElement;
+        this.stallStatusElement = stallStatusElement;
+        this.stallCountElement = stallCountElement;
+        
+        // Initialize with disabled state
+        this.setDisplayState('DISABLED');
+    }
+
+    setDisplayState(state) {
+        // Override to handle TMC status elements
+        this.displayState = state;
+        
+        const opacity = state === 'DISABLED' ? '0.4' : 
+                       state === 'OUTDATED' ? '0.7' : '1';
+        
+        if (this.statusElement) {
+            this.statusElement.style.opacity = opacity;
+        }
+        if (this.stallStatusElement) {
+            this.stallStatusElement.style.opacity = opacity;
+        }
+        if (this.stallCountElement) {
+            this.stallCountElement.style.opacity = opacity;
+        }
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        if (statusUpdate.tmc2209Status !== undefined) {
+            // Set valid state since we received TMC status data
+            this.setDisplayState('VALID');
+            
+            this.statusElement.textContent = statusUpdate.tmc2209Status ? 'OK' : 'Error';
+            this.statusElement.style.color = statusUpdate.tmc2209Status ? '#2ecc71' : '#e74c3c';
+        }
+        
+        if (statusUpdate.stallDetected !== undefined) {
+            // Set valid state since we received stall data
+            this.setDisplayState('VALID');
+            
+            this.stallStatusElement.textContent = statusUpdate.stallDetected ? 'STALL!' : 'OK';
+            this.stallStatusElement.style.color = statusUpdate.stallDetected ? '#e74c3c' : '#2ecc71';
+            this.stallStatusElement.style.fontWeight = statusUpdate.stallDetected ? 'bold' : 'normal';
+        }
+        
+        if (statusUpdate.stallCount !== undefined) {
+            // Set valid state since we received stall count data
+            this.setDisplayState('VALID');
+            
+            this.stallCountElement.textContent = statusUpdate.stallCount;
+            this.stallCountElement.style.color = statusUpdate.stallCount > 0 ? '#e67e22' : '#2ecc71';
+        }
+    }
+}
+
+// Specialized control for statistics with calculation logic
+class StatisticsControl extends Control {
+    constructor(totalRevolutionsElement, runTimeElement, avgSpeedElement, options = {}) {
+        super(null, null, options); // No main element
+        this.totalRevolutionsElement = totalRevolutionsElement;
+        this.runTimeElement = runTimeElement;
+        this.avgSpeedElement = avgSpeedElement;
+        
+        // Initialize with disabled state
+        this.setDisplayState('DISABLED');
+    }
+
+    setDisplayState(state) {
+        // Override to handle statistics elements
+        this.displayState = state;
+        
+        const opacity = state === 'DISABLED' ? '0.4' : 
+                       state === 'OUTDATED' ? '0.7' : '1';
+        
+        if (this.totalRevolutionsElement) {
+            this.totalRevolutionsElement.style.opacity = opacity;
+        }
+        if (this.runTimeElement) {
+            this.runTimeElement.style.opacity = opacity;
+        }
+        if (this.avgSpeedElement) {
+            this.avgSpeedElement.style.opacity = opacity;
+        }
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        if (statusUpdate.totalRevolutions !== undefined) {
+            // Set valid state since we received statistics data
+            this.setDisplayState('VALID');
+            
+            this.totalRevolutionsElement.textContent = statusUpdate.totalRevolutions.toFixed(3);
+        }
+        
+        if (statusUpdate.runtime !== undefined) {
+            // Set valid state since we received runtime data
+            this.setDisplayState('VALID');
+            
+            this.runTimeElement.textContent = this.formatTime(statusUpdate.runtime);
+        }
+        
+        // Calculate average speed if we have both runtime and revolutions
+        if (statusUpdate.runtime !== undefined || statusUpdate.totalRevolutions !== undefined) {
+            // Get current values from UI (our state)
+            const currentRevolutions = parseFloat(this.totalRevolutionsElement.textContent) || 0;
+            const currentRuntimeText = this.runTimeElement.textContent;
+            let currentRuntime = 0;
+            
+            // Parse runtime from HH:MM:SS format
+            if (currentRuntimeText && currentRuntimeText !== '00:00:00') {
+                const timeParts = currentRuntimeText.split(':');
+                currentRuntime = parseInt(timeParts[0]) * 3600 + parseInt(timeParts[1]) * 60 + parseInt(timeParts[2]);
+            }
+            
+            if (currentRuntime > 0 && currentRevolutions > 0) {
+                const avgSpeed = (currentRevolutions * 60) / currentRuntime; // RPM
+                this.avgSpeedElement.textContent = avgSpeed.toFixed(1);
+            } else {
+                this.avgSpeedElement.textContent = '0.0';
+            }
+        }
+    }
+
+    formatTime(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+}
+
 class BratenDreherBLE {
     constructor() {
         // Motor specifications for acceleration conversion
@@ -10,31 +652,18 @@ class BratenDreherBLE {
         this.serviceUUID = '12345678-1234-1234-1234-123456789abc';
         this.commandCharacteristicUUID = '12345678-1234-1234-1234-123456789ab1';
         
-        // BLE objects
+        // BLE Connection objects
         this.device = null;
         this.server = null;
         this.service = null;
         this.commandCharacteristic = null;
         
-        // State
+        // Connection state (only track what we need for connection management)
         this.connected = false;
         this.intentionalDisconnect = false; // Track if user intentionally disconnected
-        this.motorSpeed = 1.0;
-        this.motorDirection = true; // true = clockwise
-        this.motorEnabled = false;
-        this.current = 30;
         
-        // Variable speed state
-        this.variableSpeedEnabled = false;
-        this.variableSpeedStrength = 20; // 20%
-        this.variableSpeedPhase = 0; // 0 degrees
-        
-        // Debouncing timers for sliders
-        this.speedSliderTimer = null;
-        this.currentSliderTimer = null;
-        this.accelerationSliderTimer = null;
-        this.strengthSliderTimer = null;
-        this.phaseSliderTimer = null;
+        // Controls - using Control class for common functionality
+        this.controls = new Map();
         
         // Bind the disconnect handler so we can add/remove it
         this.onDisconnectedHandler = () => {
@@ -44,10 +673,14 @@ class BratenDreherBLE {
         
         // UI elements
         this.initializeUIElements();
+        this.initializeControls();
         this.bindEventListeners();
         
         // Initialize variable speed UI state
         this.updateVariableSpeedUI();
+        
+        // Initialize UI state
+        this.updateUI();
         
         // Check Web Bluetooth support
         if (!navigator.bluetooth) {
@@ -152,37 +785,8 @@ class BratenDreherBLE {
         this.reconnectBtn.addEventListener('click', () => this.handleReconnect());
         this.disconnectBtn.addEventListener('click', () => this.disconnect());
         
-        // Motor controls
-        this.motorToggle.addEventListener('change', (e) => {
-            this.setMotorEnabled(e.target.checked);
-        });
-        
-        this.speedSlider.addEventListener('input', (e) => {
-            const speed = parseFloat(e.target.value);
-            this.speedValue.textContent = speed.toFixed(1); // Update display immediately
-            
-            // Visual feedback that change is pending
-            this.speedValue.style.opacity = '0.7';
-            
-            // Debounce the actual command sending
-            if (this.speedSliderTimer) {
-                clearTimeout(this.speedSliderTimer);
-            }
-            this.speedSliderTimer = setTimeout(() => {
-                this.setSpeed(speed).then(() => {
-                    // Restore full opacity when command is sent
-                    this.speedValue.style.opacity = '1';
-                });
-            }, 300); // Wait 300ms after user stops moving slider
-        });
-        
-        this.clockwiseBtn.addEventListener('click', () => {
-            this.setDirection(true);
-        });
-        
-        this.counterclockwiseBtn.addEventListener('click', () => {
-            this.setDirection(false);
-        });
+        // Direction buttons - delegate to direction control
+        // (The actual event binding is handled in the DirectionControl class)
         
         this.emergencyStopBtn.addEventListener('click', () => {
             this.emergencyStop();
@@ -192,8 +796,10 @@ class BratenDreherBLE {
         this.presetBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const speed = parseFloat(btn.dataset.speed);
-                this.setSpeed(speed);
+                
+                // Update slider value and trigger the control system
                 this.speedSlider.value = speed;
+                this.speedSlider.dispatchEvent(new Event('input'));
                 
                 // Update active preset
                 this.presetBtns.forEach(b => b.classList.remove('active'));
@@ -201,101 +807,13 @@ class BratenDreherBLE {
             });
         });
         
-        // Advanced settings
-        this.currentSlider.addEventListener('input', (e) => {
-            const current = parseInt(e.target.value);
-            this.currentValue.textContent = current; // Update display immediately
-            
-            // Visual feedback that change is pending
-            this.currentValue.style.opacity = '0.7';
-            
-            // Debounce the actual command sending
-            if (this.currentSliderTimer) {
-                clearTimeout(this.currentSliderTimer);
-            }
-            this.currentSliderTimer = setTimeout(() => {
-                this.setCurrent(current).then(() => {
-                    // Restore full opacity when command is sent
-                    this.currentValue.style.opacity = '1';
-                });
-            }, 300); // Wait 300ms after user stops moving slider
-        });
-        
-        this.accelerationTimeSlider.addEventListener('input', (e) => {
-            const time = parseInt(e.target.value);
-            this.accelerationTimeValue.textContent = time; // Update display immediately
-            
-            // Visual feedback that change is pending
-            this.accelerationTimeValue.style.opacity = '0.7';
-            
-            // Debounce the actual command sending
-            if (this.accelerationSliderTimer) {
-                clearTimeout(this.accelerationSliderTimer);
-            }
-            this.accelerationSliderTimer = setTimeout(() => {
-                this.setAccelerationTime(time).then(() => {
-                    // Restore full opacity when command is sent
-                    this.accelerationTimeValue.style.opacity = '1';
-                });
-            }, 300); // Wait 300ms after user stops moving slider
-        });
-        
+        // Reset buttons
         this.resetStatsBtn.addEventListener('click', () => {
             this.resetStatistics();
         });
         
         this.resetStallBtn.addEventListener('click', () => {
             this.resetStallCount();
-        });
-        
-        // Variable speed controls
-        this.variableSpeedToggle.addEventListener('change', (e) => {
-            this.setVariableSpeedEnabled(e.target.checked);
-        });
-        
-        this.strengthSlider.addEventListener('input', (e) => {
-            const strength = parseInt(e.target.value);
-            this.strengthValue.textContent = strength; // Update display immediately
-            
-            // Visual feedback that change is pending
-            this.strengthValue.style.opacity = '0.7';
-            
-            // Debounce the actual command sending
-            if (this.strengthSliderTimer) {
-                clearTimeout(this.strengthSliderTimer);
-            }
-            this.strengthSliderTimer = setTimeout(() => {
-                this.setVariableSpeedStrength(strength / 100.0).then(() => {
-                    // Restore full opacity when command is sent
-                    this.strengthValue.style.opacity = '1';
-                });
-            }, 300);
-        });
-        
-        this.phaseSlider.addEventListener('input', (e) => {
-            const phase = parseInt(e.target.value);
-            this.phaseValue.textContent = phase; // Update display immediately
-            
-            // Visual feedback that change is pending
-            this.phaseValue.style.opacity = '0.7';
-            
-            // Debounce the actual command sending
-            if (this.phaseSliderTimer) {
-                clearTimeout(this.phaseSliderTimer);
-            }
-            this.phaseSliderTimer = setTimeout(() => {
-                // Convert degrees to radians
-                // Convert from -180 to 180 range to 0 to 2π range
-                let phaseForRadians = phase;
-                if (phaseForRadians < 0) {
-                    phaseForRadians += 360;
-                }
-                const phaseRadians = (phaseForRadians * Math.PI) / 180;
-                this.setVariableSpeedPhase(phaseRadians).then(() => {
-                    // Restore full opacity when command is sent
-                    this.phaseValue.style.opacity = '1';
-                });
-            }, 300);
         });
     }
     
@@ -362,13 +880,12 @@ class BratenDreherBLE {
             this.updateConnectionStatus('Connected');
             this.updateUI();
             
-            // Request initial status
-            setTimeout(() => {
-                this.requestStatus();
-            }, 1000);
-            
             // Initialize variable speed UI
             this.updateVariableSpeedUI();
+            
+            // Request all current status to synchronize the UI
+            console.log('Requesting current status...');
+            await this.sendCommand('status_request', null);
             
             console.log('Successfully connected to BratenDreher');
             
@@ -416,8 +933,8 @@ class BratenDreherBLE {
         this.service = null;
         this.commandCharacteristic = null;
 
-        // Clear any pending slider timers
-        this.clearSliderTimers();
+        // Clear any pending control timers
+        this.clearControlTimers();
 
         this.updateConnectionStatus('Disconnected');
         this.updateUI();
@@ -496,7 +1013,8 @@ class BratenDreherBLE {
             });
             console.log('Notifications re-enabled');
             
-            // Re-add disconnect event listener
+            // Re-add disconnect event listener (remove first to prevent duplicates)
+            this.device.removeEventListener('gattserverdisconnected', this.onDisconnectedHandler);
             this.device.addEventListener('gattserverdisconnected', this.onDisconnectedHandler);
             
             this.connected = true;
@@ -543,19 +1061,10 @@ class BratenDreherBLE {
         }
     }
 
-    clearSliderTimers() {
-        if (this.speedSliderTimer) {
-            clearTimeout(this.speedSliderTimer);
-            this.speedSliderTimer = null;
-        }
-        if (this.currentSliderTimer) {
-            clearTimeout(this.currentSliderTimer);
-            this.currentSliderTimer = null;
-        }
-        if (this.accelerationSliderTimer) {
-            clearTimeout(this.accelerationSliderTimer);
-            this.accelerationSliderTimer = null;
-        }
+    clearControlTimers() {
+        this.controls.forEach(control => {
+            control.clearTimer();
+        });
     }
 
     handleBLEError(error, userMessage) {
@@ -598,55 +1107,8 @@ class BratenDreherBLE {
         }
     }
     
-    // Request status update
-    async requestStatus() {
-        return await this.sendCommand('status_request', true);
-    }
-    
-    async setSpeed(speed) {
-        speed = Math.max(0.1, Math.min(30.0, speed)); // Clamp to valid range
-        this.motorSpeed = speed;
-        
-        return await this.sendCommand('speed', speed);
-    }
-    
-    async setCurrent(current) {
-        this.current = current;
-        return await this.sendCommand('current', current);
-    }
-    
-    async setAccelerationTime(timeSeconds) {
-        // Convert time to acceleration and send acceleration directly in steps/s²
-        const accelerationStepsPerSec2 = this.timeToAcceleration(timeSeconds);
-        return await this.sendCommand('acceleration', accelerationStepsPerSec2);
-    }
-    
-    // Variable speed commands
-    async setVariableSpeedStrength(strength) {
-        strength = Math.max(0.0, Math.min(1.0, strength)); // Clamp to valid range
-        this.variableSpeedStrength = Math.round(strength * 100); // Store as percentage
-        
-        return await this.sendCommand('speed_variation_strength', strength);
-    }
-    
-    async setVariableSpeedPhase(phaseRadians) {
-        // Normalize to 0-2π range for backend compatibility
-        while (phaseRadians < 0) phaseRadians += 2 * Math.PI;
-        while (phaseRadians >= 2 * Math.PI) phaseRadians -= 2 * Math.PI;
-        
-        // Store as degrees in -180 to 180 range for UI
-        let phaseDegrees = (phaseRadians * 180) / Math.PI;
-        // Convert from 0-360 to -180 to 180 range
-        if (phaseDegrees > 180) {
-            phaseDegrees -= 360;
-        }
-        this.variableSpeedPhase = Math.round(phaseDegrees);
-        
-        return await this.sendCommand('speed_variation_phase', phaseRadians);
-    }
-    
     async setVariableSpeedEnabled(enabled) {
-        this.variableSpeedEnabled = enabled;
+        // Update UI immediately for responsive feedback
         this.variableSpeedToggle.checked = enabled;
         
         // Update UI controls
@@ -660,7 +1122,8 @@ class BratenDreherBLE {
     }
     
     updateVariableSpeedUI() {
-        if (this.variableSpeedEnabled) {
+        const enabled = this.variableSpeedToggle.checked;
+        if (enabled) {
             this.variableSpeedControls.classList.remove('disabled');
         } else {
             this.variableSpeedControls.classList.add('disabled');
@@ -692,17 +1155,16 @@ class BratenDreherBLE {
     }
     
     async setDirection(clockwise) {
-        this.motorDirection = clockwise;
-        
-        // Update UI
-        this.clockwiseBtn.classList.toggle('active', clockwise);
-        this.counterclockwiseBtn.classList.toggle('active', !clockwise);
-        
-        return await this.sendCommand('direction', clockwise);
+        // Delegate to direction control
+        const directionControl = this.controls.get('direction');
+        if (directionControl) {
+            return await directionControl.setDirection(clockwise);
+        }
+        return false;
     }
     
     async setMotorEnabled(enabled) {
-        this.motorEnabled = enabled;
+        // Update UI immediately for responsive feedback
         this.motorToggle.checked = enabled;
         
         return await this.sendCommand('enable', enabled);
@@ -730,7 +1192,8 @@ class BratenDreherBLE {
             
             console.log('Message received:', message);
             
-            if (message.type === 'status') {
+            if (message.type === 'status_update') {
+                // Granular status update (new system)
                 this.handleStatusUpdate(message);
             } else if (message.type === 'command_result') {
                 this.handleCommandResult(message);
@@ -742,152 +1205,17 @@ class BratenDreherBLE {
         }
     }
     
-    handleStatusUpdate(status) {
-        console.log('Status update:', status);
+    handleStatusUpdate(statusUpdate) {
+        console.log('Status update:', statusUpdate);
         
-        // Update internal state from device status
-        this.motorEnabled = status.enabled;
-        this.motorSpeed = status.speed;
-        this.motorDirection = status.direction === 'cw';
-        
-        // Update UI controls to match device state
-        this.motorToggle.checked = status.enabled;
-        this.speedSlider.value = status.speed;
-        this.speedValue.textContent = status.speed.toFixed(1);
-        
-        // Update direction buttons
-        this.clockwiseBtn.classList.toggle('active', status.direction === 'cw');
-        this.counterclockwiseBtn.classList.toggle('active', status.direction !== 'cw');
-        
-        // Update status display
-        this.motorStatus.textContent = status.enabled ? 
-            (status.running ? 'Running' : 'Enabled') : 'Stopped';
-        this.currentSpeed.textContent = `${status.speed.toFixed(1)} RPM`;
-        
-        // Convert acceleration from steps/s² to time format for display
-        const accelerationTimeDisplay = status.acceleration ? 
-            this.accelerationToTime(status.acceleration).toFixed(1) : '5.0';
-        this.currentAcceleration.textContent = `${accelerationTimeDisplay}s to max`;
-        
-        this.currentDirection.textContent = status.direction === 'cw' ? 'Clockwise' : 'Counter-clockwise';
-        this.currentCurrent.textContent = `${status.current || this.current}%`;
-        
-        // Update TMC2209 status with fallback for backward compatibility
-        if (status.tmc2209Status !== undefined) {
-            this.tmc2209Status.textContent = status.tmc2209Status ? 'OK' : 'Error';
-            this.tmc2209Status.style.color = status.tmc2209Status ? '#2ecc71' : '#e74c3c';
-        } else {
-            this.tmc2209Status.textContent = 'Unknown';
-            this.tmc2209Status.style.color = '#f39c12';
-        }
-        
-        // Update stall status with fallback for backward compatibility
-        if (status.stallDetected !== undefined) {
-            this.stallStatus.textContent = status.stallDetected ? 'STALL!' : 'OK';
-            this.stallStatus.style.color = status.stallDetected ? '#e74c3c' : '#2ecc71';
-            this.stallStatus.style.fontWeight = status.stallDetected ? 'bold' : 'normal';
-        } else {
-            this.stallStatus.textContent = 'Unknown';
-            this.stallStatus.style.color = '#f39c12';
-        }
-        
-        // Update stall count
-        if (status.stallCount !== undefined) {
-            this.stallCount.textContent = status.stallCount;
-            this.stallCount.style.color = status.stallCount > 0 ? '#e67e22' : '#2ecc71';
-        } else {
-            this.stallCount.textContent = 'N/A';
-            this.stallCount.style.color = '#95a5a6';
-        }
-        
+        // Update timestamp and make it fully visible since we're receiving data
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
+        this.lastUpdate.style.opacity = '1';
         
-        // Update statistics
-        if (status.totalRevolutions !== undefined) {
-            this.totalRevolutions.textContent = status.totalRevolutions.toFixed(3);
-        }
-        
-        if (status.runtime !== undefined) {
-            this.runTime.textContent = this.formatTime(status.runtime);
-        }
-        
-        // Calculate average speed
-        if (status.runtime > 0 && status.totalRevolutions > 0) {
-            const avgSpeed = (status.totalRevolutions * 60) / status.runtime; // RPM
-            this.avgSpeed.textContent = avgSpeed.toFixed(1);
-        } else {
-            this.avgSpeed.textContent = '0.0';
-        }
-        
-        // Update current if different
-        if (status.current && status.current !== this.current) {
-            this.current = status.current;
-            this.currentSlider.value = status.current;
-            this.currentValue.textContent = status.current;
-        }
-        
-        // Update acceleration time slider if different (e.g., when variable speed changes it)
-        if (status.acceleration !== undefined) {
-            const currentSliderTime = parseInt(this.accelerationTimeSlider.value);
-            const deviceAccelerationTime = this.accelerationToTime(status.acceleration);
-            const deviceTime = Math.round(deviceAccelerationTime);
-            
-            // Check if this is a round-trip issue: convert current slider value to acceleration 
-            // and see if it matches what the device reported
-            const currentSliderAcceleration = this.timeToAcceleration(currentSliderTime);
-            const accelerationDifference = Math.abs(currentSliderAcceleration - status.acceleration);
-            const accelerationToleranceValue = status.acceleration * 0.02; // 2% tolerance
-            const significantDifference = accelerationDifference > accelerationToleranceValue;
-            
-            // Only update if there's a significant difference AND time difference > 1 second
-            if (significantDifference && Math.abs(currentSliderTime - deviceTime) > 1) {
-                this.accelerationTimeSlider.value = deviceTime;
-                this.accelerationTimeValue.textContent = deviceTime;
-            }
-        }
-        
-        // Update preset button active state based on current speed
-        this.presetBtns.forEach(btn => {
-            const presetSpeed = parseFloat(btn.dataset.speed);
-            btn.classList.toggle('active', Math.abs(presetSpeed - status.speed) < 0.05);
+        // Update all controls using the unified handleStatusUpdate method
+        this.controls.forEach(control => {
+            control.handleStatusUpdate(statusUpdate);
         });
-        
-        // Update variable speed status
-        if (status.speedVariationEnabled !== undefined) {
-            this.variableSpeedEnabled = status.speedVariationEnabled;
-            this.variableSpeedToggle.checked = status.speedVariationEnabled;
-            this.updateVariableSpeedUI();
-            
-            this.variableSpeedStatus.textContent = status.speedVariationEnabled ? 'ON' : 'OFF';
-            this.variableSpeedStatus.style.color = status.speedVariationEnabled ? '#2ecc71' : '#6b7280';
-            
-            // Show/hide current variable speed display
-            if (status.speedVariationEnabled && status.currentVariableSpeed !== undefined) {
-                this.currentVariableSpeedItem.style.display = 'flex';
-                this.currentVariableSpeed.textContent = `${status.currentVariableSpeed.toFixed(1)} RPM`;
-            } else {
-                this.currentVariableSpeedItem.style.display = 'none';
-            }
-        }
-        
-        // Update variable speed strength and phase from device
-        if (status.speedVariationStrength !== undefined) {
-            this.variableSpeedStrength = Math.round(status.speedVariationStrength * 100);
-            this.strengthSlider.value = this.variableSpeedStrength;
-            this.strengthValue.textContent = this.variableSpeedStrength;
-        }
-        
-        if (status.speedVariationPhase !== undefined) {
-            // Convert from radians to degrees and then to -180 to 180 range
-            let phaseDegrees = Math.round((status.speedVariationPhase * 180) / Math.PI);
-            // Convert from 0-360 to -180 to 180 range
-            if (phaseDegrees > 180) {
-                phaseDegrees -= 360;
-            }
-            this.variableSpeedPhase = phaseDegrees;
-            this.phaseSlider.value = this.variableSpeedPhase;
-            this.phaseValue.textContent = this.variableSpeedPhase;
-        }
     }
     
     handleCommandResult(result) {
@@ -949,13 +1277,6 @@ class BratenDreherBLE {
         }
     }
     
-    formatTime(seconds) {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = seconds % 60;
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    
     updateConnectionStatus(status, info = '') {
         this.connectionStatus.textContent = status;
         if (this.connectionInfo) {
@@ -998,27 +1319,42 @@ class BratenDreherBLE {
     }
     
     updateUI() {
-        // Enable/disable controls based on connection state
-        const controls = [
-            this.motorToggle,
-            this.speedSlider,
-            this.clockwiseBtn,
-            this.counterclockwiseBtn,
+        // Set display state for all controls based on connection state
+        const state = this.connected ? 'OUTDATED' : 'DISABLED';
+        this.controls.forEach(control => {
+            control.setDisplayState(state);
+        });
+        
+        // Handle other UI elements that aren't managed by Control system
+        const otherControls = [
             this.emergencyStopBtn,
-            this.currentSlider,
-            this.accelerationTimeSlider,
             this.resetStatsBtn,
             this.resetStallBtn
         ];
         
-        controls.forEach(control => {
+        const opacity = this.connected ? '0.7' : '0.4'; // Outdated state for non-controls
+        const disabled = !this.connected;
+        
+        otherControls.forEach(control => {
             if (control) {
-                control.disabled = !this.connected;
+                control.disabled = disabled;
+                control.style.opacity = opacity;
+                if (disabled) {
+                    control.classList.add('disabled');
+                } else {
+                    control.classList.remove('disabled');
+                }
             }
         });
         
         this.presetBtns.forEach(btn => {
-            btn.disabled = !this.connected;
+            btn.disabled = disabled;
+            btn.style.opacity = opacity;
+            if (disabled) {
+                btn.classList.add('disabled');
+            } else {
+                btn.classList.remove('disabled');
+            }
         });
     }
     
@@ -1074,6 +1410,161 @@ class BratenDreherBLE {
                 }
             }, 300);
         }, 5000);
+    }
+
+    initializeControls() {
+        // Initialize status display elements that aren't controlled by specific controls
+        const statusElements = [
+            this.currentSpeed,
+            this.lastUpdate
+        ];
+        
+        statusElements.forEach(element => {
+            if (element) {
+                element.style.opacity = '0.4'; // Initial disabled state
+            }
+        });
+
+        // Speed control with preset button management
+        this.controls.set('speed', new SpeedControl(
+            this.speedSlider,
+            this.speedValue,
+            this.presetBtns,
+            {
+                commandType: 'speed',
+                statusKey: 'speed',
+                displayTransform: (value) => value.toFixed(1),
+                valueTransform: (value) => Math.max(0.1, Math.min(30.0, value))
+            }
+        ));
+
+        // Current control
+        this.controls.set('current', new Control(
+            this.currentSlider,
+            this.currentValue,
+            {
+                commandType: 'current',
+                statusKey: 'current',
+                displayTransform: (value) => value.toString(),
+                valueTransform: (value) => parseInt(value)
+            }
+        ));
+
+        // Acceleration time control with time conversion
+        this.controls.set('acceleration', new AccelerationControl(
+            this.accelerationTimeSlider,
+            this.accelerationTimeValue,
+            this.currentAcceleration,
+            {
+                commandType: 'acceleration',
+                statusKey: null, // Handled specially in the control
+                displayTransform: (value) => value.toString(),
+                valueTransform: (value) => this.timeToAcceleration(parseInt(value))
+            }
+        ));
+
+        // Variable speed strength control
+        this.controls.set('strength', new Control(
+            this.strengthSlider,
+            this.strengthValue,
+            {
+                commandType: 'speed_variation_strength',
+                statusKey: 'speedVariationStrength',
+                displayTransform: (value) => value.toString(),
+                valueTransform: (value) => parseInt(value) / 100.0,
+                statusTransform: (value) => Math.round(value * 100) // Convert from 0-1 to 0-100 for UI
+            }
+        ));
+
+        // Variable speed phase control
+        this.controls.set('phase', new Control(
+            this.phaseSlider,
+            this.phaseValue,
+            {
+                commandType: 'speed_variation_phase',
+                statusKey: 'speedVariationPhase',
+                displayTransform: (value) => value.toString(),
+                valueTransform: (value) => {
+                    const phase = parseInt(value);
+                    // Convert degrees to radians
+                    // Convert from -180 to 180 range to 0 to 2π range
+                    let phaseForRadians = phase;
+                    if (phaseForRadians < 0) {
+                        phaseForRadians += 360;
+                    }
+                    return (phaseForRadians * Math.PI) / 180;
+                },
+                statusTransform: (value) => {
+                    // Convert from radians to degrees and then to -180 to 180 range
+                    let phaseDegrees = Math.round((value * 180) / Math.PI);
+                    if (phaseDegrees > 180) {
+                        phaseDegrees -= 360;
+                    }
+                    return phaseDegrees;
+                }
+            }
+        ));
+
+        // Motor toggle control with status display
+        this.controls.set('motor', new MotorStatusControl(
+            this.motorToggle,
+            this.motorStatus,
+            {
+                commandType: 'enable',
+                statusKey: 'enabled',
+                debounceTime: 0 // No debouncing for toggles
+            }
+        ));
+
+        // Direction control with button management
+        this.controls.set('direction', new DirectionControl(
+            this.clockwiseBtn,
+            this.counterclockwiseBtn,
+            this.currentDirection
+        ));
+
+        // Variable speed control with full UI management
+        this.controls.set('variableSpeed', new VariableSpeedControl(
+            this.variableSpeedToggle,
+            this.variableSpeedControls,
+            this.variableSpeedStatus,
+            this.currentVariableSpeedItem,
+            this.currentVariableSpeed,
+            {
+                statusKey: 'speedVariationEnabled',
+                debounceTime: 0
+            }
+        ));
+
+        // TMC2209 status control
+        this.controls.set('tmcStatus', new TMCStatusControl(
+            this.tmc2209Status,
+            this.stallStatus,
+            this.stallCount
+        ));
+
+        // Statistics control with calculation logic
+        this.controls.set('statistics', new StatisticsControl(
+            this.totalRevolutions,
+            this.runTime,
+            this.avgSpeed
+        ));
+
+        // Current display control (simple display-only)
+        this.controls.set('currentDisplay', new Control(
+            null,
+            this.currentCurrent,
+            {
+                statusKey: 'current',
+                displayTransform: (value) => `${value}%`
+            }
+        ));
+
+        // Set parent reference and bind events for all controls
+        this.controls.forEach(control => {
+            control.setParent(this);
+            control.bindEvents();
+        });
     }
 }
 
