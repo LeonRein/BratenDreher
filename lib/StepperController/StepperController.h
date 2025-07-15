@@ -207,7 +207,7 @@ private:
     void loadSettings();
     void configureDriver();
     void configureStallDetection(bool enableStealthChop = true);
-    uint32_t rpmToStepsPerSecond(float rpm) const;
+    inline uint32_t rpmToStepsPerSecond(float rpm) const;  // Inline hint for frequent calls
     
     // Internal methods (called from command processing)
     void setSpeedInternal(float rpm, uint32_t commandId);
@@ -226,10 +226,11 @@ private:
     void requestAllStatusInternal(uint32_t commandId);
     
     // Speed variation helper methods
-    float calculateVariableSpeed() const;
-    float getPositionAngle() const;
+    inline float calculateVariableSpeed() const;  // Inline hint for frequent calls
+    inline float getPositionAngle() const;       // Inline hint for frequent calls
     uint32_t calculateRequiredAccelerationForVariableSpeed() const;
     void updateAccelerationForVariableSpeed();
+    void updateSpeedForVariableSpeed();    // Update base speed for variable speed constraints
     void updateSpeedVariationParameters(); // Helper to calculate k and k0
     float calculateMaxAllowedBaseSpeed() const; // Calculate max base speed to not exceed MAX_SPEED_RPM
     
@@ -240,6 +241,11 @@ private:
     void publishStatusUpdate(StatusUpdateType type, int value);
     void publishStatusUpdate(StatusUpdateType type, uint32_t value);
     void publishStatusUpdate(StatusUpdateType type, unsigned long value);
+    
+    // Utility method for command ID generation with overflow protection
+    inline uint32_t getNextCommandId() {
+        return (nextCommandId == UINT32_MAX) ? (nextCommandId = 1) : ++nextCommandId;
+    }
     
     // Speed variation control
     void updateMotorSpeed();
