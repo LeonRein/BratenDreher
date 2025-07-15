@@ -1,4 +1,37 @@
+// Control state constants
+const CONTROL_STATES = {
+    DISABLED: 'DISABLED',
+    OUTDATED: 'OUTDATED', 
+    RETRY: 'RETRY',
+    TIMEOUT: 'TIMEOUT',
+    VALID: 'VALID'
+};
+
+// State configuration for consistent styling
+const STATE_CONFIGS = {
+    [CONTROL_STATES.DISABLED]: { opacity: '0.4', disabled: true, borderColor: '', textColor: '', addClass: 'disabled' },
+    [CONTROL_STATES.OUTDATED]: { opacity: '0.7', disabled: false, borderColor: '', textColor: '', removeClass: 'disabled' },
+    [CONTROL_STATES.RETRY]: { opacity: '0.8', disabled: false, borderColor: '#3b82f6', textColor: '#3b82f6', removeClass: 'disabled' },
+    [CONTROL_STATES.TIMEOUT]: { opacity: '0.6', disabled: false, borderColor: '#f59e0b', textColor: '#f59e0b', removeClass: 'disabled' },
+    [CONTROL_STATES.VALID]: { opacity: '1', disabled: false, borderColor: '', textColor: '', removeClass: 'disabled' }
+};
+
+/**
+ * Base control class that provides common functionality for UI controls
+ * including state management, timeout handling, and command processing.
+ */
 class Control {
+    /**
+     * @param {HTMLElement|null} element - Main UI element (input, button, etc.)
+     * @param {HTMLElement|null} valueElement - Element to display current value
+     * @param {Object} options - Configuration options
+     * @param {number} options.debounceTime - Debounce delay for input events (ms)
+     * @param {number} options.commandTimeout - Timeout for command responses (ms)
+     * @param {string} options.commandType - Type of command to send
+     * @param {Function} options.valueTransform - Transform input value before sending
+     * @param {Function} options.displayTransform - Transform value for display
+     * @param {string} options.statusKey - Key to look for in status updates
+     */
     constructor(element, valueElement, options = {}) {
         this.element = element;
         this.valueElement = valueElement;
@@ -11,16 +44,52 @@ class Control {
             statusKey: null, // Key to look for in status updates
             ...options
         };
-        this.setDisplayState('DISABLED');
         this.timer = null;
         this.timeoutTimer = null; // Add timeout timer
         this.retryAttempt = 0; // Track retry attempts
         this.lastCommandValue = null; // Store last command value for retry
         this.parent = null;
+        
+        // Additional UI elements that should follow the same state as the main element
+        this.additionalElements = [];
+        
+        // Initialize with disabled state (after additionalElements is set)
+        this.setDisplayState(CONTROL_STATES.DISABLED);
     }
 
     setParent(parent) {
         this.parent = parent;
+    }
+
+    /**
+     * Add additional UI elements that should follow the main element's state
+     * @param {HTMLElement} element - Element to add to state management
+     * @param {Object} options - Configuration for how state is applied
+     * @param {boolean} options.applyOpacity - Whether to apply opacity changes
+     * @param {boolean} options.applyDisabled - Whether to apply disabled state
+     * @param {boolean} options.applyColors - Whether to apply color changes
+     * @param {boolean} options.applyClasses - Whether to apply CSS classes
+     */
+    addAdditionalElement(element, options = {}) {
+        if (!element) {
+            console.warn('Cannot add null/undefined element to additional elements');
+            return;
+        }
+        
+        // Check if element is already added to prevent duplicates
+        const alreadyExists = this.additionalElements.some(item => item.element === element);
+        if (alreadyExists) {
+            console.warn('Element is already in additional elements list');
+            return;
+        }
+        
+        this.additionalElements.push({
+            element,
+            applyOpacity: options.applyOpacity !== false, // Default true
+            applyDisabled: options.applyDisabled !== false, // Default true
+            applyColors: options.applyColors !== false, // Default true
+            applyClasses: options.applyClasses !== false // Default true
+        });
     }
 
     // Set up event listeners
@@ -52,7 +121,7 @@ class Control {
         }
         
         // Set state to outdated when user changes control
-        this.setDisplayState('OUTDATED');
+        this.setDisplayState(CONTROL_STATES.OUTDATED);
         
         // Debounce the command sending
         if (this.timer) {
@@ -68,7 +137,7 @@ class Control {
         const value = event.target.checked;
         
         // Set state to outdated when user changes control
-        this.setDisplayState('OUTDATED');
+        this.setDisplayState(CONTROL_STATES.OUTDATED);
         
         this.sendCommand(value);
     }
@@ -76,7 +145,7 @@ class Control {
     handleClick(event) {
         if (this.options.clickValue !== undefined) {
             // Set state to outdated when user clicks control
-            this.setDisplayState('OUTDATED');
+            this.setDisplayState(CONTROL_STATES.OUTDATED);
             
             this.sendCommand(this.options.clickValue);
         }
@@ -107,6 +176,72 @@ class Control {
         }
         
         return success;
+    }
+
+    // Generic method for sending custom commands with timeout handling
+    async sendCustomCommand(commandType, value, additionalParams = {}, customTimeout = null) {
+        if (!this.parent) {
+            console.error('Control not properly configured for command sending');
+            return false;
+        }
+
+        // Clear any existing timeout timer
+        this.clearTimeoutTimer();
+
+        // Store the command info for potential retry
+        this.lastCommandValue = { commandType, value, additionalParams };
+        this.retryAttempt = 0;
+
+        // Set state to outdated when command is sent
+        this.setDisplayState(CONTROL_STATES.OUTDATED);
+
+        const success = await this.parent.sendCommand(commandType, value, additionalParams);
+        
+        if (success) {
+            // Start timeout timer to detect lost status updates
+            const timeout = customTimeout || this.options.commandTimeout;
+            this.timeoutTimer = setTimeout(() => {
+                console.warn(`Command timeout for ${commandType} - no status update received (attempt ${this.retryAttempt + 1})`);
+                this.handleCustomCommandTimeout();
+            }, timeout);
+        }
+        
+        return success;
+    }
+
+    // Handle timeout for custom commands
+    handleCustomCommandTimeout() {
+        if (this.retryAttempt === 0 && this.lastCommandValue !== null) {
+            // First timeout - attempt retry
+            const { commandType, value, additionalParams } = this.lastCommandValue;
+            console.log(`Retrying command ${commandType} (attempt 2/2)...`);
+            this.retryAttempt = 1;
+            
+            // Show brief retry indication
+            this.setDisplayState(CONTROL_STATES.RETRY);
+            
+            // Retry the command after a short delay
+            setTimeout(() => {
+                this.sendCustomCommand(commandType, value, additionalParams);
+            }, 500);
+        } else {
+            // Second timeout or no command to retry - give up
+            const commandType = this.lastCommandValue?.commandType || 'unknown';
+            console.warn(`Command ${commandType} failed after retry - giving up`);
+            this.setDisplayState(CONTROL_STATES.TIMEOUT);
+            
+            // Show warning to user about communication failure
+            if (this.parent && this.parent.showWarning) {
+                this.parent.showWarning(`Command ${commandType} failed after retry. Check connection.`);
+            }
+            
+            // Reset retry state
+            this.retryAttempt = 0;
+            this.lastCommandValue = null;
+        }
+        
+        // Clear timeout timer
+        this.clearTimeoutTimer();
     }
 
     handleCommandTimeout() {
@@ -143,10 +278,8 @@ class Control {
 
     // Handle status updates - can be overridden by subclasses for complex logic
     handleStatusUpdate(statusUpdate) {
-        // Clear timeout timer since we received a status update
+        // Always clear timeout timer and reset retry state when receiving any status update
         this.clearTimeoutTimer();
-        
-        // Reset retry state since we got a successful response
         this.retryAttempt = 0;
         this.lastCommandValue = null;
         
@@ -170,82 +303,84 @@ class Control {
             }
             
             // Mark that we've received valid status
-            this.setDisplayState('VALID');
+            this.setDisplayState(CONTROL_STATES.VALID);
         }
         
         // Subclasses can override this method to add additional specialized handling
+        // They should call super.handleStatusUpdate(statusUpdate) first to get common behavior
     }
 
-    // Unified display state management
+    /**
+     * Unified display state management with performance optimization
+     * @param {string} state - The display state to apply
+     */
     setDisplayState(state) {
+        // Skip if state hasn't changed (performance optimization)
+        if (this.displayState === state) {
+            return;
+        }
+        
+        // Validate state parameter
+        const validStates = Object.values(CONTROL_STATES);
+        if (!validStates.includes(state)) {
+            console.warn(`Invalid display state: ${state}. Using '${CONTROL_STATES.DISABLED}' as fallback.`);
+            state = CONTROL_STATES.DISABLED;
+        }
+        
         this.displayState = state;
         
-        switch (state) {
-            case 'DISABLED':
-                // Device not connected - fully disabled with low opacity
-                if (this.element) {
-                    this.element.disabled = true;
-                    this.element.style.opacity = '0.4';
-                    this.element.classList.add('disabled');
+        const config = STATE_CONFIGS[state];
+        
+        // Apply to main element
+        this.applyStateToElement(this.element, config);
+        
+        // Apply to value element (but don't touch disabled property)
+        if (this.valueElement) {
+            this.applyStateToElement(this.valueElement, { ...config, disabled: undefined });
+        }
+        
+        // Apply to additional elements with error handling
+        this.additionalElements.forEach(({ element, applyOpacity, applyDisabled, applyColors, applyClasses }) => {
+            try {
+                const elementConfig = { ...config };
+                if (!applyOpacity) elementConfig.opacity = undefined;
+                if (!applyDisabled) elementConfig.disabled = undefined;
+                if (!applyColors) {
+                    elementConfig.borderColor = undefined;
+                    elementConfig.textColor = undefined;
                 }
-                if (this.valueElement) {
-                    this.valueElement.style.opacity = '0.4';
+                if (!applyClasses) {
+                    elementConfig.addClass = undefined;
+                    elementConfig.removeClass = undefined;
                 }
-                break;
-                
-            case 'OUTDATED':
-                // Device connected but no valid data yet - enabled but muted
-                if (this.element) {
-                    this.element.disabled = false;
-                    this.element.style.opacity = '0.7';
-                    this.element.classList.remove('disabled');
-                }
-                if (this.valueElement) {
-                    this.valueElement.style.opacity = '0.7';
-                }
-                break;
-                
-            case 'RETRY':
-                // Command being retried - show blue indication
-                if (this.element) {
-                    this.element.disabled = false;
-                    this.element.style.opacity = '0.8';
-                    this.element.style.borderColor = '#3b82f6'; // Blue border for retry
-                    this.element.classList.remove('disabled');
-                }
-                if (this.valueElement) {
-                    this.valueElement.style.opacity = '0.8';
-                    this.valueElement.style.color = '#3b82f6'; // Blue text for retry
-                }
-                break;
-                
-            case 'TIMEOUT':
-                // Command sent but no response received - show warning state
-                if (this.element) {
-                    this.element.disabled = false;
-                    this.element.style.opacity = '0.6';
-                    this.element.style.borderColor = '#f59e0b'; // Orange border for timeout
-                    this.element.classList.remove('disabled');
-                }
-                if (this.valueElement) {
-                    this.valueElement.style.opacity = '0.6';
-                    this.valueElement.style.color = '#f59e0b'; // Orange text for timeout
-                }
-                break;
-                
-            case 'VALID':
-                // Device connected with valid data - fully enabled and visible
-                if (this.element) {
-                    this.element.disabled = false;
-                    this.element.style.opacity = '1';
-                    this.element.style.borderColor = ''; // Reset border color
-                    this.element.classList.remove('disabled');
-                }
-                if (this.valueElement) {
-                    this.valueElement.style.opacity = '1';
-                    this.valueElement.style.color = ''; // Reset text color
-                }
-                break;
+                this.applyStateToElement(element, elementConfig);
+            } catch (error) {
+                console.warn(`Failed to apply state to element:`, error);
+            }
+        });
+    }
+
+    // Helper method to apply state configuration to an element
+    applyStateToElement(element, config) {
+        if (!element) return;
+        
+        if (config.opacity !== undefined) {
+            element.style.opacity = config.opacity;
+        }
+        if (config.disabled !== undefined && 'disabled' in element) {
+            element.disabled = config.disabled;
+        }
+        if (config.borderColor !== undefined) {
+            element.style.borderColor = config.borderColor;
+        }
+        if (config.textColor !== undefined) {
+            element.style.color = config.textColor;
+        }
+        if (config.addClass) {
+            element.classList.add(config.addClass);
+        }
+        if (config.removeClass) {
+            element.classList.remove(config.removeClass);
         }
     }
 
@@ -271,31 +406,15 @@ class SpeedControl extends Control {
         super(element, valueElement, options);
         this.presetButtons = presetButtons;
         
-        // Now that presetButtons is set, update display state to properly initialize them
-        this.setDisplayState(this.displayState);
-    }
-
-    setDisplayState(state) {
-        // Override to handle preset buttons
-        super.setDisplayState(state);
-        
-        // Safety check - presetButtons might not be set during construction
-        if (!this.presetButtons) {
-            return;
+        // Add preset buttons as additional elements
+        if (this.presetButtons) {
+            this.presetButtons.forEach(btn => {
+                this.addAdditionalElement(btn);
+            });
         }
         
-        const opacity = state === 'DISABLED' ? '0.4' : 
-                       state === 'OUTDATED' ? '0.7' : '1';
-                       
-        this.presetButtons.forEach(btn => {
-            btn.disabled = state === 'DISABLED';
-            btn.style.opacity = opacity;
-            if (state === 'DISABLED') {
-                btn.classList.add('disabled');
-            } else {
-                btn.classList.remove('disabled');
-            }
-        });
+        // Update display state now that all elements are properly registered
+        this.setDisplayState(this.displayState);
     }
 
     handleStatusUpdate(statusUpdate) {
@@ -305,7 +424,7 @@ class SpeedControl extends Control {
         // Add specialized handling
         if (statusUpdate.speed !== undefined) {
             // Set valid state since we received speed data
-            this.setDisplayState('VALID');
+            this.setDisplayState(CONTROL_STATES.VALID);
             
             // Update current speed display
             const currentSpeedElement = this.parent.currentSpeed;
@@ -330,113 +449,14 @@ class DirectionControl extends Control {
         this.clockwiseBtn = clockwiseBtn;
         this.counterclockwiseBtn = counterclockwiseBtn;
         this.currentDirectionElement = currentDirectionElement;
-        this.timeoutTimer = null;
-        this.retryAttempt = 0;
-        this.lastCommandValue = null;
+        
+        // Add buttons and direction element as additional elements
+        this.addAdditionalElement(this.clockwiseBtn);
+        this.addAdditionalElement(this.counterclockwiseBtn);
+        this.addAdditionalElement(this.currentDirectionElement, { applyDisabled: false });
         
         // Initialize with disabled state
-        this.setDisplayState('DISABLED');
-    }
-
-    setDisplayState(state) {
-        // Override to handle direction buttons and current direction element
-        this.displayState = state;
-        
-        switch (state) {
-            case 'DISABLED':
-                // Device not connected - fully disabled with low opacity
-                if (this.clockwiseBtn) {
-                    this.clockwiseBtn.disabled = true;
-                    this.clockwiseBtn.style.opacity = '0.4';
-                    this.clockwiseBtn.classList.add('disabled');
-                }
-                if (this.counterclockwiseBtn) {
-                    this.counterclockwiseBtn.disabled = true;
-                    this.counterclockwiseBtn.style.opacity = '0.4';
-                    this.counterclockwiseBtn.classList.add('disabled');
-                }
-                if (this.currentDirectionElement) {
-                    this.currentDirectionElement.style.opacity = '0.4';
-                }
-                break;
-                
-            case 'OUTDATED':
-                // Device connected but no valid data yet - enabled but muted
-                if (this.clockwiseBtn) {
-                    this.clockwiseBtn.disabled = false;
-                    this.clockwiseBtn.style.opacity = '0.7';
-                    this.clockwiseBtn.classList.remove('disabled');
-                }
-                if (this.counterclockwiseBtn) {
-                    this.counterclockwiseBtn.disabled = false;
-                    this.counterclockwiseBtn.style.opacity = '0.7';
-                    this.counterclockwiseBtn.classList.remove('disabled');
-                }
-                if (this.currentDirectionElement) {
-                    this.currentDirectionElement.style.opacity = '0.7';
-                }
-                break;
-                
-            case 'RETRY':
-                // Command being retried - show blue indication
-                if (this.clockwiseBtn) {
-                    this.clockwiseBtn.disabled = false;
-                    this.clockwiseBtn.style.opacity = '0.8';
-                    this.clockwiseBtn.style.borderColor = '#3b82f6';
-                    this.clockwiseBtn.classList.remove('disabled');
-                }
-                if (this.counterclockwiseBtn) {
-                    this.counterclockwiseBtn.disabled = false;
-                    this.counterclockwiseBtn.style.opacity = '0.8';
-                    this.counterclockwiseBtn.style.borderColor = '#3b82f6';
-                    this.counterclockwiseBtn.classList.remove('disabled');
-                }
-                if (this.currentDirectionElement) {
-                    this.currentDirectionElement.style.opacity = '0.8';
-                    this.currentDirectionElement.style.color = '#3b82f6';
-                }
-                break;
-                
-            case 'TIMEOUT':
-                // Command failed after retry - show warning state
-                if (this.clockwiseBtn) {
-                    this.clockwiseBtn.disabled = false;
-                    this.clockwiseBtn.style.opacity = '0.6';
-                    this.clockwiseBtn.style.borderColor = '#f59e0b';
-                    this.clockwiseBtn.classList.remove('disabled');
-                }
-                if (this.counterclockwiseBtn) {
-                    this.counterclockwiseBtn.disabled = false;
-                    this.counterclockwiseBtn.style.opacity = '0.6';
-                    this.counterclockwiseBtn.style.borderColor = '#f59e0b';
-                    this.counterclockwiseBtn.classList.remove('disabled');
-                }
-                if (this.currentDirectionElement) {
-                    this.currentDirectionElement.style.opacity = '0.6';
-                    this.currentDirectionElement.style.color = '#f59e0b';
-                }
-                break;
-                
-            case 'VALID':
-                // Device connected with valid data - fully enabled and visible
-                if (this.clockwiseBtn) {
-                    this.clockwiseBtn.disabled = false;
-                    this.clockwiseBtn.style.opacity = '1';
-                    this.clockwiseBtn.style.borderColor = '';
-                    this.clockwiseBtn.classList.remove('disabled');
-                }
-                if (this.counterclockwiseBtn) {
-                    this.counterclockwiseBtn.disabled = false;
-                    this.counterclockwiseBtn.style.opacity = '1';
-                    this.counterclockwiseBtn.style.borderColor = '';
-                    this.counterclockwiseBtn.classList.remove('disabled');
-                }
-                if (this.currentDirectionElement) {
-                    this.currentDirectionElement.style.opacity = '1';
-                    this.currentDirectionElement.style.color = '';
-                }
-                break;
-        }
+        this.setDisplayState(CONTROL_STATES.DISABLED);
     }
 
     bindEvents() {
@@ -449,16 +469,6 @@ class DirectionControl extends Control {
     }
 
     async setDirection(clockwise) {
-        // Set state to outdated when user changes direction
-        this.setDisplayState('OUTDATED');
-        
-        // Store command value for potential retry
-        this.lastCommandValue = clockwise;
-        this.retryAttempt = 0;
-        
-        // Clear any existing timeout timer
-        this.clearTimeoutTimer();
-        
         // Update UI immediately for responsive feedback
         if (this.clockwiseBtn) {
             this.clockwiseBtn.classList.toggle('active', clockwise);
@@ -467,72 +477,14 @@ class DirectionControl extends Control {
             this.counterclockwiseBtn.classList.toggle('active', !clockwise);
         }
         
-        const success = await this.parent.sendCommand('direction', clockwise);
-        
-        if (success) {
-            // Start timeout timer to detect lost status updates
-            this.timeoutTimer = setTimeout(() => {
-                console.warn(`Direction command timeout - no status update received (attempt ${this.retryAttempt + 1})`);
-                this.handleCommandTimeout();
-            }, 5000); // 5 second timeout
-        }
-        
-        return success;
-    }
-
-    handleCommandTimeout() {
-        if (this.retryAttempt === 0 && this.lastCommandValue !== null) {
-            // First timeout - attempt retry
-            console.log(`Retrying direction command (attempt 2/2)...`);
-            this.retryAttempt = 1;
-            
-            // Show brief retry indication
-            this.setDisplayState('RETRY');
-            
-            // Retry the command after a short delay
-            setTimeout(() => {
-                this.setDirection(this.lastCommandValue);
-            }, 500);
-        } else {
-            // Second timeout or no command to retry - give up
-            console.warn(`Direction command failed after retry - giving up`);
-            this.setDisplayState('TIMEOUT');
-            
-            // Show warning to user about communication failure
-            if (this.parent && this.parent.showWarning) {
-                this.parent.showWarning(`Direction command failed after retry. Check connection.`);
-            }
-            
-            // Reset retry state
-            this.retryAttempt = 0;
-            this.lastCommandValue = null;
-        }
-        
-        // Clear timeout timer
-        this.clearTimeoutTimer();
-    }
-
-    clearTimeoutTimer() {
-        if (this.timeoutTimer) {
-            clearTimeout(this.timeoutTimer);
-            this.timeoutTimer = null;
-        }
-    }
-
-    clearTimer() {
-        // DirectionControl doesn't use debounce timer, but needs to clear timeout timer
-        this.clearTimeoutTimer();
+        return await this.sendCustomCommand('direction', clockwise);
     }
 
     handleStatusUpdate(statusUpdate) {
+        // Call parent to get common timeout clearing and retry reset
+        super.handleStatusUpdate(statusUpdate);
+        
         if (statusUpdate.direction !== undefined) {
-            // Clear timeout timer since we received a status update
-            this.clearTimeoutTimer();
-            
-            // Reset retry state manually since we don't call parent
-            this.retryAttempt = 0;
-            this.lastCommandValue = null;
-            
             // Set valid state since we received direction data
             this.setDisplayState('VALID');
             
@@ -555,17 +507,9 @@ class MotorStatusControl extends Control {
     constructor(element, motorStatusElement, options = {}) {
         super(element, null, options);
         this.motorStatusElement = motorStatusElement;
-    }
-
-    setDisplayState(state) {
-        // Override to include motor status element
-        super.setDisplayState(state);
         
-        if (this.motorStatusElement) {
-            const opacity = state === 'DISABLED' ? '0.4' : 
-                           state === 'OUTDATED' ? '0.7' : '1';
-            this.motorStatusElement.style.opacity = opacity;
-        }
+        // Add motor status element as additional element
+        this.addAdditionalElement(this.motorStatusElement, { applyDisabled: false });
     }
 
     handleStatusUpdate(statusUpdate) {
@@ -600,20 +544,15 @@ class AccelerationControl extends Control {
     constructor(element, valueElement, currentAccelerationElement, options = {}) {
         super(element, valueElement, options);
         this.currentAccelerationElement = currentAccelerationElement;
-    }
-
-    setDisplayState(state) {
-        // Override to include current acceleration element
-        super.setDisplayState(state);
         
-        if (this.currentAccelerationElement) {
-            const opacity = state === 'DISABLED' ? '0.4' : 
-                           state === 'OUTDATED' ? '0.7' : '1';
-            this.currentAccelerationElement.style.opacity = opacity;
-        }
+        // Add current acceleration element as additional element
+        this.addAdditionalElement(this.currentAccelerationElement, { applyDisabled: false });
     }
 
     handleStatusUpdate(statusUpdate) {
+        // Call parent to handle standard status key mapping
+        super.handleStatusUpdate(statusUpdate);
+        
         if (statusUpdate.acceleration !== undefined) {
             // Set valid state since we received acceleration data
             this.setDisplayState('VALID');
@@ -640,27 +579,13 @@ class VariableSpeedControl extends Control {
         this.variableSpeedStatus = variableSpeedStatus;
         this.currentVariableSpeedItem = currentVariableSpeedItem;
         this.currentVariableSpeed = currentVariableSpeed;
-        this.timeoutTimer = null;
-        this.retryAttempt = 0;
-        this.lastCommandValue = null;
+        
+        // Add additional elements for state management
+        this.addAdditionalElement(this.variableSpeedStatus, { applyDisabled: false });
+        this.addAdditionalElement(this.currentVariableSpeed, { applyDisabled: false });
         
         // Initialize with disabled state
-        this.setDisplayState('DISABLED');
-    }
-
-    setDisplayState(state) {
-        // Override to handle variable speed elements
-        super.setDisplayState(state);
-        
-        const opacity = state === 'DISABLED' ? '0.4' : 
-                       state === 'OUTDATED' ? '0.7' : '1';
-                       
-        if (this.variableSpeedStatus) {
-            this.variableSpeedStatus.style.opacity = opacity;
-        }
-        if (this.currentVariableSpeed) {
-            this.currentVariableSpeed.style.opacity = opacity;
-        }
+        this.setDisplayState(CONTROL_STATES.DISABLED);
     }
 
     bindEvents() {
@@ -670,82 +595,12 @@ class VariableSpeedControl extends Control {
     }
 
     async setVariableSpeedEnabled(enabled) {
-        // Set state to outdated when user changes variable speed
-        this.setDisplayState('OUTDATED');
-        
-        // Store command value for potential retry
-        this.lastCommandValue = enabled;
-        this.retryAttempt = 0;
-        
-        // Clear any existing timeout timer
-        this.clearTimeoutTimer();
-        
         // Update UI immediately for responsive feedback
         this.element.checked = enabled;
-        
-        // Update UI controls
         this.updateVariableSpeedUI();
         
-        let success;
-        if (enabled) {
-            success = await this.parent.sendCommand('enable_speed_variation', true);
-        } else {
-            success = await this.parent.sendCommand('disable_speed_variation', true);
-        }
-        
-        if (success) {
-            // Start timeout timer to detect lost status updates
-            this.timeoutTimer = setTimeout(() => {
-                console.warn(`Variable speed command timeout - no status update received (attempt ${this.retryAttempt + 1})`);
-                this.handleCommandTimeout();
-            }, 5000); // 5 second timeout
-        }
-        
-        return success;
-    }
-
-    handleCommandTimeout() {
-        if (this.retryAttempt === 0 && this.lastCommandValue !== null) {
-            // First timeout - attempt retry
-            console.log(`Retrying variable speed command (attempt 2/2)...`);
-            this.retryAttempt = 1;
-            
-            // Show brief retry indication
-            this.setDisplayState('RETRY');
-            
-            // Retry the command after a short delay
-            setTimeout(() => {
-                this.setVariableSpeedEnabled(this.lastCommandValue);
-            }, 500);
-        } else {
-            // Second timeout or no command to retry - give up
-            console.warn(`Variable speed command failed after retry - giving up`);
-            this.setDisplayState('TIMEOUT');
-            
-            // Show warning to user about communication failure
-            if (this.parent && this.parent.showWarning) {
-                this.parent.showWarning(`Variable speed command failed after retry. Check connection.`);
-            }
-            
-            // Reset retry state
-            this.retryAttempt = 0;
-            this.lastCommandValue = null;
-        }
-        
-        // Clear timeout timer
-        this.clearTimeoutTimer();
-    }
-
-    clearTimeoutTimer() {
-        if (this.timeoutTimer) {
-            clearTimeout(this.timeoutTimer);
-            this.timeoutTimer = null;
-        }
-    }
-
-    clearTimer() {
-        // VariableSpeedControl doesn't use debounce timer, but needs to clear timeout timer
-        this.clearTimeoutTimer();
+        const commandType = enabled ? 'enable_speed_variation' : 'disable_speed_variation';
+        return await this.sendCustomCommand(commandType, true);
     }
 
     updateVariableSpeedUI() {
@@ -758,16 +613,10 @@ class VariableSpeedControl extends Control {
     }
 
     handleStatusUpdate(statusUpdate) {
-        // No parent call needed - this control doesn't use standard status key mapping
+        // Call parent to get common timeout clearing and retry reset
+        super.handleStatusUpdate(statusUpdate);
         
         if (statusUpdate.speedVariationEnabled !== undefined) {
-            // Clear timeout timer since we received a status update
-            this.clearTimeoutTimer();
-            
-            // Reset retry state manually since we don't call parent
-            this.retryAttempt = 0;
-            this.lastCommandValue = null;
-            
             // Set valid state since we received speed variation data
             this.setDisplayState('VALID');
             
@@ -791,9 +640,6 @@ class VariableSpeedControl extends Control {
         }
 
         if (statusUpdate.currentVariableSpeed !== undefined) {
-            // Clear timeout timer since we received a status update
-            this.clearTimeoutTimer();
-            
             // Set valid state since we received variable speed data
             this.setDisplayState('VALID');
             
@@ -814,29 +660,19 @@ class TMCStatusControl extends Control {
         this.stallStatusElement = stallStatusElement;
         this.stallCountElement = stallCountElement;
         
+        // Add all status elements as additional elements
+        this.addAdditionalElement(this.statusElement, { applyDisabled: false });
+        this.addAdditionalElement(this.stallStatusElement, { applyDisabled: false });
+        this.addAdditionalElement(this.stallCountElement, { applyDisabled: false });
+        
         // Initialize with disabled state
-        this.setDisplayState('DISABLED');
-    }
-
-    setDisplayState(state) {
-        // Override to handle TMC status elements
-        this.displayState = state;
-        
-        const opacity = state === 'DISABLED' ? '0.4' : 
-                       state === 'OUTDATED' ? '0.7' : '1';
-        
-        if (this.statusElement) {
-            this.statusElement.style.opacity = opacity;
-        }
-        if (this.stallStatusElement) {
-            this.stallStatusElement.style.opacity = opacity;
-        }
-        if (this.stallCountElement) {
-            this.stallCountElement.style.opacity = opacity;
-        }
+        this.setDisplayState(CONTROL_STATES.DISABLED);
     }
 
     handleStatusUpdate(statusUpdate) {
+        // Call parent to get common timeout clearing and retry reset
+        super.handleStatusUpdate(statusUpdate);
+        
         if (statusUpdate.tmc2209Status !== undefined) {
             // Set valid state since we received TMC status data
             this.setDisplayState('VALID');
@@ -872,29 +708,19 @@ class StatisticsControl extends Control {
         this.runTimeElement = runTimeElement;
         this.avgSpeedElement = avgSpeedElement;
         
+        // Add all statistics elements as additional elements
+        this.addAdditionalElement(this.totalRevolutionsElement, { applyDisabled: false });
+        this.addAdditionalElement(this.runTimeElement, { applyDisabled: false });
+        this.addAdditionalElement(this.avgSpeedElement, { applyDisabled: false });
+        
         // Initialize with disabled state
-        this.setDisplayState('DISABLED');
-    }
-
-    setDisplayState(state) {
-        // Override to handle statistics elements
-        this.displayState = state;
-        
-        const opacity = state === 'DISABLED' ? '0.4' : 
-                       state === 'OUTDATED' ? '0.7' : '1';
-        
-        if (this.totalRevolutionsElement) {
-            this.totalRevolutionsElement.style.opacity = opacity;
-        }
-        if (this.runTimeElement) {
-            this.runTimeElement.style.opacity = opacity;
-        }
-        if (this.avgSpeedElement) {
-            this.avgSpeedElement.style.opacity = opacity;
-        }
+        this.setDisplayState(CONTROL_STATES.DISABLED);
     }
 
     handleStatusUpdate(statusUpdate) {
+        // Call parent to get common timeout clearing and retry reset
+        super.handleStatusUpdate(statusUpdate);
+        
         if (statusUpdate.totalRevolutions !== undefined) {
             // Set valid state since we received statistics data
             this.setDisplayState('VALID');
