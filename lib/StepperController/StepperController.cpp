@@ -17,10 +17,10 @@ StepperController::StepperController()
         Serial.println("ERROR: Failed to create stepper command queue!");
     }
     
-    // Create result queue for command status reporting
-    resultQueue = xQueueCreate(RESULT_QUEUE_SIZE, sizeof(CommandResultData));
-    if (resultQueue == nullptr) {
-        Serial.println("ERROR: Failed to create stepper result queue!");
+    // Create notification queue for warnings and errors only
+    notificationQueue = xQueueCreate(NOTIFICATION_QUEUE_SIZE, sizeof(NotificationData));
+    if (notificationQueue == nullptr) {
+        Serial.println("ERROR: Failed to create stepper notification queue!");
     }
     
     // Create status update queue for thread-safe status communication
@@ -34,8 +34,8 @@ StepperController::~StepperController() {
     if (commandQueue != nullptr) {
         vQueueDelete(commandQueue);
     }
-    if (resultQueue != nullptr) {
-        vQueueDelete(resultQueue);
+    if (notificationQueue != nullptr) {
+        vQueueDelete(notificationQueue);
     }
     if (statusUpdateQueue != nullptr) {
         vQueueDelete(statusUpdateQueue);
@@ -529,7 +529,7 @@ void StepperController::resetCountersInternal(uint32_t commandId) {
     isFirstStart = false;
     
     Serial.println("Counters reset");
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
 void StepperController::resetStallCountInternal(uint32_t commandId) {
@@ -539,7 +539,7 @@ void StepperController::resetStallCountInternal(uint32_t commandId) {
     
     Serial.println("Stall count reset");
     publishStatusUpdate(StatusUpdateType::STALL_COUNT_UPDATE, stallCount);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
 void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
@@ -550,7 +550,7 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
     // Validate input against global limits
     if (rpm < MIN_SPEED_RPM || rpm > MAX_SPEED_RPM) {
         publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
-        reportResult(commandId, CommandResult::INVALID_PARAMETER,
+        sendNotification(commandId, NotificationType::ERROR,
                     "Speed out of range (" + String(MIN_SPEED_RPM) + "-" + String(MAX_SPEED_RPM) + " RPM)");
         return;
     }
@@ -568,7 +568,7 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
     
     if (!stepper) {
         publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
-        reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
+        sendNotification(commandId, NotificationType::ERROR, "Stepper not initialized");
         return;
     }
     
@@ -594,14 +594,13 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
     // Publish status update for speed change
     publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, rpm);
     
-    // Report result with warning if speed was adjusted
+    // Report warning if speed was adjusted
     if (speedWasAdjusted && commandId != 0) {
         String warningMessage = "Speed auto-adjusted from " + String(originalRequestedSpeed) + 
                               " to " + String(rpm) + " RPM due to variable speed modulation limits";
-        reportResult(commandId, CommandResult::SUCCESS, warningMessage);
-    } else {
-        reportResult(commandId, CommandResult::SUCCESS);
+        sendNotification(commandId, NotificationType::WARNING, warningMessage);
     }
+    // Success is indicated by the status update - no notification needed for normal success
 }
 
 void StepperController::setDirectionInternal(bool clockwise, uint32_t commandId) {
@@ -616,13 +615,13 @@ void StepperController::setDirectionInternal(bool clockwise, uint32_t commandId)
     
     // Publish status update for direction change
     publishStatusUpdate(StatusUpdateType::DIRECTION_CHANGED, clockwise);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
 void StepperController::enableInternal(uint32_t commandId) {
     if (!stepper) {
         publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, motorEnabled);
-        reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
+        sendNotification(commandId, NotificationType::ERROR, "Stepper not initialized");
         return;
     }
     
@@ -644,7 +643,7 @@ void StepperController::enableInternal(uint32_t commandId) {
         motorEnabled = false;
         stepperDriver.disable();
         publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, motorEnabled);
-        reportResult(commandId, CommandResult::HARDWARE_ERROR, 
+        sendNotification(commandId, NotificationType::ERROR, 
                     "Failed to start stepper movement (result code: " + String((int)result) + ")");
         return;
     }
@@ -658,7 +657,7 @@ void StepperController::enableInternal(uint32_t commandId) {
     
     // Publish status update for enabled state change
     publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, motorEnabled);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
 void StepperController::disableInternal(uint32_t commandId) {
@@ -675,7 +674,7 @@ void StepperController::disableInternal(uint32_t commandId) {
     
     // Publish status update for enabled state change
     publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
 void StepperController::emergencyStopInternal(uint32_t commandId) {
@@ -692,14 +691,14 @@ void StepperController::emergencyStopInternal(uint32_t commandId) {
     
     // Publish status update for enabled state change
     publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
 void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     // Validate current (10-100%)
     if (current < 10 || current > 100) {
         publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, runCurrent);
-        reportResult(commandId, CommandResult::INVALID_PARAMETER, 
+        sendNotification(commandId, NotificationType::ERROR, 
                     "Current out of range (10-100%)");
         return;
     }
@@ -725,7 +724,7 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     // Verify driver communication by checking if it's responding
     if (!tmc2209Initialized) {
         publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, current);
-        reportResult(commandId, CommandResult::COMMUNICATION_ERROR, 
+        sendNotification(commandId, NotificationType::ERROR, 
                     "TMC2209 driver not responding after setting current");
         return;
     }
@@ -736,13 +735,13 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     
     // Publish status update for current change
     publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, current);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
 void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec2, uint32_t commandId) {
     if (!stepper) {
         publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, currentAcceleration);
-        reportResult(commandId, CommandResult::HARDWARE_ERROR, 
+        sendNotification(commandId, NotificationType::ERROR, 
                     "Stepper not initialized");
         return;
     }
@@ -750,7 +749,7 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
     // Validate acceleration range (reasonable limits to prevent excessive values)
     if (accelerationStepsPerSec2 < 100 || accelerationStepsPerSec2 > 100000) {
         publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, currentAcceleration);
-        reportResult(commandId, CommandResult::INVALID_PARAMETER, 
+        sendNotification(commandId, NotificationType::ERROR, 
                     "Acceleration out of range (100-100000 steps/s²)");
         return;
     }
@@ -764,25 +763,25 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
     
     // Publish status update for acceleration change
     publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, accelerationStepsPerSec2);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
-void StepperController::reportResult(uint32_t commandId, CommandResult result, const String& errorMessage) {
-    if (resultQueue == nullptr) return;
+void StepperController::sendNotification(uint32_t commandId, NotificationType type, const String& message) {
+    if (notificationQueue == nullptr) return;
     
-    CommandResultData resultData;
-    resultData.commandId = commandId;
-    resultData.result = result;
-    resultData.setErrorMessage(errorMessage.c_str());
+    NotificationData notificationData;
+    notificationData.commandId = commandId;
+    notificationData.type = type;
+    notificationData.setMessage(message.c_str());
     
-    // Try to send result, but don't block if queue is full
-    xQueueSend(resultQueue, &resultData, 0);
+    // Try to send notification, but don't block if queue is full
+    xQueueSend(notificationQueue, &notificationData, 0);
 }
 
-bool StepperController::getCommandResult(CommandResultData& result) {
-    if (resultQueue == nullptr) return false;
+bool StepperController::getNotification(NotificationData& notification) {
+    if (notificationQueue == nullptr) return false;
     
-    return xQueueReceive(resultQueue, &result, 0) == pdTRUE; // Non-blocking
+    return xQueueReceive(notificationQueue, &notification, 0) == pdTRUE; // Non-blocking
 }
 
 bool StepperController::getStatusUpdate(StatusUpdateData& status) {
@@ -998,7 +997,7 @@ void StepperController::setSpeedVariationInternal(float strength, uint32_t comma
     // Validate strength (0.0 to 1.0)
     if (strength < 0.0f || strength > 1.0f) {
         publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, speedVariationStrength);
-        reportResult(commandId, CommandResult::INVALID_PARAMETER, 
+        sendNotification(commandId, NotificationType::ERROR, 
                     "Speed variation strength out of range (0.0-1.0)");
         return;
     }
@@ -1042,7 +1041,7 @@ void StepperController::setSpeedVariationInternal(float strength, uint32_t comma
     
     // Publish status update for speed variation strength change
     publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, strength);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
 void StepperController::setSpeedVariationPhaseInternal(float phase, uint32_t commandId) {
@@ -1057,13 +1056,13 @@ void StepperController::setSpeedVariationPhaseInternal(float phase, uint32_t com
     
     // Publish status update for speed variation phase change
     publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED, phase);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
 void StepperController::enableSpeedVariationInternal(uint32_t commandId) {
     if (!stepper) {
         publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, speedVariationEnabled);
-        reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
+        sendNotification(commandId, NotificationType::ERROR, "Stepper not initialized");
         return;
     }
     
@@ -1109,7 +1108,7 @@ void StepperController::enableSpeedVariationInternal(uint32_t commandId) {
     publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, true);
     publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED, speedVariationPhase);
     publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, speedVariationStrength);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status updates - no notification needed
 }
 
 void StepperController::disableSpeedVariationInternal(uint32_t commandId) {
@@ -1130,7 +1129,7 @@ void StepperController::disableSpeedVariationInternal(uint32_t commandId) {
     
     // Publish status update for speed variation enabled change
     publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, false);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by the status update - no notification needed
 }
 
 void StepperController::requestAllStatusInternal(uint32_t commandId) {
@@ -1168,7 +1167,7 @@ void StepperController::requestAllStatusInternal(uint32_t commandId) {
     publishStatusUpdate(StatusUpdateType::TMC2209_STATUS_UPDATE, tmc2209Initialized);
     publishStatusUpdate(StatusUpdateType::STALL_DETECTED_UPDATE, stallDetected);
     publishStatusUpdate(StatusUpdateType::STALL_COUNT_UPDATE, (int)stallCount);
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Success is indicated by all the status updates - no notification needed
 }
 
 float StepperController::calculateVariableSpeed() const {

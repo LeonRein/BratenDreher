@@ -35,7 +35,7 @@
 
 // Queue size configuration
 #define COMMAND_QUEUE_SIZE          20     // Command queue size
-#define RESULT_QUEUE_SIZE           20     // Result queue size  
+#define NOTIFICATION_QUEUE_SIZE     10     // Notification queue size (smaller since only warnings/errors)  
 #define STATUS_UPDATE_QUEUE_SIZE    30     // Status update queue size
 
 // Command types for inter-task communication
@@ -56,13 +56,10 @@ enum class StepperCommand {
     REQUEST_ALL_STATUS  // Request all current status values
 };
 
-// Command result status
-enum class CommandResult {
-    SUCCESS,
-    HARDWARE_ERROR,
-    INVALID_PARAMETER,
-    DRIVER_NOT_RESPONDING,
-    COMMUNICATION_ERROR
+// Notification types (for warnings and errors only)
+enum class NotificationType {
+    WARNING,    // Success with warning message
+    ERROR       // Error occurred
 };
 
 // Status update types for inter-task communication
@@ -96,23 +93,23 @@ struct StepperCommandData {
     uint32_t commandId;      // unique ID for tracking command results
 };
 
-// Command result structure
-struct CommandResultData {
+// Notification structure (for warnings and errors only)
+struct NotificationData {
     uint32_t commandId;
-    CommandResult result;
-    char errorMessage[128];  // fixed-size buffer to prevent heap fragmentation
+    NotificationType type;
+    char message[128];  // fixed-size buffer to prevent heap fragmentation
     
-    // Helper constructor to safely set error message
-    CommandResultData() : commandId(0), result(CommandResult::SUCCESS) {
-        errorMessage[0] = '\0';
+    // Helper constructor to safely set message
+    NotificationData() : commandId(0), type(NotificationType::WARNING) {
+        message[0] = '\0';
     }
     
-    void setErrorMessage(const char* msg) {
+    void setMessage(const char* msg) {
         if (msg) {
-            strncpy(errorMessage, msg, sizeof(errorMessage) - 1);
-            errorMessage[sizeof(errorMessage) - 1] = '\0';
+            strncpy(message, msg, sizeof(message) - 1);
+            message[sizeof(message) - 1] = '\0';
         } else {
-            errorMessage[0] = '\0';
+            message[0] = '\0';
         }
     }
 };
@@ -197,8 +194,8 @@ private:
     // Command queue for thread-safe operation
     QueueHandle_t commandQueue;
     
-    // Result queue for command status reporting
-    QueueHandle_t resultQueue;
+    // Notification queue for warnings and errors only
+    QueueHandle_t notificationQueue;
     uint32_t nextCommandId;
     
     // Status update queue for thread-safe status communication
@@ -237,7 +234,7 @@ private:
     float calculateMaxAllowedBaseSpeed() const; // Calculate max base speed to not exceed MAX_SPEED_RPM
     
     // Helper methods for status reporting
-    void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
+    void sendNotification(uint32_t commandId, NotificationType type, const String& message = "");
     void publishStatusUpdate(StatusUpdateType type, float value);
     void publishStatusUpdate(StatusUpdateType type, bool value);
     void publishStatusUpdate(StatusUpdateType type, int value);
@@ -291,8 +288,8 @@ public:
     // Speed variation information getters
     float getMaxAllowedBaseSpeed() const;                  // Get maximum base speed that doesn't exceed MAX_SPEED_RPM with current variation
     
-    // Command result retrieval (thread-safe)
-    bool getCommandResult(CommandResultData& result); // non-blocking, returns false if no result available
+    // Notification retrieval (thread-safe)
+    bool getNotification(NotificationData& notification); // non-blocking, returns false if no notification available
     
     // Status update retrieval (thread-safe)
     bool getStatusUpdate(StatusUpdateData& status); // non-blocking, returns false if no update available

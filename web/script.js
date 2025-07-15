@@ -526,6 +526,9 @@ class DirectionControl extends Control {
 
     handleStatusUpdate(statusUpdate) {
         if (statusUpdate.direction !== undefined) {
+            // Clear timeout timer since we received a status update
+            this.clearTimeoutTimer();
+            
             // Reset retry state manually since we don't call parent
             this.retryAttempt = 0;
             this.lastCommandValue = null;
@@ -758,6 +761,9 @@ class VariableSpeedControl extends Control {
         // No parent call needed - this control doesn't use standard status key mapping
         
         if (statusUpdate.speedVariationEnabled !== undefined) {
+            // Clear timeout timer since we received a status update
+            this.clearTimeoutTimer();
+            
             // Reset retry state manually since we don't call parent
             this.retryAttempt = 0;
             this.lastCommandValue = null;
@@ -785,6 +791,9 @@ class VariableSpeedControl extends Control {
         }
 
         if (statusUpdate.currentVariableSpeed !== undefined) {
+            // Clear timeout timer since we received a status update
+            this.clearTimeoutTimer();
+            
             // Set valid state since we received variable speed data
             this.setDisplayState('VALID');
             
@@ -1517,8 +1526,9 @@ class BratenDreherBLE {
             if (message.type === 'status_update') {
                 // Granular status update (new system)
                 this.handleStatusUpdate(message);
-            } else if (message.type === 'command_result') {
-                this.handleCommandResult(message);
+            } else if (message.type === 'notification') {
+                // Notification (warnings and errors only)
+                this.handleNotification(message);
             } else {
                 console.log('Unknown message type:', message.type);
             }
@@ -1540,66 +1550,23 @@ class BratenDreherBLE {
         });
     }
     
-    handleCommandResult(result) {
-        console.log('Command result:', result);
+    handleNotification(notification) {
+        console.log('Notification received:', notification);
         
-        const commandId = result.command_id;
-        const status = result.status;
-        const message = result.message || '';
+        const commandId = notification.command_id;
+        const level = notification.level;
+        const message = notification.message || '';
         
-        if (status === 'success') {
-            // Command was successful - check if there's a warning message to show
-            if (message && message.trim() !== '') {
-                // Show warning toast for successful commands with messages (like auto-adjusted speeds)
-                this.showWarning(message);
-            }
-            console.log(`Command ${commandId} executed successfully`);
+        if (level === 'warning') {
+            // Show warning message
+            this.showWarning(message);
+            console.log(`Command ${commandId} warning: ${message}`);
+        } else if (level === 'error') {
+            // Show error message
+            this.showError(message);
+            console.error(`Command ${commandId} error: ${message}`);
         } else {
-            // Command failed - show error to user
-            let userMessage = '';
-            
-            switch (status) {
-                case 'hardware_error':
-                    if (message.includes('Stepper not initialized')) {
-                        userMessage = 'Hardware Error: Stepper motor system not properly initialized';
-                    } else if (message.includes('Failed to start stepper movement')) {
-                        userMessage = 'Movement Error: Unable to start motor movement. Check motor connections and power.';
-                    } else if (message.includes('Failed to set speed')) {
-                        userMessage = 'Speed Error: Unable to set motor speed. Check stepper driver configuration.';
-                    } else {
-                        userMessage = 'Hardware Error: ' + (message || 'Stepper motor hardware issue');
-                    }
-                    break;
-                case 'driver_not_responding':
-                    userMessage = 'Driver Error: TMC2209 stepper driver is not responding. Check connections and power.';
-                    break;
-                case 'invalid_parameter':
-                    if (message.includes('Speed out of range')) {
-                        userMessage = 'Speed Error: ' + message;
-                    } else if (message.includes('Current out of range')) {
-                        userMessage = 'Current Error: ' + message;
-                    } else {
-                        userMessage = 'Invalid Setting: ' + (message || 'The parameter value is out of range');
-                    }
-                    break;
-                case 'communication_error':
-                    if (message.includes('verification failed')) {
-                        userMessage = 'Configuration Error: ' + message + '. TMC2209 may not be responding properly.';
-                    } else if (message.includes('not responding after')) {
-                        userMessage = 'Communication Error: TMC2209 driver stopped responding during configuration.';
-                    } else {
-                        userMessage = 'Communication Error: Failed to communicate with the stepper driver. Check wiring.';
-                    }
-                    break;
-                default:
-                    userMessage = 'Command Failed: ' + (message || 'Unknown error occurred');
-                    break;
-            }
-            
-            this.showError(userMessage);
-            
-            // Log technical details for debugging
-            console.error(`Command ${commandId} failed: ${status} - ${message}`);
+            console.warn(`Unknown notification level: ${level}`);
         }
     }
     
