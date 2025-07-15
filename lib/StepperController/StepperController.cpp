@@ -40,7 +40,6 @@ void StepperController::updateCurrentRPM() {
 
     currentRPM = (currentStepsPerSecond * 60.0f) /
         (static_cast<float>(GEAR_RATIO) * static_cast<float>(STEPS_PER_REVOLUTION) * static_cast<float>(MICRO_STEPS));
-    Serial.printf("[updateCurrentRPM] Calculated RPM: %.6f\n", currentRPM);
 }
 
 void StepperController::applyStepperAcceleration(uint32_t accelerationStepsPerSec2) {
@@ -563,14 +562,19 @@ void StepperController::setSpeedInternal(float rpm) {
     const float originalRequestedSpeed = rpm;
     bool speedWasAdjusted = false;
     
-    // Validate input against global limits
-    if (rpm < MIN_SPEED_RPM || rpm > MAX_SPEED_RPM) {
+    if (!stepper) {
         publishStatusUpdate(StatusUpdateType::SPEED_SETPOINT_CHANGED, setpointRPM);
-        // Use efficient string building for error message
-        char errorMsg[80];
-        snprintf(errorMsg, sizeof(errorMsg), "Speed out of range (%.1f-%.1f RPM)", MIN_SPEED_RPM, MAX_SPEED_RPM);
-        sendNotification(NotificationType::ERROR, String(errorMsg));
+        sendNotification(NotificationType::ERROR, "Stepper not initialized");
         return;
+    }
+    
+    // Clamp speed to allowed range
+    if (rpm < MIN_SPEED_RPM) {
+        rpm = MIN_SPEED_RPM;
+        speedWasAdjusted = true;
+    } else if (rpm > MAX_SPEED_RPM) {
+        rpm = MAX_SPEED_RPM;
+        speedWasAdjusted = true;
     }
     
     // If speed variation is enabled, check against maximum allowed base speed
@@ -582,12 +586,6 @@ void StepperController::setSpeedInternal(float rpm) {
             rpm = maxAllowedBaseSpeed; // Auto-adjust to maximum allowed speed
             speedWasAdjusted = true;
         }
-    }
-    
-    if (!stepper) {
-        publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, setpointRPM);
-        sendNotification(NotificationType::ERROR, "Stepper not initialized");
-        return;
     }
 
     // Update the setpoint
@@ -610,10 +608,26 @@ void StepperController::setSpeedInternal(float rpm) {
     
     // Report warning if speed was adjusted (use efficient string building)
     if (speedWasAdjusted && !isInitializing) {
-        char warningMsg[120];
-        snprintf(warningMsg, sizeof(warningMsg), 
-                "Speed auto-adjusted from %.2f to %.2f RPM due to variable speed modulation limits", 
-                originalRequestedSpeed, rpm);
+        char warningMsg[150];
+        if (speedVariationEnabled && speedVariationStrength > 0.0f) {
+            const float maxAllowedBaseSpeed = calculateMaxAllowedBaseSpeed();
+            if (rpm == maxAllowedBaseSpeed && originalRequestedSpeed > maxAllowedBaseSpeed) {
+                // Adjusted due to variable speed requirements
+                snprintf(warningMsg, sizeof(warningMsg),
+                        "Speed auto-adjusted from %.2f to %.2f RPM due to variable speed modulation limits",
+                        originalRequestedSpeed, rpm);
+            } else {
+                // Adjusted due to range limits
+                snprintf(warningMsg, sizeof(warningMsg),
+                        "Speed auto-adjusted from %.2f to %.2f RPM (allowed range: %.1f-%.1f RPM)",
+                        originalRequestedSpeed, rpm, MIN_SPEED_RPM, MAX_SPEED_RPM);
+            }
+        } else {
+            // Adjusted due to range limits
+            snprintf(warningMsg, sizeof(warningMsg),
+                    "Speed auto-adjusted from %.2f to %.2f RPM (allowed range: %.1f-%.1f RPM)",
+                    originalRequestedSpeed, rpm, MIN_SPEED_RPM, MAX_SPEED_RPM);
+        }
         sendNotification(NotificationType::WARNING, String(warningMsg));
     }
     // Success is indicated by the status update - no notification needed for normal success
@@ -787,6 +801,17 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
         accelWasAdjusted = true;
     }
 
+    // If speed variation is enabled, check against minimum required acceleration
+    if (speedVariationEnabled && speedVariationStrength > 0.0f) {
+        const uint32_t minRequiredAcceleration = calculateRequiredAccelerationForVariableSpeed();
+        if (minRequiredAcceleration > 0 && accelerationStepsPerSec2 < minRequiredAcceleration) {
+            Serial.printf("Requested acceleration %u steps/s² is below minimum required %u steps/s² for current variable speed settings. Auto-adjusting to minimum required acceleration.\n", 
+                          accelerationStepsPerSec2, minRequiredAcceleration);
+            accelerationStepsPerSec2 = minRequiredAcceleration; // Auto-adjust to minimum required acceleration
+            accelWasAdjusted = true;
+        }
+    }
+
     applyStepperAcceleration(accelerationStepsPerSec2);
     Serial.printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
 
@@ -800,10 +825,26 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
 
     // Report warning if acceleration was adjusted (use efficient string building)
     if (accelWasAdjusted && !isInitializing) {
-        char warningMsg[120];
-        snprintf(warningMsg, sizeof(warningMsg),
-                "Acceleration auto-adjusted from %u to %u steps/s² (allowed range: 100-100000)",
-                originalRequestedAccel, accelerationStepsPerSec2);
+        char warningMsg[150];
+        if (speedVariationEnabled && speedVariationStrength > 0.0f) {
+            const uint32_t minRequiredAcceleration = calculateRequiredAccelerationForVariableSpeed();
+            if (minRequiredAcceleration > 0 && accelerationStepsPerSec2 >= minRequiredAcceleration) {
+                // Adjusted due to variable speed requirements
+                snprintf(warningMsg, sizeof(warningMsg),
+                        "Acceleration auto-adjusted from %u to %u steps/s² due to variable speed modulation requirements",
+                        originalRequestedAccel, accelerationStepsPerSec2);
+            } else {
+                // Adjusted due to range limits
+                snprintf(warningMsg, sizeof(warningMsg),
+                        "Acceleration auto-adjusted from %u to %u steps/s² (allowed range: 100-100000)",
+                        originalRequestedAccel, accelerationStepsPerSec2);
+            }
+        } else {
+            // Adjusted due to range limits
+            snprintf(warningMsg, sizeof(warningMsg),
+                    "Acceleration auto-adjusted from %u to %u steps/s² (allowed range: 100-100000)",
+                    originalRequestedAccel, accelerationStepsPerSec2);
+        }
         sendNotification(NotificationType::WARNING, String(warningMsg));
     }
     // Success is indicated by the status update - no notification needed for normal success
