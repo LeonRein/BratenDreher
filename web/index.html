@@ -181,16 +181,24 @@
                     <span id="motorStatus" class="status-value">Stopped</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">Speed:</span>
+                    <span class="status-label">Direction:</span>
+                    <span id="currentDirection" class="status-value">Clockwise</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Setpoint RPM:</span>
+                    <span id="setpointSpeed" class="status-value">0.0 RPM</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Current RPM:</span>
                     <span id="currentSpeed" class="status-value">0.0 RPM</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Variable Speed:</span>
+                    <span id="variableSpeedStatus" class="status-value">OFF</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Acceleration:</span>
                     <span id="currentAcceleration" class="status-value">5.0s to max</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Direction:</span>
-                    <span id="currentDirection" class="status-value">Clockwise</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">Current:</span>
@@ -201,24 +209,36 @@
                     <span id="tmc2209Status" class="status-value">Unknown</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">Stall Status:</span>
-                    <span id="stallStatus" class="status-value">OK</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Stall Count:</span>
-                    <span id="stallCount" class="status-value">0</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Variable Speed:</span>
-                    <span id="variableSpeedStatus" class="status-value">OFF</span>
-                </div>
-                <div class="status-item" id="currentVariableSpeedItem" style="display: none;">
-                    <span class="status-label">Current Speed:</span>
-                    <span id="currentVariableSpeed" class="status-value">0.0 RPM</span>
-                </div>
-                <div class="status-item">
                     <span class="status-label">Last Update:</span>
                     <span id="lastUpdate" class="status-value">Never</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stall Detection -->
+        <div class="card stall-card">
+            <h2>Stall Detection</h2>
+            <div class="stall-content">
+                <div class="stall-info">
+                    <p>TMC2209 StallGuard monitors motor load and detects when the motor cannot turn due to excessive resistance.</p>
+                </div>
+                <div class="stall-status-grid">
+                    <div class="stall-status-item">
+                        <span class="status-label">Stall Status:</span>
+                        <span id="stallStatus" class="status-value">OK</span>
+                    </div>
+                    <div class="stall-status-item">
+                        <span class="status-label">Stall Count:</span>
+                        <span id="stallCount" class="status-value">0</span>
+                    </div>
+                </div>
+                <div class="stall-actions">
+                    <button id="resetStallBtn" class="btn btn-warning">
+                        ⚠️ Reset Stall Count
+                    </button>
+                </div>
+                <div class="stall-help">
+                    <small><em>💡 If stalls occur frequently, try reducing speed or checking for mechanical obstructions.</em></small>
                 </div>
             </div>
         </div>
@@ -243,9 +263,6 @@
             <div class="stats-buttons">
                 <button id="resetStatsBtn" class="btn btn-secondary stats-reset">
                     📊 Reset Statistics
-                </button>
-                <button id="resetStallBtn" class="btn btn-warning stall-reset">
-                    ⚠️ Reset Stall Count
                 </button>
             </div>
         </div>

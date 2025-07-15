@@ -305,6 +305,12 @@ class Control {
         this.retryAttempt = 0;
         this.lastCommandValue = null;
         
+        // Check for custom handler first
+        if (this.options.customHandler) {
+            this.options.customHandler(this, statusUpdate);
+            return;
+        }
+        
         // First, handle standard status key mapping (for simple controls)
         if (this.options.statusKey && statusUpdate[this.options.statusKey] !== undefined) {
             let value = statusUpdate[this.options.statusKey];
@@ -424,10 +430,12 @@ class Control {
 
 // Specialized control for speed with preset button management
 class SpeedControl extends Control {
-    constructor(element, valueElement, presetButtons, triangleElement, options = {}) {
+    constructor(element, valueElement, presetButtons, triangleElement, setpointSpeedElement, currentSpeedElement, options = {}) {
         super(element, valueElement, options);
         this.presetButtons = presetButtons;
         this.triangleElement = triangleElement;
+        this.setpointSpeedElement = setpointSpeedElement;
+        this.currentSpeedElement = currentSpeedElement;
         
         // Add preset buttons as additional elements
         if (this.presetButtons) {
@@ -444,6 +452,14 @@ class SpeedControl extends Control {
                 applyColors: false, 
                 applyClasses: false 
             });
+        }
+        
+        // Add setpoint and current speed elements as additional elements
+        if (this.setpointSpeedElement) {
+            this.addAdditionalElement(this.setpointSpeedElement, { applyDisabled: false });
+        }
+        if (this.currentSpeedElement) {
+            this.addAdditionalElement(this.currentSpeedElement, { applyDisabled: false });
         }
         
         // Update display state now that all elements are properly registered
@@ -509,6 +525,22 @@ class SpeedControl extends Control {
                 this.valueElement.textContent = statusUpdate.speed.toFixed(1);
             }
             
+            // Update the setpoint speed display in status section with adaptive coloring
+            if (this.setpointSpeedElement) {
+                this.setpointSpeedElement.textContent = `${statusUpdate.speed.toFixed(1)} RPM`;
+                this.setpointSpeedElement.style.opacity = '1';
+                // Color based on speed level
+                if (statusUpdate.speed === 0) {
+                    this.setpointSpeedElement.style.color = '#1f2937'; // Black for stopped
+                } else if (statusUpdate.speed < 5) {
+                    this.setpointSpeedElement.style.color = '#10b981'; // Green for slow
+                } else if (statusUpdate.speed < 15) {
+                    this.setpointSpeedElement.style.color = '#3b82f6'; // Blue for medium
+                } else {
+                    this.setpointSpeedElement.style.color = '#8b5cf6'; // Purple for fast
+                }
+            }
+            
             // Update preset button active state based on setpoint
             this.presetButtons.forEach(btn => {
                 const presetSpeed = parseFloat(btn.dataset.speed);
@@ -517,14 +549,23 @@ class SpeedControl extends Control {
         }
         
         if (statusUpdate.currentSpeed !== undefined) {
-            // Update current speed display (separate from setpoint)
-            const currentSpeedElement = this.parent.currentSpeed;
-            if (currentSpeedElement) {
-                currentSpeedElement.textContent = `${statusUpdate.currentSpeed.toFixed(1)} RPM`;
-                currentSpeedElement.style.opacity = '1';
+            // Update current speed display in status section with adaptive coloring
+            if (this.currentSpeedElement) {
+                this.currentSpeedElement.textContent = `${statusUpdate.currentSpeed.toFixed(1)} RPM`;
+                this.currentSpeedElement.style.opacity = '1';
+                // Color based on speed level
+                if (statusUpdate.currentSpeed === 0) {
+                    this.currentSpeedElement.style.color = '#1f2937'; // Black for stopped
+                } else if (statusUpdate.currentSpeed < 5) {
+                    this.currentSpeedElement.style.color = '#10b981'; // Green for slow
+                } else if (statusUpdate.currentSpeed < 15) {
+                    this.currentSpeedElement.style.color = '#3b82f6'; // Blue for medium
+                } else {
+                    this.currentSpeedElement.style.color = '#8b5cf6'; // Purple for fast
+                }
             }
             
-            // Update the triangle indicator position (no redundant text display)
+            // Update the triangle indicator position
             this.updateTrianglePosition(statusUpdate.currentSpeed);
         }
     }
@@ -585,6 +626,8 @@ class DirectionControl extends Control {
             }
             if (this.currentDirectionElement) {
                 this.currentDirectionElement.textContent = clockwise ? 'Clockwise' : 'Counter-clockwise';
+                // Add adaptive coloring - blue for clockwise, purple for counter-clockwise
+                this.currentDirectionElement.style.color = clockwise ? '#3b82f6' : '#8b5cf6';
             }
         }
     }
@@ -612,6 +655,8 @@ class MotorStatusControl extends Control {
             const enabled = statusUpdate.enabled;
             // Update motor status (will be refined if running status is also provided)
             this.motorStatusElement.textContent = enabled ? 'Enabled' : 'Stopped';
+            // Add adaptive coloring
+            this.motorStatusElement.style.color = enabled ? '#f59e0b' : '#1f2937'; // Orange for enabled, black for stopped
         }
         
         if (statusUpdate.running !== undefined) {
@@ -622,6 +667,8 @@ class MotorStatusControl extends Control {
             const enabled = this.element.checked; // Get from UI state
             if (enabled) {
                 this.motorStatusElement.textContent = statusUpdate.running ? 'Running' : 'Enabled';
+                // Add adaptive coloring - green for running, orange for enabled but not running
+                this.motorStatusElement.style.color = statusUpdate.running ? '#10b981' : '#f59e0b';
             }
         }
     }
@@ -648,6 +695,18 @@ class AccelerationControl extends Control {
             const accelerationTimeDisplay = this.parent.accelerationToTime(statusUpdate.acceleration).toFixed(1);
             this.currentAccelerationElement.textContent = `${accelerationTimeDisplay}s to max`;
             
+            // Add adaptive coloring based on acceleration time
+            const time = parseFloat(accelerationTimeDisplay);
+            if (time <= 2) {
+                this.currentAccelerationElement.style.color = '#8b5cf6'; // Purple for very fast acceleration
+            } else if (time <= 5) {
+                this.currentAccelerationElement.style.color = '#3b82f6'; // Blue for fast acceleration
+            } else if (time <= 10) {
+                this.currentAccelerationElement.style.color = '#10b981'; // Green for medium acceleration
+            } else {
+                this.currentAccelerationElement.style.color = '#1f2937'; // Black for slow acceleration
+            }
+            
             // Update acceleration slider if significantly different
             const currentSliderTime = parseFloat(this.element.value);
             const deviceTime = parseFloat(this.parent.accelerationToTime(statusUpdate.acceleration).toFixed(1));
@@ -661,16 +720,13 @@ class AccelerationControl extends Control {
 
 // Specialized control for variable speed with UI management
 class VariableSpeedControl extends Control {
-    constructor(element, variableSpeedControls, variableSpeedStatus, currentVariableSpeedItem, currentVariableSpeed, options = {}) {
+    constructor(element, variableSpeedControls, variableSpeedStatus, options = {}) {
         super(element, null, options);
         this.variableSpeedControls = variableSpeedControls;
         this.variableSpeedStatus = variableSpeedStatus;
-        this.currentVariableSpeedItem = currentVariableSpeedItem;
-        this.currentVariableSpeed = currentVariableSpeed;
         
         // Add additional elements for state management
         this.addAdditionalElement(this.variableSpeedStatus, { applyDisabled: false });
-        this.addAdditionalElement(this.currentVariableSpeed, { applyDisabled: false });
         
         // Initialize with disabled state
         this.setDisplayState(CONTROL_STATES.DISABLED);
@@ -719,23 +775,7 @@ class VariableSpeedControl extends Control {
             this.updateVariableSpeedUI();
             
             this.variableSpeedStatus.textContent = enabled ? 'ON' : 'OFF';
-            this.variableSpeedStatus.style.color = enabled ? '#2ecc71' : '#6b7280';
-            
-            // Hide variable speed display if disabled
-            if (!enabled) {
-                this.currentVariableSpeedItem.style.display = 'none';
-            }
-        }
-
-        if (statusUpdate.currentSpeed !== undefined) {
-            // Set valid state since we received current speed data
-            this.setDisplayState('VALID');
-            
-            const variableSpeedEnabled = this.element.checked;
-            if (variableSpeedEnabled) {
-                this.currentVariableSpeedItem.style.display = 'flex';
-                this.currentVariableSpeed.textContent = `${statusUpdate.currentSpeed.toFixed(1)} RPM`;
-            }
+            this.variableSpeedStatus.style.color = enabled ? '#10b981' : '#1f2937';
         }
     }
 }
@@ -766,7 +806,7 @@ class TMCStatusControl extends Control {
             this.setDisplayState('VALID');
             
             this.statusElement.textContent = statusUpdate.tmc2209Status ? 'OK' : 'Error';
-            this.statusElement.style.color = statusUpdate.tmc2209Status ? '#2ecc71' : '#e74c3c';
+            this.statusElement.style.color = statusUpdate.tmc2209Status ? '#10b981' : '#e74c3c';
         }
         
         if (statusUpdate.stallDetected !== undefined) {
@@ -774,7 +814,7 @@ class TMCStatusControl extends Control {
             this.setDisplayState('VALID');
             
             this.stallStatusElement.textContent = statusUpdate.stallDetected ? 'STALL!' : 'OK';
-            this.stallStatusElement.style.color = statusUpdate.stallDetected ? '#e74c3c' : '#2ecc71';
+            this.stallStatusElement.style.color = statusUpdate.stallDetected ? '#e74c3c' : '#10b981';
             this.stallStatusElement.style.fontWeight = statusUpdate.stallDetected ? 'bold' : 'normal';
         }
         
@@ -783,7 +823,7 @@ class TMCStatusControl extends Control {
             this.setDisplayState('VALID');
             
             this.stallCountElement.textContent = statusUpdate.stallCount;
-            this.stallCountElement.style.color = statusUpdate.stallCount > 0 ? '#e67e22' : '#2ecc71';
+            this.stallCountElement.style.color = statusUpdate.stallCount > 0 ? '#f59e0b' : '#1f2937';
         }
     }
 }
@@ -971,6 +1011,7 @@ class BratenDreherBLE {
         
         // Status elements
         this.motorStatus = document.getElementById('motorStatus');
+        this.setpointSpeed = document.getElementById('setpointSpeed');
         this.currentSpeed = document.getElementById('currentSpeed');
         this.currentAcceleration = document.getElementById('currentAcceleration');
         this.currentDirection = document.getElementById('currentDirection');
@@ -982,8 +1023,6 @@ class BratenDreherBLE {
         
         // Variable speed status elements
         this.variableSpeedStatus = document.getElementById('variableSpeedStatus');
-        this.currentVariableSpeedItem = document.getElementById('currentVariableSpeedItem');
-        this.currentVariableSpeed = document.getElementById('currentVariableSpeed');
         
         // Statistics elements
         this.totalRevolutions = document.getElementById('totalRevolutions');
@@ -1688,6 +1727,7 @@ class BratenDreherBLE {
     initializeControls() {
         // Initialize status display elements that aren't controlled by specific controls
         const statusElements = [
+            this.setpointSpeed,
             this.currentSpeed,
             this.lastUpdate
         ];
@@ -1704,6 +1744,8 @@ class BratenDreherBLE {
             this.speedValue,
             this.presetBtns,
             this.currentSpeedTriangle,
+            this.setpointSpeed,
+            this.currentSpeed,
             {
                 commandType: 'speed',
                 statusKey: 'speed',
@@ -1802,8 +1844,6 @@ class BratenDreherBLE {
             this.variableSpeedToggle,
             this.variableSpeedControls,
             this.variableSpeedStatus,
-            this.currentVariableSpeedItem,
-            this.currentVariableSpeed,
             {
                 statusKey: 'speedVariationEnabled',
                 debounceTime: 0
@@ -1824,13 +1864,33 @@ class BratenDreherBLE {
             this.avgSpeed
         ));
 
-        // Current display control (simple display-only)
+        // Current display control (enhanced with adaptive coloring)
         this.controls.set('currentDisplay', new Control(
             null,
             this.currentCurrent,
             {
                 statusKey: 'current',
-                displayTransform: (value) => `${value}%`
+                displayTransform: (value) => `${value}%`,
+                customHandler: (control, statusUpdate) => {
+                    if (statusUpdate.current !== undefined) {
+                        const current = statusUpdate.current;
+                        control.valueElement.textContent = `${current}%`;
+                        control.valueElement.style.opacity = '1';
+                        
+                        // Add adaptive coloring based on current level
+                        if (current <= 20) {
+                            control.valueElement.style.color = '#10b981'; // Green for low current
+                        } else if (current <= 50) {
+                            control.valueElement.style.color = '#3b82f6'; // Blue for medium current
+                        } else if (current <= 80) {
+                            control.valueElement.style.color = '#f59e0b'; // Orange for high current
+                        } else {
+                            control.valueElement.style.color = '#8b5cf6'; // Purple for very high current (100% is normal operation)
+                        }
+                        
+                        control.setDisplayState('VALID');
+                    }
+                }
             }
         ));
 
