@@ -538,18 +538,36 @@ void StepperController::resetStallCountInternal(uint32_t commandId) {
     lastStallTime = 0;
     
     Serial.println("Stall count reset");
+    publishStatusUpdate(StatusUpdateType::STALL_COUNT_UPDATE, stallCount);
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
 void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
-    // Validate input
+    // Store original requested speed for potential warning message
+    float originalRequestedSpeed = rpm;
+    bool speedWasAdjusted = false;
+    
+    // Validate input against global limits
     if (rpm < MIN_SPEED_RPM || rpm > MAX_SPEED_RPM) {
+        publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
         reportResult(commandId, CommandResult::INVALID_PARAMETER,
                     "Speed out of range (" + String(MIN_SPEED_RPM) + "-" + String(MAX_SPEED_RPM) + " RPM)");
         return;
     }
     
+    // If speed variation is enabled, check against maximum allowed base speed
+    if (speedVariationEnabled && speedVariationStrength > 0.0f) {
+        float maxAllowedBaseSpeed = calculateMaxAllowedBaseSpeed();
+        if (rpm > maxAllowedBaseSpeed) {
+            Serial.printf("Requested speed %.2f RPM exceeds max allowed %.2f RPM with current variation. Auto-adjusting to max allowed speed.\n", 
+                          rpm, maxAllowedBaseSpeed);
+            rpm = maxAllowedBaseSpeed; // Auto-adjust to maximum allowed speed
+            speedWasAdjusted = true;
+        }
+    }
+    
     if (!stepper) {
+        publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
         reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
         return;
     }
@@ -576,7 +594,14 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
     // Publish status update for speed change
     publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, rpm);
     
-    reportResult(commandId, CommandResult::SUCCESS);
+    // Report result with warning if speed was adjusted
+    if (speedWasAdjusted && commandId != 0) {
+        String warningMessage = "Speed auto-adjusted from " + String(originalRequestedSpeed) + 
+                              " to " + String(rpm) + " RPM due to variable speed modulation limits";
+        reportResult(commandId, CommandResult::SUCCESS, warningMessage);
+    } else {
+        reportResult(commandId, CommandResult::SUCCESS);
+    }
 }
 
 void StepperController::setDirectionInternal(bool clockwise, uint32_t commandId) {
@@ -591,12 +616,12 @@ void StepperController::setDirectionInternal(bool clockwise, uint32_t commandId)
     
     // Publish status update for direction change
     publishStatusUpdate(StatusUpdateType::DIRECTION_CHANGED, clockwise);
-    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
 void StepperController::enableInternal(uint32_t commandId) {
     if (!stepper) {
+        publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, motorEnabled);
         reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
         return;
     }
@@ -618,6 +643,7 @@ void StepperController::enableInternal(uint32_t commandId) {
     if (result != MOVE_OK) {
         motorEnabled = false;
         stepperDriver.disable();
+        publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, motorEnabled);
         reportResult(commandId, CommandResult::HARDWARE_ERROR, 
                     "Failed to start stepper movement (result code: " + String((int)result) + ")");
         return;
@@ -631,8 +657,7 @@ void StepperController::enableInternal(uint32_t commandId) {
     Serial.println("Motor enabled and started");
     
     // Publish status update for enabled state change
-    publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, true);
-    
+    publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, motorEnabled);
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -650,7 +675,6 @@ void StepperController::disableInternal(uint32_t commandId) {
     
     // Publish status update for enabled state change
     publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
-    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -668,13 +692,13 @@ void StepperController::emergencyStopInternal(uint32_t commandId) {
     
     // Publish status update for enabled state change
     publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
-    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
 void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     // Validate current (10-100%)
     if (current < 10 || current > 100) {
+        publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, runCurrent);
         reportResult(commandId, CommandResult::INVALID_PARAMETER, 
                     "Current out of range (10-100%)");
         return;
@@ -700,6 +724,7 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     
     // Verify driver communication by checking if it's responding
     if (!tmc2209Initialized) {
+        publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, current);
         reportResult(commandId, CommandResult::COMMUNICATION_ERROR, 
                     "TMC2209 driver not responding after setting current");
         return;
@@ -711,12 +736,12 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
     
     // Publish status update for current change
     publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, current);
-    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
 void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec2, uint32_t commandId) {
     if (!stepper) {
+        publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, currentAcceleration);
         reportResult(commandId, CommandResult::HARDWARE_ERROR, 
                     "Stepper not initialized");
         return;
@@ -724,6 +749,7 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
     
     // Validate acceleration range (reasonable limits to prevent excessive values)
     if (accelerationStepsPerSec2 < 100 || accelerationStepsPerSec2 > 100000) {
+        publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, currentAcceleration);
         reportResult(commandId, CommandResult::INVALID_PARAMETER, 
                     "Acceleration out of range (100-100000 steps/s²)");
         return;
@@ -738,7 +764,6 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
     
     // Publish status update for acceleration change
     publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, accelerationStepsPerSec2);
-    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -764,6 +789,10 @@ bool StepperController::getStatusUpdate(StatusUpdateData& status) {
     if (statusUpdateQueue == nullptr) return false;
     
     return xQueueReceive(statusUpdateQueue, &status, 0) == pdTRUE; // Non-blocking
+}
+
+float StepperController::getMaxAllowedBaseSpeed() const {
+    return calculateMaxAllowedBaseSpeed();
 }
 
 void StepperController::publishStatusUpdate(StatusUpdateType type, float value) {
@@ -968,6 +997,7 @@ uint32_t StepperController::resetStallCount() {
 void StepperController::setSpeedVariationInternal(float strength, uint32_t commandId) {
     // Validate strength (0.0 to 1.0)
     if (strength < 0.0f || strength > 1.0f) {
+        publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, speedVariationStrength);
         reportResult(commandId, CommandResult::INVALID_PARAMETER, 
                     "Speed variation strength out of range (0.0-1.0)");
         return;
@@ -978,6 +1008,28 @@ void StepperController::setSpeedVariationInternal(float strength, uint32_t comma
     // Update k and k0 parameters for new strength first
     updateSpeedVariationParameters();
     
+    // Calculate maximum allowed base speed to ensure modulated speed doesn't exceed MAX_SPEED_RPM
+    float maxAllowedBaseSpeed = calculateMaxAllowedBaseSpeed();
+    
+    // If current speed exceeds the maximum allowed, reduce it
+    if (currentSpeedRPM > maxAllowedBaseSpeed) {
+        float oldSpeed = currentSpeedRPM;
+        currentSpeedRPM = maxAllowedBaseSpeed;
+        
+        Serial.printf("Base speed reduced from %.2f to %.2f RPM to prevent exceeding max speed with modulation\n", 
+                      oldSpeed, currentSpeedRPM);
+        
+        // Update the stepper with the new base speed if motor is enabled
+        if (stepper && motorEnabled) {
+            uint32_t stepsPerSecond = rpmToStepsPerSecond(currentSpeedRPM);
+            stepper->setSpeedInHz(stepsPerSecond);
+            stepper->applySpeedAcceleration();
+        }
+        
+        // Publish status update for speed change
+        publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
+    }
+    
     // If variable speed is enabled, update acceleration for new strength
     if (speedVariationEnabled) {
         updateAccelerationForVariableSpeed();
@@ -985,10 +1037,11 @@ void StepperController::setSpeedVariationInternal(float strength, uint32_t comma
     
     Serial.printf("Speed variation strength set to %.2f (%.0f%%) - k=%.3f, k0=%.3f\n", 
                   strength, strength * 100.0f, speedVariationK, speedVariationK0);
+    Serial.printf("Max allowed base speed: %.2f RPM (current: %.2f RPM)\n", 
+                  maxAllowedBaseSpeed, currentSpeedRPM);
     
     // Publish status update for speed variation strength change
     publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, strength);
-    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -1004,14 +1057,36 @@ void StepperController::setSpeedVariationPhaseInternal(float phase, uint32_t com
     
     // Publish status update for speed variation phase change
     publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED, phase);
-    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
 void StepperController::enableSpeedVariationInternal(uint32_t commandId) {
     if (!stepper) {
+        publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, speedVariationEnabled);
         reportResult(commandId, CommandResult::HARDWARE_ERROR, "Stepper not initialized");
         return;
+    }
+    
+    // Calculate maximum allowed base speed to ensure modulated speed doesn't exceed MAX_SPEED_RPM
+    float maxAllowedBaseSpeed = calculateMaxAllowedBaseSpeed();
+    
+    // If current speed exceeds the maximum allowed, reduce it
+    if (currentSpeedRPM > maxAllowedBaseSpeed) {
+        float oldSpeed = currentSpeedRPM;
+        currentSpeedRPM = maxAllowedBaseSpeed;
+        
+        Serial.printf("Base speed reduced from %.2f to %.2f RPM to prevent exceeding max speed with modulation\n", 
+                      oldSpeed, currentSpeedRPM);
+        
+        // Update the stepper with the new base speed if motor is enabled
+        if (motorEnabled) {
+            uint32_t stepsPerSecond = rpmToStepsPerSecond(currentSpeedRPM);
+            stepper->setSpeedInHz(stepsPerSecond);
+            stepper->applySpeedAcceleration();
+        }
+        
+        // Publish status update for speed change
+        publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
     }
     
     // Set current position as the reference point for variation
@@ -1026,11 +1101,14 @@ void StepperController::enableSpeedVariationInternal(uint32_t commandId) {
     
     Serial.printf("Speed variation enabled at position %ld (strength: %.0f%%, phase: 0°)\n", 
                   speedVariationStartPosition, speedVariationStrength * 100.0f);
+    Serial.printf("Max allowed base speed: %.2f RPM (current: %.2f RPM)\n", 
+                  maxAllowedBaseSpeed, currentSpeedRPM);
     Serial.println("Current position will be the fastest point in the cycle (new algorithm)");
     
     // Publish status update for speed variation enabled change
     publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, true);
-    
+    publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED, speedVariationPhase);
+    publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, speedVariationStrength);
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -1052,7 +1130,6 @@ void StepperController::disableSpeedVariationInternal(uint32_t commandId) {
     
     // Publish status update for speed variation enabled change
     publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, false);
-    
     reportResult(commandId, CommandResult::SUCCESS);
 }
 
@@ -1091,9 +1168,7 @@ void StepperController::requestAllStatusInternal(uint32_t commandId) {
     publishStatusUpdate(StatusUpdateType::TMC2209_STATUS_UPDATE, tmc2209Initialized);
     publishStatusUpdate(StatusUpdateType::STALL_DETECTED_UPDATE, stallDetected);
     publishStatusUpdate(StatusUpdateType::STALL_COUNT_UPDATE, (int)stallCount);
-    
     reportResult(commandId, CommandResult::SUCCESS);
-    Serial.println("All status values published to queue");
 }
 
 float StepperController::calculateVariableSpeed() const {
@@ -1311,4 +1386,22 @@ void StepperController::updateSpeedVariationParameters() {
     // Calculate compensation factor k0 = sqrt(1 - k²)
     // This ensures the average speed remains w0
     speedVariationK0 = sqrtf(1.0f - speedVariationK * speedVariationK);
+}
+
+float StepperController::calculateMaxAllowedBaseSpeed() const {
+    if (speedVariationStrength == 0.0f) {
+        return MAX_SPEED_RPM; // No modulation, full speed allowed
+    }
+    
+    // Calculate max allowed base speed so that the peak modulated speed doesn't exceed MAX_SPEED_RPM
+    // Maximum speed occurs when cos(a) = -1: w_max = w0 * k0 / (1 - k)
+    // Solving for w0: w0 = w_max * (1 - k) / k0
+    // Where w_max should not exceed MAX_SPEED_RPM
+    
+    float maxAllowedBaseSpeed = MAX_SPEED_RPM * (1.0f - speedVariationK) / speedVariationK0;
+    
+    // Ensure it's at least the minimum speed
+    maxAllowedBaseSpeed = max(maxAllowedBaseSpeed, MIN_SPEED_RPM);
+    
+    return maxAllowedBaseSpeed;
 }

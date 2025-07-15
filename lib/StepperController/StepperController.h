@@ -234,6 +234,7 @@ private:
     uint32_t calculateRequiredAccelerationForVariableSpeed() const;
     void updateAccelerationForVariableSpeed();
     void updateSpeedVariationParameters(); // Helper to calculate k and k0
+    float calculateMaxAllowedBaseSpeed() const; // Calculate max base speed to not exceed MAX_SPEED_RPM
     
     // Helper methods for status reporting
     void reportResult(uint32_t commandId, CommandResult result, const String& errorMessage = "");
@@ -286,6 +287,9 @@ public:
     
     // Status request (thread-safe via command queue)
     uint32_t requestAllStatus();                           // Request all current status to be published
+    
+    // Speed variation information getters
+    float getMaxAllowedBaseSpeed() const;                  // Get maximum base speed that doesn't exceed MAX_SPEED_RPM with current variation
     
     // Command result retrieval (thread-safe)
     bool getCommandResult(CommandResultData& result); // non-blocking, returns false if no result available

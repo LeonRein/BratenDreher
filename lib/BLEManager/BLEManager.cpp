@@ -246,11 +246,10 @@ void BLEManager::handleCommand(const std::string& command) {
         // Request all current status from StepperController
         Serial.println("Status request received, requesting all current status...");
         uint32_t commandId = stepperController->requestAllStatus();
-        if (commandId > 0) {
-            sendCommandResult(commandId, "success", "Status request sent");
-        } else {
+        if (commandId == 0) {
             sendCommandResult(0, "error", "Failed to send status request");
         }
+        // Note: Success response will come from StepperController when request is processed
     }
     else if (strcmp(type, "acceleration") == 0) {
         // Set acceleration directly in steps/s²
@@ -258,10 +257,13 @@ void BLEManager::handleCommand(const std::string& command) {
         
         if (accelerationStepsPerSec2 >= 100 && accelerationStepsPerSec2 <= 100000) {
             uint32_t commandId = stepperController->setAcceleration(accelerationStepsPerSec2);
-            Serial.printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
-            
-            // Send success response
-            sendCommandResult(commandId, "success", String("Acceleration set to ") + accelerationStepsPerSec2 + " steps/s²");
+            if (commandId > 0) {
+                Serial.printf("Acceleration command queued: %u steps/s² (ID: %u)\n", accelerationStepsPerSec2, commandId);
+            } else {
+                Serial.println("Failed to queue acceleration command");
+                sendCommandResult(0, "error", "Failed to queue acceleration command");
+            }
+            // Note: Success response will come from StepperController when command is processed
         } else {
             Serial.println("Invalid acceleration parameters");
             sendCommandResult(0, "invalid_parameter", "Acceleration must be 100-100000 steps/s²");
