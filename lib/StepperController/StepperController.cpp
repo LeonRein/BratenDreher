@@ -1,3 +1,6 @@
+// Always include the header first to ensure class/type declarations
+#include "StepperController.h"
+
 // Centralized stepper hardware control methods
 void StepperController::applyStepperSpeed(uint32_t stepsPerSecond) {
     if (!stepper) {
