@@ -246,13 +246,18 @@ body {
 }
 
 /* Speed Slider */
+.speed-slider-container {
+    position: relative;
+    width: 100%;
+    margin-bottom: 40px; /* Increased to make room for triangle */
+}
+
 .speed-slider {
     width: 100%;
     height: 8px;
     border-radius: 4px;
     background: #e5e7eb;
     outline: none;
-    margin-bottom: 16px;
     cursor: pointer;
     -webkit-appearance: none;
     appearance: none;
@@ -284,35 +289,35 @@ body {
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
+/* Current Speed Triangle Indicator */
+.current-speed-triangle {
+    position: absolute;
+    top: 28px; /* Position well below the slider track and thumb */
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.1s ease;
+    z-index: 10;
+}
+
+.triangle-indicator {
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 12px solid #10b981;
+    position: relative;
+    left: -8px; /* Center the triangle */
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+.current-speed-triangle.visible {
+    opacity: 1;
+}
+
 /* Speed Presets */
 .speed-presets {
     display: flex;
     gap: 8px;
-}
-
-/* Current Speed Indicator */
-.current-speed-indicator {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-    padding: 8px 12px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 0.9rem;
-}
-
-.current-speed-label {
-    color: #64748b;
-    font-weight: 500;
-}
-
-.current-speed-value {
-    color: #1e293b;
-    font-weight: 600;
-    font-family: 'Courier New', monospace;
 }
 
 .preset-btn {

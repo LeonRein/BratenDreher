@@ -157,7 +157,6 @@ private:
     
     // Acceleration tracking
     uint32_t setpointAcceleration;   // Target acceleration in steps/s²
-    uint32_t currentAcceleration;    // Actual acceleration (if measured separately, else same as setpoint)
     
     // Speed variation settings
     bool speedVariationEnabled;
@@ -231,10 +230,10 @@ private:
     void publishStatusUpdate(StatusUpdateType type, unsigned long value);
     
     // Centralized stepper hardware control methods (always publish status when hardware is changed)
-    void applyStepperSetpointSpeed(uint32_t stepsPerSecond);      // Set target speed
+    void applyStepperSpeed(uint32_t stepsPerSecond);      // Set target speed
+    void applyStepperSetpointSpeed(float rpm);            // Set target speed in RPM and publish setpoint update
     void updateCurrentRPM();                                      // Update actual/measured RPM
-    void applyStepperSetpointAcceleration(uint32_t accelerationStepsPerSec2); // Set target acceleration
-    void updateCurrentAcceleration();                             // Update actual/measured acceleration
+    void applyStepperAcceleration(uint32_t accelerationStepsPerSec2); // Set target acceleration
     
     // Speed variation control
     void updateMotorSpeed();

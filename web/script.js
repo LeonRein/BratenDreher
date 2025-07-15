@@ -424,9 +424,10 @@ class Control {
 
 // Specialized control for speed with preset button management
 class SpeedControl extends Control {
-    constructor(element, valueElement, presetButtons, options = {}) {
+    constructor(element, valueElement, presetButtons, triangleElement, options = {}) {
         super(element, valueElement, options);
         this.presetButtons = presetButtons;
+        this.triangleElement = triangleElement;
         
         // Add preset buttons as additional elements
         if (this.presetButtons) {
@@ -435,8 +436,58 @@ class SpeedControl extends Control {
             });
         }
         
+        // Add triangle element as additional element (no state management applied)
+        if (this.triangleElement) {
+            this.addAdditionalElement(this.triangleElement, { 
+                applyOpacity: false, 
+                applyDisabled: false, 
+                applyColors: false, 
+                applyClasses: false 
+            });
+        }
+        
         // Update display state now that all elements are properly registered
         this.setDisplayState(this.displayState);
+    }
+
+    // Update triangle position based on current speed
+    updateTrianglePosition(currentSpeed) {
+        if (!this.triangleElement || !this.element) {
+            return;
+        }
+        
+        // Get slider properties
+        const slider = this.element;
+        const min = parseFloat(slider.min);
+        const max = parseFloat(slider.max);
+        
+        // Clamp current speed to slider range
+        const clampedSpeed = Math.max(min, Math.min(max, currentSpeed));
+        
+        // Calculate position as percentage
+        const percentage = (clampedSpeed - min) / (max - min);
+        
+        // Get slider width and calculate accurate track position
+        const sliderRect = slider.getBoundingClientRect();
+        const sliderStyle = getComputedStyle(slider);
+        
+        // Account for the actual track area (excluding browser-specific padding)
+        const trackPadding = 12; // Typical browser slider track padding
+        const trackWidth = sliderRect.width - (trackPadding * 2);
+        const position = percentage * trackWidth + trackPadding;
+        
+        // Position the triangle (note: CSS already handles centering with left: -8px)
+        this.triangleElement.style.left = `${position}px`;
+        
+        // Show the triangle with a fade-in effect
+        this.triangleElement.classList.add('visible');
+    }
+
+    // Hide triangle (called during disconnection or emergency stop)
+    hideTriangle() {
+        if (this.triangleElement) {
+            this.triangleElement.classList.remove('visible');
+        }
     }
 
     handleStatusUpdate(statusUpdate) {
@@ -473,12 +524,8 @@ class SpeedControl extends Control {
                 currentSpeedElement.style.opacity = '1';
             }
             
-            // Update the current speed indicator under the slider
-            const currentSpeedIndicator = this.parent.currentSpeedIndicator;
-            if (currentSpeedIndicator) {
-                currentSpeedIndicator.textContent = `${statusUpdate.currentSpeed.toFixed(1)} RPM`;
-                currentSpeedIndicator.style.opacity = '1';
-            }
+            // Update the triangle indicator position (no redundant text display)
+            this.updateTrianglePosition(statusUpdate.currentSpeed);
         }
     }
 }
@@ -903,6 +950,7 @@ class BratenDreherBLE {
         this.speedSlider = document.getElementById('speedSlider');
         this.speedValue = document.getElementById('speedValue');
         this.currentSpeedIndicator = document.getElementById('currentSpeedIndicator');
+        this.currentSpeedTriangle = document.getElementById('currentSpeedTriangle');
         this.clockwiseBtn = document.getElementById('clockwiseBtn');
         this.counterclockwiseBtn = document.getElementById('counterclockwiseBtn');
         this.emergencyStopBtn = document.getElementById('emergencyStopBtn');
@@ -1371,6 +1419,12 @@ class BratenDreherBLE {
             motorControl.setDisplayState('OUTDATED');
         }
         
+        // Hide speed triangle during emergency stop
+        const speedControl = this.controls.get('speed');
+        if (speedControl && speedControl.hideTriangle) {
+            speedControl.hideTriangle();
+        }
+        
         await this.setMotorEnabled(false);
         
         // Visual feedback
@@ -1513,6 +1567,14 @@ class BratenDreherBLE {
                 btn.classList.remove('disabled');
             }
         });
+        
+        // Hide triangle indicator when disconnected
+        if (!this.connected) {
+            const speedControl = this.controls.get('speed');
+            if (speedControl && speedControl.hideTriangle) {
+                speedControl.hideTriangle();
+            }
+        }
     }
     
     showError(message) {
@@ -1627,7 +1689,6 @@ class BratenDreherBLE {
         // Initialize status display elements that aren't controlled by specific controls
         const statusElements = [
             this.currentSpeed,
-            this.currentSpeedIndicator,
             this.lastUpdate
         ];
         
@@ -1642,6 +1703,7 @@ class BratenDreherBLE {
             this.speedSlider,
             this.speedValue,
             this.presetBtns,
+            this.currentSpeedTriangle,
             {
                 commandType: 'speed',
                 statusKey: 'speed',

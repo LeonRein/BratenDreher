@@ -58,16 +58,17 @@
                 <label class="control-label" for="speedSlider">
                     Speed: <span id="speedValue">1.0</span> RPM
                 </label>
-                <input type="range" 
-                       id="speedSlider" 
-                       class="speed-slider"
-                       min="0.1" 
-                       max="30" 
-                       step="0.1" 
-                       value="1.0">
-                <div class="current-speed-indicator">
-                    <span class="current-speed-label">Current:</span>
-                    <span id="currentSpeedIndicator" class="current-speed-value">0.0 RPM</span>
+                <div class="speed-slider-container">
+                    <input type="range" 
+                           id="speedSlider" 
+                           class="speed-slider"
+                           min="0.1" 
+                           max="30" 
+                           step="0.1" 
+                           value="1.0">
+                    <div class="current-speed-triangle" id="currentSpeedTriangle">
+                        <div class="triangle-indicator"></div>
+                    </div>
                 </div>
                 <div class="speed-presets">
                     <button class="preset-btn" data-speed="0.5">Very Slow</button>
