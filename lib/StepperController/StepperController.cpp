@@ -1,3 +1,27 @@
+// Centralized stepper hardware control methods
+void StepperController::applyStepperSpeed(uint32_t stepsPerSecond) {
+    if (!stepper) {
+        Serial.println("WARNING: Cannot apply speed - stepper not initialized");
+        return;
+    }
+    // Calculate and set canonical RPM value
+    currentSpeedRPM = (static_cast<float>(stepsPerSecond) * 60.0f) /
+        (static_cast<float>(GEAR_RATIO) * static_cast<float>(STEPS_PER_REVOLUTION) * static_cast<float>(MICRO_STEPS));
+    stepper->setSpeedInHz(stepsPerSecond);
+    stepper->applySpeedAcceleration();
+    publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
+}
+
+void StepperController::applyStepperAcceleration(uint32_t accelerationStepsPerSec2) {
+    if (!stepper) {
+        Serial.println("WARNING: Cannot apply acceleration - stepper not initialized");
+        return;
+    }
+    stepper->setAcceleration(accelerationStepsPerSec2);
+    currentAcceleration = accelerationStepsPerSec2;
+    stepper->applySpeedAcceleration();
+    publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, accelerationStepsPerSec2);
+}
 #include "StepperController.h"
 
 StepperController::StepperController() 
@@ -111,8 +135,7 @@ bool StepperController::begin() {
     // Calculate: 30 RPM * 10 gear ratio * 200 steps * 16 microsteps / 60 seconds = 16000 steps/s
     // Acceleration for 2 seconds: 16000 / 2 = 8000 steps/s²
     uint32_t defaultAcceleration = rpmToStepsPerSecond(MAX_SPEED_RPM) / 2;  // 2 seconds to reach max speed
-    stepper->setAcceleration(defaultAcceleration);
-    currentAcceleration = defaultAcceleration;  // Track the set acceleration
+    applyStepperAcceleration(defaultAcceleration);
     
     // Note: Acceleration status update will be sent in batch with other initial updates
     
@@ -539,12 +562,8 @@ void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
         return;
     }
     
-    currentSpeedRPM = rpm;
     const uint32_t stepsPerSecond = rpmToStepsPerSecond(rpm);
-    
-    // Set speed and apply it with acceleration
-    stepper->setSpeedInHz(stepsPerSecond);
-    stepper->applySpeedAcceleration();
+    applyStepperSpeed(stepsPerSecond);
     
     // If variable speed is enabled, recalculate acceleration for new base speed
     if (speedVariationEnabled) {
@@ -717,15 +736,8 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
         return;
     }
     
-    // Set the acceleration on FastAccelStepper
-    stepper->setAcceleration(accelerationStepsPerSec2);
-    currentAcceleration = accelerationStepsPerSec2;  // Track the set acceleration
-    stepper->applySpeedAcceleration();
-    
+    applyStepperAcceleration(accelerationStepsPerSec2);
     Serial.printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
-    
-    // Publish status update for acceleration change
-    publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, accelerationStepsPerSec2);
     // Success is indicated by the status update - no notification needed
 }
 
@@ -811,8 +823,8 @@ void StepperController::saveSettings() {
         preferences.putBool("clockwise", clockwise);
         preferences.putInt("microsteps", MICRO_STEPS);
         preferences.putInt("current", runCurrent);
+        preferences.putUInt("acceleration", currentAcceleration);
         preferences.end();
-        
         Serial.println("Settings saved to flash");
     } else {
         Serial.println("Failed to open preferences for saving");
@@ -826,10 +838,10 @@ void StepperController::loadSettings() {
         // microSteps is now a define, just read the value for compatibility but don't use it
         preferences.getInt("microsteps", MICRO_STEPS);
         runCurrent = preferences.getInt("current", runCurrent);
+        currentAcceleration = preferences.getUInt("acceleration", currentAcceleration);
         preferences.end();
-        
-        Serial.printf("Settings loaded from flash: %.2f RPM, %s, %d microsteps, %d%% current\n",
-                      currentSpeedRPM, clockwise ? "CW" : "CCW", MICRO_STEPS, runCurrent);
+        Serial.printf("Settings loaded from flash: %.2f RPM, %s, %d microsteps, %d%% current, %u accel\n",
+                      currentSpeedRPM, clockwise ? "CW" : "CCW", MICRO_STEPS, runCurrent, currentAcceleration);
     } else {
         Serial.println("Failed to open preferences for loading, using defaults");
         // Default values are already set in constructor
@@ -1064,11 +1076,7 @@ void StepperController::disableSpeedVariationInternal(uint32_t commandId) {
     // Always reset to base speed when disabling variation, regardless of motor state
     // The stepper library will handle the case when motor is disabled
     uint32_t baseStepsPerSecond = rpmToStepsPerSecond(currentSpeedRPM);
-    stepper->setSpeedInHz(baseStepsPerSecond);
-    stepper->applySpeedAcceleration();
-    
-    // Always publish status update for speed change back to base speed
-    publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
+    applyStepperSpeed(baseStepsPerSecond);
     
     Serial.println("Speed variation disabled, returned to constant speed");
     Serial.println("Note: Acceleration remains at current setting for normal operation");
@@ -1211,15 +1219,8 @@ void StepperController::updateAccelerationForVariableSpeed() {
     
     // Only update acceleration if the current setting is too small for variable speed operation
     if (requiredAcceleration > currentAcceleration) {
-        stepper->setAcceleration(requiredAcceleration);
-        currentAcceleration = requiredAcceleration;  // Track the set acceleration
-        stepper->applySpeedAcceleration();
-        
-        // Publish status update only when acceleration actually changed
-        publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, requiredAcceleration);
-        
-        Serial.printf("Acceleration increased from %u to %u steps/s² for variable speed operation\n", 
-                      currentAcceleration, requiredAcceleration);
+        applyStepperAcceleration(requiredAcceleration);
+        Serial.printf("Acceleration increased to %u steps/s² for variable speed operation\n", requiredAcceleration);
     }
 }
 
@@ -1233,8 +1234,7 @@ void StepperController::updateMotorSpeed() {
     
     // Apply the new speed
     uint32_t stepsPerSecond = rpmToStepsPerSecond(currentVariableSpeed);
-    stepper->setSpeedInHz(stepsPerSecond);
-    stepper->applySpeedAcceleration();
+    applyStepperSpeed(stepsPerSecond);
 }
 
 void StepperController::updateSpeedForVariableSpeed() {
@@ -1248,18 +1248,9 @@ void StepperController::updateSpeedForVariableSpeed() {
     // Only update if current speed exceeds the maximum allowed
     if (currentSpeedRPM > maxAllowedBaseSpeed) {
         float oldSpeed = currentSpeedRPM;
-        currentSpeedRPM = maxAllowedBaseSpeed;
-        
-        Serial.printf("Base speed reduced from %.2f to %.2f RPM to prevent exceeding max speed with modulation\n", 
-                      oldSpeed, currentSpeedRPM);
-        
-        // Update stepper speed only when currentSpeedRPM actually changed
-        uint32_t stepsPerSecond = rpmToStepsPerSecond(currentSpeedRPM);
-        stepper->setSpeedInHz(stepsPerSecond);
-        stepper->applySpeedAcceleration();
-        
-        // Publish status update only when speed actually changed
-        publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentSpeedRPM);
+        uint32_t stepsPerSecond = rpmToStepsPerSecond(maxAllowedBaseSpeed);
+        applyStepperSpeed(stepsPerSecond);
+        Serial.printf("Base speed reduced from %.2f to %.2f RPM to prevent exceeding max speed with modulation\n", oldSpeed, currentSpeedRPM);
     }
 }
 

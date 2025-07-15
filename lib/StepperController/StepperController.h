@@ -247,6 +247,10 @@ private:
         return (nextCommandId == UINT32_MAX) ? (nextCommandId = 1) : ++nextCommandId;
     }
     
+    // Centralized stepper hardware control methods (always publish status when hardware is changed)
+    void applyStepperSpeed(uint32_t stepsPerSecond);
+    void applyStepperAcceleration(uint32_t accelerationStepsPerSec2);
+    
     // Speed variation control
     void updateMotorSpeed();
 
