@@ -166,26 +166,6 @@ class Control {
         // Apply value transformation
         let transformedValue = this.options.valueTransform ? this.options.valueTransform(rawValue) : rawValue;
 
-        // Check for minimum acceleration (backend limit: 100 steps/s²) - only for acceleration controls
-        if (this.options.commandType === 'acceleration') {
-            const minAcceleration = 100;
-            if (transformedValue < minAcceleration) {
-                // Clamp to minimum
-                transformedValue = minAcceleration;
-                // Convert back to time for UI update
-                const minTime = this.parent.accelerationToTime(minAcceleration).toFixed(1);
-                if (this.valueElement) {
-                    this.valueElement.textContent = minTime;
-                }
-                if (this.element) {
-                    this.element.value = minTime;
-                }
-                if (this.parent && this.parent.showWarning) {
-                    this.parent.showWarning('Acceleration too low. Set to minimum allowed.');
-                }
-            }
-        }
-
         const success = await this.parent.sendCommand(this.options.commandType, transformedValue, this.options.additionalParams || {});
 
         if (success) {
@@ -320,14 +300,19 @@ class Control {
                 value = this.options.statusTransform(value);
             }
             
-            // Update UI element based on type
-            if (this.element && this.element.type === 'range') {
-                this.element.value = value;
-                if (this.valueElement) {
-                    this.valueElement.textContent = this.options.displayTransform(value);
+            // Update UI element based on type - basic handling only
+            if (this.element) {
+                if (this.element.type === 'range') {
+                    this.element.value = value;
+                } else if (this.element.type === 'checkbox') {
+                    this.element.checked = value;
                 }
-            } else if (this.element && this.element.type === 'checkbox') {
-                this.element.checked = value;
+            }
+            
+            // Update value display element if exists
+            if (this.valueElement) {
+                this.valueElement.textContent = this.options.displayTransform(value);
+                this.valueElement.style.opacity = '1.0'; // VALID state - data received
             }
             
             // Mark that we've received valid status
@@ -528,7 +513,7 @@ class SpeedControl extends Control {
             // Update the setpoint speed display in status section with adaptive coloring
             if (this.setpointSpeedElement) {
                 this.setpointSpeedElement.textContent = `${statusUpdate.speed.toFixed(1)} RPM`;
-                this.setpointSpeedElement.style.opacity = '1';
+                this.setpointSpeedElement.style.opacity = '1.0'; // VALID state - data received
                 // Color based on speed level
                 if (statusUpdate.speed === 0) {
                     this.setpointSpeedElement.style.color = '#1f2937'; // Black for stopped
@@ -552,7 +537,7 @@ class SpeedControl extends Control {
             // Update current speed display in status section with adaptive coloring
             if (this.currentSpeedElement) {
                 this.currentSpeedElement.textContent = `${statusUpdate.currentSpeed.toFixed(1)} RPM`;
-                this.currentSpeedElement.style.opacity = '1';
+                this.currentSpeedElement.style.opacity = '1.0'; // VALID state - data received
                 // Color based on speed level
                 if (statusUpdate.currentSpeed === 0) {
                     this.currentSpeedElement.style.color = '#1f2937'; // Black for stopped
@@ -567,6 +552,49 @@ class SpeedControl extends Control {
             
             // Update the triangle indicator position
             this.updateTrianglePosition(statusUpdate.currentSpeed);
+        }
+    }
+}
+
+// Specialized control for current with adaptive coloring
+class CurrentControl extends Control {
+    constructor(element, valueElement, currentDisplayElement, options = {}) {
+        super(element, valueElement, options);
+        this.currentDisplayElement = currentDisplayElement;
+        
+        // Add current display element as additional element
+        if (this.currentDisplayElement) {
+            this.addAdditionalElement(this.currentDisplayElement, { applyDisabled: false });
+        }
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        // Call parent to handle standard status key mapping
+        super.handleStatusUpdate(statusUpdate);
+        
+        // Add specialized handling for current display
+        if (statusUpdate.current !== undefined) {
+            // Set valid state since we received current data
+            this.setDisplayState(CONTROL_STATES.VALID);
+            
+            const current = statusUpdate.current;
+            
+            // Update the current display element with adaptive coloring
+            if (this.currentDisplayElement) {
+                this.currentDisplayElement.textContent = `${current}%`;
+                this.currentDisplayElement.style.opacity = '1.0'; // VALID state - data received
+                
+                // Add adaptive coloring based on current level
+                if (current <= 20) {
+                    this.currentDisplayElement.style.color = '#10b981'; // Green for low current
+                } else if (current <= 50) {
+                    this.currentDisplayElement.style.color = '#3b82f6'; // Blue for medium current
+                } else if (current <= 80) {
+                    this.currentDisplayElement.style.color = '#f59e0b'; // Orange for high current
+                } else {
+                    this.currentDisplayElement.style.color = '#8b5cf6'; // Purple for very high current (100% is normal operation)
+                }
+            }
         }
     }
 }
@@ -626,6 +654,7 @@ class DirectionControl extends Control {
             }
             if (this.currentDirectionElement) {
                 this.currentDirectionElement.textContent = clockwise ? 'Clockwise' : 'Counter-clockwise';
+                this.currentDirectionElement.style.opacity = '1.0'; // VALID state - data received
                 // Add adaptive coloring - blue for clockwise, purple for counter-clockwise
                 this.currentDirectionElement.style.color = clockwise ? '#3b82f6' : '#8b5cf6';
             }
@@ -655,6 +684,7 @@ class MotorStatusControl extends Control {
             const enabled = statusUpdate.enabled;
             // Update motor status (will be refined if running status is also provided)
             this.motorStatusElement.textContent = enabled ? 'Enabled' : 'Stopped';
+            this.motorStatusElement.style.opacity = '1.0'; // VALID state - data received
             // Add adaptive coloring
             this.motorStatusElement.style.color = enabled ? '#f59e0b' : '#1f2937'; // Orange for enabled, black for stopped
         }
@@ -667,6 +697,7 @@ class MotorStatusControl extends Control {
             const enabled = this.element.checked; // Get from UI state
             if (enabled) {
                 this.motorStatusElement.textContent = statusUpdate.running ? 'Running' : 'Enabled';
+                this.motorStatusElement.style.opacity = '1.0'; // VALID state - data received
                 // Add adaptive coloring - green for running, orange for enabled but not running
                 this.motorStatusElement.style.color = statusUpdate.running ? '#10b981' : '#f59e0b';
             }
@@ -694,6 +725,7 @@ class AccelerationControl extends Control {
             
             const accelerationTimeDisplay = this.parent.accelerationToTime(statusUpdate.acceleration).toFixed(1);
             this.currentAccelerationElement.textContent = `${accelerationTimeDisplay}s to max`;
+            this.currentAccelerationElement.style.opacity = '1.0'; // VALID state - data received
             
             // Add adaptive coloring based on acceleration time
             const time = parseFloat(accelerationTimeDisplay);
@@ -775,6 +807,7 @@ class VariableSpeedControl extends Control {
             this.updateVariableSpeedUI();
             
             this.variableSpeedStatus.textContent = enabled ? 'ON' : 'OFF';
+            this.variableSpeedStatus.style.opacity = '1.0'; // VALID state - data received
             this.variableSpeedStatus.style.color = enabled ? '#10b981' : '#1f2937';
         }
     }
@@ -806,6 +839,7 @@ class TMCStatusControl extends Control {
             this.setDisplayState('VALID');
             
             this.statusElement.textContent = statusUpdate.tmc2209Status ? 'OK' : 'Error';
+            this.statusElement.style.opacity = '1.0'; // VALID state - data received
             this.statusElement.style.color = statusUpdate.tmc2209Status ? '#10b981' : '#e74c3c';
         }
         
@@ -814,6 +848,7 @@ class TMCStatusControl extends Control {
             this.setDisplayState('VALID');
             
             this.stallStatusElement.textContent = statusUpdate.stallDetected ? 'STALL!' : 'OK';
+            this.stallStatusElement.style.opacity = '1.0'; // VALID state - data received
             this.stallStatusElement.style.color = statusUpdate.stallDetected ? '#e74c3c' : '#10b981';
             this.stallStatusElement.style.fontWeight = statusUpdate.stallDetected ? 'bold' : 'normal';
         }
@@ -823,6 +858,7 @@ class TMCStatusControl extends Control {
             this.setDisplayState('VALID');
             
             this.stallCountElement.textContent = statusUpdate.stallCount;
+            this.stallCountElement.style.opacity = '1.0'; // VALID state - data received
             this.stallCountElement.style.color = statusUpdate.stallCount > 0 ? '#f59e0b' : '#1f2937';
         }
     }
@@ -854,6 +890,7 @@ class StatisticsControl extends Control {
             this.setDisplayState('VALID');
             
             this.totalRevolutionsElement.textContent = statusUpdate.totalRevolutions.toFixed(3);
+            this.totalRevolutionsElement.style.opacity = '1.0'; // VALID state - data received
         }
         
         if (statusUpdate.runtime !== undefined) {
@@ -861,6 +898,7 @@ class StatisticsControl extends Control {
             this.setDisplayState('VALID');
             
             this.runTimeElement.textContent = this.formatTime(statusUpdate.runtime);
+            this.runTimeElement.style.opacity = '1.0'; // VALID state - data received
         }
         
         // Calculate average speed if we have both runtime and revolutions
@@ -879,8 +917,10 @@ class StatisticsControl extends Control {
             if (currentRuntime > 0 && currentRevolutions > 0) {
                 const avgSpeed = (currentRevolutions * 60) / currentRuntime; // RPM
                 this.avgSpeedElement.textContent = avgSpeed.toFixed(1);
+                this.avgSpeedElement.style.opacity = '1.0'; // VALID state - data received
             } else {
                 this.avgSpeedElement.textContent = '0.0';
+                this.avgSpeedElement.style.opacity = '1.0'; // VALID state - data received
             }
         }
     }
@@ -1390,6 +1430,16 @@ class BratenDreherBLE {
             this.variableSpeedControls.classList.add('disabled');
         }
     }
+
+    /**
+     * Sets a status element to VALID state (fully opaque) when valid data is received
+     * @param {HTMLElement} element - The status element to update
+     */
+    setStatusElementValid(element) {
+        if (element) {
+            element.style.opacity = '1.0'; // VALID state - fully opaque
+        }
+    }
     
     async resetStatistics() {
         // Set statistics control to outdated state
@@ -1503,7 +1553,7 @@ class BratenDreherBLE {
         
         // Update timestamp and make it fully visible since we're receiving data
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
-        this.lastUpdate.style.opacity = '1';
+        this.lastUpdate.style.opacity = '1.0'; // VALID state - data received
         
         // Update all controls using the unified handleStatusUpdate method
         this.controls.forEach(control => {
@@ -1725,16 +1775,27 @@ class BratenDreherBLE {
     }
 
     initializeControls() {
-        // Initialize status display elements that aren't controlled by specific controls
+        // Initialize ALL status display elements to OUTDATED state (0.7 opacity)
         const statusElements = [
+            this.motorStatus,
             this.setpointSpeed,
             this.currentSpeed,
-            this.lastUpdate
+            this.currentAcceleration,
+            this.currentDirection,
+            this.currentCurrent,
+            this.tmc2209Status,
+            this.stallStatus,
+            this.stallCount,
+            this.lastUpdate,
+            this.variableSpeedStatus,
+            this.totalRevolutions,
+            this.runTime,
+            this.avgSpeed
         ];
         
         statusElements.forEach(element => {
             if (element) {
-                element.style.opacity = '0.4'; // Initial disabled state
+                element.style.opacity = '0.7'; // Initial OUTDATED state - visible but indicating no data received
             }
         });
 
@@ -1754,10 +1815,11 @@ class BratenDreherBLE {
             }
         ));
 
-        // Current control
-        this.controls.set('current', new Control(
+        // Current control with display
+        this.controls.set('current', new CurrentControl(
             this.currentSlider,
             this.currentValue,
+            this.currentCurrent,
             {
                 commandType: 'current',
                 statusKey: 'current',
@@ -1766,7 +1828,7 @@ class BratenDreherBLE {
             }
         ));
 
-        // Acceleration time control with time conversion
+        // Acceleration time control with time conversion and validation
         this.controls.set('acceleration', new AccelerationControl(
             this.accelerationTimeSlider,
             this.accelerationTimeValue,
@@ -1775,7 +1837,32 @@ class BratenDreherBLE {
                 commandType: 'acceleration',
                 statusKey: null, // Handled specially in the control
                 displayTransform: (value) => Number(value).toFixed(1),
-                valueTransform: (value) => this.timeToAcceleration(parseInt(value))
+                valueTransform: (timeValue) => {
+                    // Convert time to acceleration (steps/s²)
+                    const acceleration = this.timeToAcceleration(parseInt(timeValue));
+                    
+                    // Apply minimum acceleration validation (backend limit: 100 steps/s²)
+                    const minAcceleration = 100;
+                    if (acceleration < minAcceleration) {
+                        // Update UI to show the clamped value
+                        const minTime = this.accelerationToTime(minAcceleration).toFixed(1);
+                        const control = this.controls.get('acceleration');
+                        if (control && control.valueElement) {
+                            control.valueElement.textContent = minTime;
+                        }
+                        if (control && control.element) {
+                            control.element.value = minTime;
+                        }
+                        
+                        // Show warning for user feedback
+                        if (this.showWarning) {
+                            this.showWarning('Acceleration too low. Set to minimum allowed.');
+                        }
+                        return minAcceleration;
+                    }
+                    
+                    return acceleration;
+                }
             }
         ));
 
@@ -1862,36 +1949,6 @@ class BratenDreherBLE {
             this.totalRevolutions,
             this.runTime,
             this.avgSpeed
-        ));
-
-        // Current display control (enhanced with adaptive coloring)
-        this.controls.set('currentDisplay', new Control(
-            null,
-            this.currentCurrent,
-            {
-                statusKey: 'current',
-                displayTransform: (value) => `${value}%`,
-                customHandler: (control, statusUpdate) => {
-                    if (statusUpdate.current !== undefined) {
-                        const current = statusUpdate.current;
-                        control.valueElement.textContent = `${current}%`;
-                        control.valueElement.style.opacity = '1';
-                        
-                        // Add adaptive coloring based on current level
-                        if (current <= 20) {
-                            control.valueElement.style.color = '#10b981'; // Green for low current
-                        } else if (current <= 50) {
-                            control.valueElement.style.color = '#3b82f6'; // Blue for medium current
-                        } else if (current <= 80) {
-                            control.valueElement.style.color = '#f59e0b'; // Orange for high current
-                        } else {
-                            control.valueElement.style.color = '#8b5cf6'; // Purple for very high current (100% is normal operation)
-                        }
-                        
-                        control.setDisplayState('VALID');
-                    }
-                }
-            }
         ));
 
         // Set parent reference and bind events for all controls
