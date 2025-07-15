@@ -2,8 +2,8 @@
 
 StepperController::StepperController() 
     : Task("Stepper_Task", 4096, 1, 1), // Task name, 4KB stack, priority 1, core 1
-      stepper(nullptr), serialStream(Serial2), currentSpeedRPM(1.0f), minSpeedRPM(0.1f), maxSpeedRPM(30.0f),
-      microSteps(16), runCurrent(30), motorEnabled(false), clockwise(true),  // Fixed to 16 microsteps
+      stepper(nullptr), serialStream(Serial2), currentSpeedRPM(1.0f),
+      runCurrent(30), motorEnabled(false), clockwise(true),
       startTime(0), totalSteps(0), isFirstStart(true), tmc2209Initialized(false),
       stallDetected(false), lastStallTime(0), stallCount(0),
       currentAcceleration(0),  // Will be set during initialization
@@ -49,20 +49,20 @@ bool StepperController::begin() {
     initPreferences();
     
     // Configure pins
-    pinMode(TMC_EN, OUTPUT);
-    pinMode(MS1, OUTPUT);
-    pinMode(MS2, OUTPUT);
-    pinMode(DIAG, INPUT);
+    pinMode(TMC_EN_PIN, OUTPUT);
+    pinMode(MS1_PIN, OUTPUT);
+    pinMode(MS2_PIN, OUTPUT);
+    pinMode(DIAG_PIN, INPUT);
     
     // Set serial address pins
-    digitalWrite(MS1, LOW);
-    digitalWrite(MS2, LOW);
+    digitalWrite(MS1_PIN, LOW);
+    digitalWrite(MS2_PIN, LOW);
     
     // Enable driver (will be controlled via FastAccelStepper)
-    digitalWrite(TMC_EN, LOW);
+    digitalWrite(TMC_EN_PIN, LOW);
     
     // Initialize TMC2209
-    stepperDriver.setup(serialStream, 115200, TMC2209::SERIAL_ADDRESS_0, TMC_RX, TMC_TX);
+    stepperDriver.setup(serialStream, 115200, TMC2209::SERIAL_ADDRESS_0, TMC_RX_PIN, TMC_TX_PIN);
     
     // Load saved settings
     loadSettings();
@@ -107,10 +107,10 @@ bool StepperController::begin() {
     
     // Set acceleration (steps/s²) - optimized for variable speed operation
     // For variable speed to work smoothly, we need fast acceleration
-    // Target: reach 30 RPM in 2 seconds for responsive speed changes
+    // Target: reach MAX_SPEED_RPM in 2 seconds for responsive speed changes
     // Calculate: 30 RPM * 10 gear ratio * 200 steps * 16 microsteps / 60 seconds = 16000 steps/s
     // Acceleration for 2 seconds: 16000 / 2 = 8000 steps/s²
-    uint32_t defaultAcceleration = rpmToStepsPerSecond(30.0f) / 2;  // 2 seconds to reach max speed
+    uint32_t defaultAcceleration = rpmToStepsPerSecond(MAX_SPEED_RPM) / 2;  // 2 seconds to reach max speed
     stepper->setAcceleration(defaultAcceleration);
     currentAcceleration = defaultAcceleration;  // Track the set acceleration
     
@@ -172,8 +172,8 @@ bool StepperController::begin() {
     if (tmc2209Initialized) {
         Serial.println("FastAccelStepper with TMC2209 initialized successfully");
         Serial.printf("Steps per output revolution: %d\n", TOTAL_STEPS_PER_REVOLUTION);
-        Serial.printf("Speed range: %.1f - %.1f RPM\n", minSpeedRPM, maxSpeedRPM);
-        Serial.printf("Microsteps: %d, Run current: %d%%\n", microSteps, runCurrent);
+        Serial.printf("Speed range: %.1f - %.1f RPM\n", MIN_SPEED_RPM, MAX_SPEED_RPM);
+        Serial.printf("Microsteps: %d, Run current: %d%%\n", MICRO_STEPS, runCurrent);
     } else {
         Serial.println("WARNING: FastAccelStepper initialized but TMC2209 driver not responding");
         Serial.println("Check TMC2209 wiring and power supply");
@@ -191,7 +191,7 @@ bool StepperController::initPreferences() {
             Serial.println("Fresh preferences namespace, writing defaults");
             preferences.putFloat("speed", currentSpeedRPM);
             preferences.putBool("clockwise", clockwise);
-            preferences.putInt("microsteps", microSteps);
+            preferences.putInt("microsteps", MICRO_STEPS);
             preferences.putInt("current", runCurrent);
         }
         preferences.end();
@@ -205,7 +205,7 @@ bool StepperController::initPreferences() {
 
 void StepperController::configureDriver() {
     stepperDriver.setRunCurrent(runCurrent);
-    stepperDriver.setMicrostepsPerStep(microSteps);
+    stepperDriver.setMicrostepsPerStep(MICRO_STEPS);
     stepperDriver.enableAutomaticCurrentScaling();
     
     // Note: StallGuard typically requires SpreadCycle mode (not StealthChop)
@@ -232,7 +232,7 @@ void StepperController::configureDriver() {
     
     // Check if driver is communicating properly
     if (tmc2209Initialized) {
-        Serial.printf("TMC2209 configured: %d microsteps, %d%% current, StallGuard threshold: 10\n", microSteps, runCurrent);
+        Serial.printf("TMC2209 configured: %d microsteps, %d%% current, StallGuard threshold: 10\n", MICRO_STEPS, runCurrent);
         Serial.println("Note: StallGuard may require disabling StealthChop for optimal detection");
     } else {
         Serial.println("WARNING: TMC2209 driver not responding during configuration");
@@ -302,7 +302,7 @@ uint32_t StepperController::rpmToStepsPerSecond(float rpm) const {
     // Calculate steps per second for the motor (before gear reduction)
     // Final RPM * gear ratio = motor RPM
     float motorRPM = rpm * GEAR_RATIO;
-    float motorStepsPerSecond = (motorRPM * STEPS_PER_REVOLUTION * microSteps) / 60.0f;
+    float motorStepsPerSecond = (motorRPM * STEPS_PER_REVOLUTION * MICRO_STEPS) / 60.0f;
     return static_cast<uint32_t>(motorStepsPerSecond);
 }
 
@@ -391,7 +391,7 @@ void StepperController::publishPeriodicStatusUpdates() {
     
     // Collect position and runtime data
     if (stepper) {
-        totalRevolutions = static_cast<float>(stepper->getCurrentPosition()) / (STEPS_PER_REVOLUTION * microSteps * GEAR_RATIO);
+        totalRevolutions = static_cast<float>(stepper->getCurrentPosition()) / (STEPS_PER_REVOLUTION * MICRO_STEPS * GEAR_RATIO);
         isRunning = stepper->isRunning() && motorEnabled;
     }
     
@@ -407,7 +407,7 @@ void StepperController::publishPeriodicStatusUpdates() {
     }
     
     // Update stall detection state (moved from checkAndUpdateStallStatus)
-    bool diagPinHigh = digitalRead(DIAG);
+    bool diagPinHigh = digitalRead(DIAG_PIN);
     bool motorIsRunning = (stepper && stepper->isRunning());
     
     // DIAG pin goes high when StallGuard triggers (motor stalled)
@@ -543,9 +543,9 @@ void StepperController::resetStallCountInternal(uint32_t commandId) {
 
 void StepperController::setSpeedInternal(float rpm, uint32_t commandId) {
     // Validate input
-    if (rpm < minSpeedRPM || rpm > maxSpeedRPM) {
-        reportResult(commandId, CommandResult::INVALID_PARAMETER, 
-                    "Speed out of range (" + String(minSpeedRPM) + "-" + String(maxSpeedRPM) + " RPM)");
+    if (rpm < MIN_SPEED_RPM || rpm > MAX_SPEED_RPM) {
+        reportResult(commandId, CommandResult::INVALID_PARAMETER,
+                    "Speed out of range (" + String(MIN_SPEED_RPM) + "-" + String(MAX_SPEED_RPM) + " RPM)");
         return;
     }
     
@@ -806,7 +806,7 @@ void StepperController::saveSettings() {
     if (preferences.begin("stepper", false)) {
         preferences.putFloat("speed", currentSpeedRPM);
         preferences.putBool("clockwise", clockwise);
-        preferences.putInt("microsteps", microSteps);
+        preferences.putInt("microsteps", MICRO_STEPS);
         preferences.putInt("current", runCurrent);
         preferences.end();
         
@@ -820,12 +820,13 @@ void StepperController::loadSettings() {
     if (preferences.begin("stepper", true)) {
         currentSpeedRPM = preferences.getFloat("speed", currentSpeedRPM);
         clockwise = preferences.getBool("clockwise", clockwise);
-        microSteps = preferences.getInt("microsteps", microSteps);
+        // microSteps is now a define, just read the value for compatibility but don't use it
+        preferences.getInt("microsteps", MICRO_STEPS);
         runCurrent = preferences.getInt("current", runCurrent);
         preferences.end();
         
         Serial.printf("Settings loaded from flash: %.2f RPM, %s, %d microsteps, %d%% current\n",
-                      currentSpeedRPM, clockwise ? "CW" : "CCW", microSteps, runCurrent);
+                      currentSpeedRPM, clockwise ? "CW" : "CCW", MICRO_STEPS, runCurrent);
     } else {
         Serial.println("Failed to open preferences for loading, using defaults");
         // Default values are already set in constructor
@@ -1119,7 +1120,7 @@ float StepperController::calculateVariableSpeed() const {
     float variableSpeed = currentSpeedRPM * speedVariationK0 / denominator;
     
     // Ensure we don't go below minimum or above maximum speed
-    variableSpeed = constrain(variableSpeed, minSpeedRPM, maxSpeedRPM);
+    variableSpeed = constrain(variableSpeed, MIN_SPEED_RPM, MAX_SPEED_RPM);
     
     return variableSpeed;
 }
@@ -1132,8 +1133,8 @@ float StepperController::getPositionAngle() const {
     int32_t relativePosition = currentPosition - speedVariationStartPosition;
     
     // Convert position to angle in one full output revolution
-    // One full output revolution = TOTAL_STEPS_PER_REVOLUTION * microSteps
-    int32_t stepsPerOutputRevolution = TOTAL_STEPS_PER_REVOLUTION * microSteps;
+    // One full output revolution = TOTAL_STEPS_PER_REVOLUTION * MICRO_STEPS
+    int32_t stepsPerOutputRevolution = TOTAL_STEPS_PER_REVOLUTION * MICRO_STEPS;
     
     // Calculate angle (0 to 2π for one complete revolution)
     float angle = (2.0f * PI * relativePosition) / stepsPerOutputRevolution;
@@ -1156,8 +1157,8 @@ uint32_t StepperController::calculateRequiredAccelerationForVariableSpeed() cons
     float maxSpeed = currentSpeedRPM * speedVariationK0 / (1.0f - speedVariationK);
     
     // Constrain to motor limits
-    minSpeed = constrain(minSpeed, minSpeedRPM, maxSpeedRPM);
-    maxSpeed = constrain(maxSpeed, minSpeedRPM, maxSpeedRPM);
+    minSpeed = constrain(minSpeed, MIN_SPEED_RPM, MAX_SPEED_RPM);
+    maxSpeed = constrain(maxSpeed, MIN_SPEED_RPM, MAX_SPEED_RPM);
     
     // Calculate the maximum speed change
     float maxSpeedChange = maxSpeed - minSpeed;

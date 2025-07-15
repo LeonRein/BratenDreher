@@ -9,6 +9,35 @@
 #include <freertos/queue.h>
 #include "Task.h"
 
+// Hardware pin definitions (from PD-Stepper example)
+#define TMC_EN_PIN          21
+#define STEP_PIN            5
+#define DIR_PIN             6
+#define MS1_PIN             1
+#define MS2_PIN             2
+#define TMC_TX_PIN          17
+#define TMC_RX_PIN          18
+#define DIAG_PIN            16
+
+// Motor specifications
+#define STEPS_PER_REVOLUTION        200    // NEMA 17
+#define GEAR_RATIO                  10     // 1:10 reduction
+#define TOTAL_STEPS_PER_REVOLUTION  (STEPS_PER_REVOLUTION * GEAR_RATIO)
+#define MICRO_STEPS                 16     // Fixed at 16 microsteps
+
+// Speed settings (in RPM)
+#define MIN_SPEED_RPM               0.1f   // Minimum speed
+#define MAX_SPEED_RPM               30.0f  // Maximum speed (0.5 RPS after gear reduction)
+
+// Timing configuration
+#define STATUS_UPDATE_INTERVAL      500    // Status update every 500ms
+#define MOTOR_SPEED_UPDATE_INTERVAL 50     // Speed update every 50ms for smooth variation
+
+// Queue size configuration
+#define COMMAND_QUEUE_SIZE          20     // Command queue size
+#define RESULT_QUEUE_SIZE           20     // Result queue size  
+#define STATUS_UPDATE_QUEUE_SIZE    30     // Status update queue size
+
 // Command types for inter-task communication
 enum class StepperCommand {
     SET_SPEED,
@@ -137,30 +166,8 @@ private:
     HardwareSerial& serialStream;
     Preferences preferences;
     
-    // Hardware pins (from PD-Stepper example)
-    static const uint8_t TMC_EN = 21;
-    static const uint8_t STEP_PIN = 5;
-    static const uint8_t DIR_PIN = 6;
-    static const uint8_t MS1 = 1;
-    static const uint8_t MS2 = 2;
-    static const uint8_t TMC_TX = 17;
-    static const uint8_t TMC_RX = 18;
-    static const uint8_t DIAG = 16;
-    
-    // Motor specifications
-    static const int STEPS_PER_REVOLUTION = 200;  // NEMA 17
-    static const int GEAR_RATIO = 10;             // 1:10 reduction
-    static const int TOTAL_STEPS_PER_REVOLUTION = STEPS_PER_REVOLUTION * GEAR_RATIO;
-    
-    // Timing configuration
-    static const unsigned long STATUS_UPDATE_INTERVAL = 500;        // Status update every 500ms
-    static const unsigned long MOTOR_SPEED_UPDATE_INTERVAL = 50;    // Speed update every 50ms for smooth variation
-    
-    // Speed settings (in RPM) - max 30 RPM for the final output (0.5 RPS)
+    // Speed settings (in RPM)
     float currentSpeedRPM;
-    float minSpeedRPM;
-    float maxSpeedRPM;
-    int microSteps;          // Fixed at 16 - no longer user configurable
     int runCurrent;
     
     // Acceleration tracking
@@ -189,16 +196,13 @@ private:
     
     // Command queue for thread-safe operation
     QueueHandle_t commandQueue;
-    static const size_t COMMAND_QUEUE_SIZE = 20;
     
     // Result queue for command status reporting
     QueueHandle_t resultQueue;
-    static const size_t RESULT_QUEUE_SIZE = 20;
     uint32_t nextCommandId;
     
     // Status update queue for thread-safe status communication
     QueueHandle_t statusUpdateQueue;
-    static const size_t STATUS_UPDATE_QUEUE_SIZE = 30;
     
     // Helper methods
     bool initPreferences();
