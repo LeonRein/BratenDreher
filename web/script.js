@@ -163,9 +163,28 @@ class Control {
         // Store the command value for potential retry
         this.lastCommandValue = rawValue;
 
-        const transformedValue = this.options.valueTransform(rawValue);
+        // Check for minimum acceleration (backend limit: 100 steps/s²)
+        // We must convert the UI value (seconds) to acceleration (steps/s²)
+        const minAcceleration = 100;
+        let transformedValue = this.options.valueTransform(rawValue);
+        if (transformedValue < minAcceleration) {
+            // Clamp to minimum
+            transformedValue = minAcceleration;
+            // Convert back to time for UI update
+            const minTime = this.parent.accelerationToTime(minAcceleration).toFixed(1);
+            if (this.valueElement) {
+                this.valueElement.textContent = minTime;
+            }
+            if (this.element) {
+                this.element.value = minTime;
+            }
+            if (this.parent && this.parent.showWarning) {
+                this.parent.showWarning('Acceleration too low. Set to minimum allowed.');
+            }
+        }
+
         const success = await this.parent.sendCommand(this.options.commandType, transformedValue, this.options.additionalParams || {});
-        
+
         if (success) {
             // Start timeout timer to detect lost status updates
             this.timeoutTimer = setTimeout(() => {
@@ -174,7 +193,7 @@ class Control {
                 this.handleCommandTimeout();
             }, this.options.commandTimeout);
         }
-        
+
         return success;
     }
 
@@ -561,11 +580,11 @@ class AccelerationControl extends Control {
             this.currentAccelerationElement.textContent = `${accelerationTimeDisplay}s to max`;
             
             // Update acceleration slider if significantly different
-            const currentSliderTime = parseInt(this.element.value);
-            const deviceTime = Math.round(this.parent.accelerationToTime(statusUpdate.acceleration));
-            if (Math.abs(currentSliderTime - deviceTime) > 1) {
+            const currentSliderTime = parseFloat(this.element.value);
+            const deviceTime = parseFloat(this.parent.accelerationToTime(statusUpdate.acceleration).toFixed(1));
+            if (Math.abs(currentSliderTime - deviceTime) > 0.05) {
                 this.element.value = deviceTime;
-                this.valueElement.textContent = deviceTime;
+                this.valueElement.textContent = deviceTime.toFixed(1);
             }
         }
     }
@@ -1631,7 +1650,7 @@ class BratenDreherBLE {
             {
                 commandType: 'acceleration',
                 statusKey: null, // Handled specially in the control
-                displayTransform: (value) => value.toString(),
+                displayTransform: (value) => Number(value).toFixed(1),
                 valueTransform: (value) => this.timeToAcceleration(parseInt(value))
             }
         ));

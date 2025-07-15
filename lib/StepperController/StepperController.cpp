@@ -725,23 +725,45 @@ void StepperController::setRunCurrentInternal(int current, uint32_t commandId) {
 }
 
 void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec2, uint32_t commandId) {
+    // Store original requested acceleration for potential warning message
+    const uint32_t originalRequestedAccel = accelerationStepsPerSec2;
+    bool accelWasAdjusted = false;
+
     if (!stepper) {
         publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, currentAcceleration);
         sendNotification(commandId, NotificationType::ERROR, "Stepper not initialized");
         return;
     }
-    
-    // Validate acceleration range (reasonable limits to prevent excessive values)
-    if (accelerationStepsPerSec2 < 100 || accelerationStepsPerSec2 > 100000) {
-        publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, currentAcceleration);
-        sendNotification(commandId, NotificationType::ERROR, 
-                    "Acceleration out of range (100-100000 steps/s²)");
-        return;
+
+    // Clamp acceleration to allowed range
+    if (accelerationStepsPerSec2 < 100) {
+        accelerationStepsPerSec2 = 100;
+        accelWasAdjusted = true;
+    } else if (accelerationStepsPerSec2 > 100000) {
+        accelerationStepsPerSec2 = 100000;
+        accelWasAdjusted = true;
     }
-    
+
     applyStepperAcceleration(accelerationStepsPerSec2);
     Serial.printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
-    // Success is indicated by the status update - no notification needed
+
+    // Save settings only if not during initialization (commandId != 0)
+    if (commandId != 0) {
+        saveSettings();
+    }
+
+    // Publish status update for acceleration change
+    publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, accelerationStepsPerSec2);
+
+    // Report warning if acceleration was adjusted (use efficient string building)
+    if (accelWasAdjusted && commandId != 0) {
+        char warningMsg[120];
+        snprintf(warningMsg, sizeof(warningMsg),
+                "Acceleration auto-adjusted from %u to %u steps/s² (allowed range: 100-100000)",
+                originalRequestedAccel, accelerationStepsPerSec2);
+        sendNotification(commandId, NotificationType::WARNING, String(warningMsg));
+    }
+    // Success is indicated by the status update - no notification needed for normal success
 }
 
 void StepperController::sendNotification(uint32_t commandId, NotificationType type, const String& message) {
