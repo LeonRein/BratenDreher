@@ -402,7 +402,7 @@ void StepperController::publishPeriodicStatusUpdates() {
     if (statusUpdateQueue == nullptr) return;
     
     // Pre-allocate status update array for batch processing
-    StatusUpdateData updates[6];  // Maximum 6 updates per cycle
+    StatusUpdateData updates[7];  // Maximum 7 updates per cycle (added current speed)
     uint8_t updateCount = 0;
     
     // Collect all status data in one pass to minimize function calls
@@ -417,6 +417,11 @@ void StepperController::publishPeriodicStatusUpdates() {
         float stepsPerOutputRev = static_cast<float>(STEPS_PER_REVOLUTION * MICRO_STEPS * GEAR_RATIO);
         totalRevolutions = static_cast<float>(currentPosition) / stepsPerOutputRev;
         motorIsRunning = stepper->isRunning();
+        
+        // Update current RPM from actual stepper speed
+        uint32_t currentStepsPerSecond = stepper->getCurrentSpeedInMilliHz() / 1000;
+        currentRPM = (static_cast<float>(currentStepsPerSecond) * 60.0f) /
+            (static_cast<float>(GEAR_RATIO) * static_cast<float>(STEPS_PER_REVOLUTION) * static_cast<float>(MICRO_STEPS));
     }
     
     // Calculate runtime once
@@ -456,6 +461,7 @@ void StepperController::publishPeriodicStatusUpdates() {
     updates[updateCount++] = StatusUpdateData(StatusUpdateType::RUNTIME_UPDATE, runtime);
     updates[updateCount++] = StatusUpdateData(StatusUpdateType::STALL_DETECTED_UPDATE, stallDetected);
     updates[updateCount++] = StatusUpdateData(StatusUpdateType::STALL_COUNT_UPDATE, static_cast<int>(stallCount));
+    updates[updateCount++] = StatusUpdateData(StatusUpdateType::SPEED_CHANGED, currentRPM);  // Add current speed
     
     // Batch send all updates (reduces queue operation overhead)
     for (uint8_t i = 0; i < updateCount; i++) {
@@ -1208,9 +1214,6 @@ void StepperController::updateMotorSpeed() {
     
     // Update current RPM for monitoring
     currentRPM = currentVariableSpeed;
-    
-    // Publish current speed update (this is the actual speed being applied)
-    publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentVariableSpeed);
 }
 
 void StepperController::updateSpeedForVariableSpeed() {
