@@ -13,6 +13,9 @@ void StepperController::applyStepperSetpointSpeed(uint32_t stepsPerSecond) {
     
     // Update the current RPM based on what was actually applied
     updateCurrentRPM();
+
+    // Publish current speed update (not setpoint change)
+    publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentRPM);
 }
 
 void StepperController::updateCurrentRPM() {
@@ -20,12 +23,23 @@ void StepperController::updateCurrentRPM() {
         return;
     }
     // Calculate current RPM from the stepper's actual speed
-    uint32_t currentStepsPerSecond = stepper->getCurrentSpeedInMilliHz() / 1000;
-    currentRPM = (static_cast<float>(currentStepsPerSecond) * 60.0f) /
+    int32_t speedMilliHz_signed = (int32_t)stepper->getCurrentSpeedInMilliHz(false);
+    uint32_t speedMilliHz_unsigned = (uint32_t)stepper->getCurrentSpeedInMilliHz(false);
+    float currentStepsPerSecond = speedMilliHz_signed / 1000.0f;
+
+    // Debug print for calculation
+    Serial.printf("[updateCurrentRPM] getCurrentSpeedInMilliHz: %ld (signed), %lu (unsigned), steps/s: %.3f\n", (long)speedMilliHz_signed, (unsigned long)speedMilliHz_unsigned, currentStepsPerSecond);
+    Serial.printf("[updateCurrentRPM] GEAR_RATIO: %d, STEPS_PER_REVOLUTION: %d, MICRO_STEPS: %d\n", GEAR_RATIO, STEPS_PER_REVOLUTION, MICRO_STEPS);
+
+    // Safety check: if speed is negative or unreasonably large, treat as 0
+    if (speedMilliHz_signed < 0 || speedMilliHz_unsigned > 1000000UL * 1000UL) {
+        currentStepsPerSecond = 0.0f;
+        Serial.println("[updateCurrentRPM] Speed value invalid, set steps/s to 0");
+    }
+
+    currentRPM = (currentStepsPerSecond * 60.0f) /
         (static_cast<float>(GEAR_RATIO) * static_cast<float>(STEPS_PER_REVOLUTION) * static_cast<float>(MICRO_STEPS));
-    
-    // Publish current speed update (not setpoint change)
-    publishStatusUpdate(StatusUpdateType::SPEED_CHANGED, currentRPM);
+    Serial.printf("[updateCurrentRPM] Calculated RPM: %.6f\n", currentRPM);
 }
 
 void StepperController::applyStepperSetpointAcceleration(uint32_t accelerationStepsPerSec2) {

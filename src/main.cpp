@@ -16,11 +16,11 @@ void setup() {
     // Initialize USB CDC for ESP32-S3
     Serial.begin(115200);
     
-    // Wait for USB CDC connection (ESP32-S3 specific)
-    unsigned long startTime = millis();
-    while (!Serial && (millis() - startTime < 1000)) {
-        delay(100);
-    }
+    // // Wait for USB CDC connection (ESP32-S3 specific)
+    // unsigned long startTime = millis();
+    // while (!Serial && (millis() - startTime < 1000)) {
+    //     delay(100);
+    // }
     
     Serial.println();
     Serial.println("=== BratenDreher Stepper Control ===");
