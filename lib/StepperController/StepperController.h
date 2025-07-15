@@ -90,7 +90,6 @@ struct StepperCommandData {
         bool boolValue;      // for direction, enable/disable
         int intValue;        // for microsteps, current
     };
-    // commandId removed
 };
 
 // Notification structure (for warnings and errors only)
@@ -148,6 +147,7 @@ struct StatusUpdateData {
 
 class StepperController : public Task {
 private:
+    bool isInitializing; // True during construction/initialization, false otherwise
     // FastAccelStepper engine and stepper
     FastAccelStepperEngine engine;
     FastAccelStepper* stepper;
@@ -190,7 +190,6 @@ private:
     
     // Notification queue for warnings and errors only
     QueueHandle_t notificationQueue;
-    // nextCommandId removed
     
     // Status update queue for thread-safe status communication
     QueueHandle_t statusUpdateQueue;
@@ -235,9 +234,6 @@ private:
     void publishStatusUpdate(StatusUpdateType type, int value);
     void publishStatusUpdate(StatusUpdateType type, uint32_t value);
     void publishStatusUpdate(StatusUpdateType type, unsigned long value);
-    
-    // Utility method for command ID generation with overflow protection
-    // getNextCommandId removed
     
     // Centralized stepper hardware control methods (always publish status when hardware is changed)
     void applyStepperSpeed(uint32_t stepsPerSecond);
