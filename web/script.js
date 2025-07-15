@@ -163,23 +163,26 @@ class Control {
         // Store the command value for potential retry
         this.lastCommandValue = rawValue;
 
-        // Check for minimum acceleration (backend limit: 100 steps/s²)
-        // We must convert the UI value (seconds) to acceleration (steps/s²)
-        const minAcceleration = 100;
-        let transformedValue = this.options.valueTransform(rawValue);
-        if (transformedValue < minAcceleration) {
-            // Clamp to minimum
-            transformedValue = minAcceleration;
-            // Convert back to time for UI update
-            const minTime = this.parent.accelerationToTime(minAcceleration).toFixed(1);
-            if (this.valueElement) {
-                this.valueElement.textContent = minTime;
-            }
-            if (this.element) {
-                this.element.value = minTime;
-            }
-            if (this.parent && this.parent.showWarning) {
-                this.parent.showWarning('Acceleration too low. Set to minimum allowed.');
+        // Apply value transformation
+        let transformedValue = this.options.valueTransform ? this.options.valueTransform(rawValue) : rawValue;
+
+        // Check for minimum acceleration (backend limit: 100 steps/s²) - only for acceleration controls
+        if (this.options.commandType === 'acceleration') {
+            const minAcceleration = 100;
+            if (transformedValue < minAcceleration) {
+                // Clamp to minimum
+                transformedValue = minAcceleration;
+                // Convert back to time for UI update
+                const minTime = this.parent.accelerationToTime(minAcceleration).toFixed(1);
+                if (this.valueElement) {
+                    this.valueElement.textContent = minTime;
+                }
+                if (this.element) {
+                    this.element.value = minTime;
+                }
+                if (this.parent && this.parent.showWarning) {
+                    this.parent.showWarning('Acceleration too low. Set to minimum allowed.');
+                }
             }
         }
 
@@ -442,21 +445,33 @@ class SpeedControl extends Control {
         
         // Add specialized handling
         if (statusUpdate.speed !== undefined) {
-            // Set valid state since we received speed data
+            // Set valid state since we received speed setpoint data
             this.setDisplayState(CONTROL_STATES.VALID);
             
-            // Update current speed display
-            const currentSpeedElement = this.parent.currentSpeed;
-            if (currentSpeedElement) {
-                currentSpeedElement.textContent = `${statusUpdate.speed.toFixed(1)} RPM`;
-                currentSpeedElement.style.opacity = '1';
+            // Update the speed control (slider/input) with the setpoint
+            if (this.element) {
+                this.element.value = statusUpdate.speed;
             }
             
-            // Update preset button active state
+            // Update the value display element if it exists
+            if (this.valueElement) {
+                this.valueElement.textContent = statusUpdate.speed.toFixed(1);
+            }
+            
+            // Update preset button active state based on setpoint
             this.presetButtons.forEach(btn => {
                 const presetSpeed = parseFloat(btn.dataset.speed);
                 btn.classList.toggle('active', Math.abs(presetSpeed - statusUpdate.speed) < 0.05);
             });
+        }
+        
+        if (statusUpdate.currentSpeed !== undefined) {
+            // Update current speed display (separate from setpoint)
+            const currentSpeedElement = this.parent.currentSpeed;
+            if (currentSpeedElement) {
+                currentSpeedElement.textContent = `${statusUpdate.currentSpeed.toFixed(1)} RPM`;
+                currentSpeedElement.style.opacity = '1';
+            }
         }
     }
 }
@@ -658,14 +673,14 @@ class VariableSpeedControl extends Control {
             }
         }
 
-        if (statusUpdate.currentVariableSpeed !== undefined) {
-            // Set valid state since we received variable speed data
+        if (statusUpdate.currentSpeed !== undefined) {
+            // Set valid state since we received current speed data
             this.setDisplayState('VALID');
             
             const variableSpeedEnabled = this.element.checked;
             if (variableSpeedEnabled) {
                 this.currentVariableSpeedItem.style.display = 'flex';
-                this.currentVariableSpeed.textContent = `${statusUpdate.currentVariableSpeed.toFixed(1)} RPM`;
+                this.currentVariableSpeed.textContent = `${statusUpdate.currentSpeed.toFixed(1)} RPM`;
             }
         }
     }

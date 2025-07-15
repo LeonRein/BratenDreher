@@ -407,7 +407,10 @@ void BLEManager::processStatusUpdates() {
 void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate) {
     switch (statusUpdate.type) {
         case StatusUpdateType::SPEED_CHANGED:
-            doc["speed"] = statusUpdate.floatValue;
+            doc["currentSpeed"] = statusUpdate.floatValue;  // Actual speed for display
+            break;
+        case StatusUpdateType::SPEED_SETPOINT_CHANGED:
+            doc["speed"] = statusUpdate.floatValue;         // Setpoint for UI controls
             break;
         case StatusUpdateType::DIRECTION_CHANGED:
             doc["direction"] = statusUpdate.boolValue ? "cw" : "ccw";
@@ -447,9 +450,6 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
             break;
         case StatusUpdateType::TMC2209_STATUS_UPDATE:
             doc["tmc2209Status"] = statusUpdate.boolValue;
-            break;
-        case StatusUpdateType::CURRENT_VARIABLE_SPEED_UPDATE:
-            doc["currentVariableSpeed"] = statusUpdate.floatValue;
             break;
     }
 }

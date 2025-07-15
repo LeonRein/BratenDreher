@@ -64,7 +64,8 @@ enum class NotificationType {
 
 // Status update types for inter-task communication
 enum class StatusUpdateType {
-    SPEED_CHANGED,
+    SPEED_CHANGED,              // Current/actual speed changed (for display only)
+    SPEED_SETPOINT_CHANGED,     // User setpoint changed (for UI controls)
     DIRECTION_CHANGED,
     ENABLED_CHANGED,
     CURRENT_CHANGED,
@@ -78,8 +79,7 @@ enum class StatusUpdateType {
     IS_RUNNING_UPDATE,
     STALL_DETECTED_UPDATE,
     STALL_COUNT_UPDATE,
-    TMC2209_STATUS_UPDATE,
-    CURRENT_VARIABLE_SPEED_UPDATE
+    TMC2209_STATUS_UPDATE
 };
 
 // Command data structure
@@ -117,30 +117,23 @@ struct StatusUpdateData {
         uint32_t uint32Value; // for acceleration
         unsigned long ulongValue; // for runtime, timestamps
     };
-    uint32_t timestamp;      // millis() when status was updated
-    
     // Helper constructors
-    StatusUpdateData() : type(StatusUpdateType::SPEED_CHANGED), timestamp(0) {
+    StatusUpdateData() : type(StatusUpdateType::SPEED_CHANGED) {
         floatValue = 0.0f;
     }
-    
-    StatusUpdateData(StatusUpdateType t, float value) : type(t), timestamp(millis()) {
+    StatusUpdateData(StatusUpdateType t, float value) : type(t) {
         floatValue = value;
     }
-    
-    StatusUpdateData(StatusUpdateType t, bool value) : type(t), timestamp(millis()) {
+    StatusUpdateData(StatusUpdateType t, bool value) : type(t) {
         boolValue = value;
     }
-    
-    StatusUpdateData(StatusUpdateType t, int value) : type(t), timestamp(millis()) {
+    StatusUpdateData(StatusUpdateType t, int value) : type(t) {
         intValue = value;
     }
-    
-    StatusUpdateData(StatusUpdateType t, uint32_t value) : type(t), timestamp(millis()) {
+    StatusUpdateData(StatusUpdateType t, uint32_t value) : type(t) {
         uint32Value = value;
     }
-    
-    StatusUpdateData(StatusUpdateType t, unsigned long value) : type(t), timestamp(millis()) {
+    StatusUpdateData(StatusUpdateType t, unsigned long value) : type(t) {
         ulongValue = value;
     }
 };
@@ -158,11 +151,13 @@ private:
     Preferences preferences;
     
     // Speed settings (in RPM)
-    float currentSpeedRPM;
+    float setpointRPM;         // Target RPM set by user/command
+    float currentRPM;          // Actual/measured RPM (calculated from stepper)
     int runCurrent;
     
     // Acceleration tracking
-    uint32_t currentAcceleration;    // Current acceleration in steps/s²
+    uint32_t setpointAcceleration;   // Target acceleration in steps/s²
+    uint32_t currentAcceleration;    // Actual acceleration (if measured separately, else same as setpoint)
     
     // Speed variation settings
     bool speedVariationEnabled;
@@ -236,8 +231,10 @@ private:
     void publishStatusUpdate(StatusUpdateType type, unsigned long value);
     
     // Centralized stepper hardware control methods (always publish status when hardware is changed)
-    void applyStepperSpeed(uint32_t stepsPerSecond);
-    void applyStepperAcceleration(uint32_t accelerationStepsPerSec2);
+    void applyStepperSetpointSpeed(uint32_t stepsPerSecond);      // Set target speed
+    void updateCurrentRPM();                                      // Update actual/measured RPM
+    void applyStepperSetpointAcceleration(uint32_t accelerationStepsPerSec2); // Set target acceleration
+    void updateCurrentAcceleration();                             // Update actual/measured acceleration
     
     // Speed variation control
     void updateMotorSpeed();
