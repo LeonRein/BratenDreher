@@ -1398,18 +1398,14 @@ class BratenDreherBLE {
     handleNotification(notification) {
         console.log('Notification received:', notification);
         
-        const commandId = notification.command_id;
         const level = notification.level;
         const message = notification.message || '';
-        
         if (level === 'warning') {
-            // Show warning message
             this.showWarning(message);
-            console.log(`Command ${commandId} warning: ${message}`);
+            console.log(`Warning: ${message}`);
         } else if (level === 'error') {
-            // Show error message
             this.showError(message);
-            console.error(`Command ${commandId} error: ${message}`);
+            console.error(`Error: ${message}`);
         } else {
             console.warn(`Unknown notification level: ${level}`);
         }

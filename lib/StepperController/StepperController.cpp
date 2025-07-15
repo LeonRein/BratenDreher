@@ -36,7 +36,7 @@ StepperController::StepperController()
       currentAcceleration(0),  // Will be set during initialization
       speedVariationEnabled(false), speedVariationStrength(0.0f), speedVariationPhase(0.0f), speedVariationStartPosition(0),
       speedVariationK(0.0f), speedVariationK0(1.0f),  // Initialize with default values
-      nextCommandId(1) {
+      /* nextCommandId removed */ {
     
     // Create command queue for thread-safe operation
     commandQueue = xQueueCreate(COMMAND_QUEUE_SIZE, sizeof(StepperCommandData));
@@ -874,137 +874,71 @@ void StepperController::loadSettings() {
 }
 
 // Thread-safe public interface using command queue
-uint32_t StepperController::setSpeed(float rpm) {
-    if (commandQueue == nullptr) return 0;
-    
-    // Optimized command ID generation with overflow protection
-    const uint32_t commandId = getNextCommandId();
-    
+bool StepperController::setSpeed(float rpm) {
+    if (commandQueue == nullptr) return false;
     StepperCommandData cmd;
     cmd.command = StepperCommand::SET_SPEED;
     cmd.floatValue = rpm;
-    cmd.commandId = commandId;
-    
-    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
-        return commandId;
-    }
-    return 0;
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
 }
 
-uint32_t StepperController::setDirection(bool clockwise) {
-    if (commandQueue == nullptr) return 0;
-    
-    const uint32_t commandId = getNextCommandId();
+bool StepperController::setDirection(bool clockwise) {
+    if (commandQueue == nullptr) return false;
     StepperCommandData cmd;
     cmd.command = StepperCommand::SET_DIRECTION;
     cmd.boolValue = clockwise;
-    cmd.commandId = commandId;
-    
-    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
-        return commandId;
-    }
-    return 0;
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
 }
 
-uint32_t StepperController::enable() {
-    if (commandQueue == nullptr) return 0;
-    
-    uint32_t commandId = nextCommandId++;
+bool StepperController::enable() {
+    if (commandQueue == nullptr) return false;
     StepperCommandData cmd;
     cmd.command = StepperCommand::ENABLE;
-    cmd.commandId = commandId;
-    
-    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
-        return commandId;
-    }
-    return 0;
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
 }
 
-uint32_t StepperController::disable() {
-    if (commandQueue == nullptr) return 0;
-    
-    uint32_t commandId = nextCommandId++;
+bool StepperController::disable() {
+    if (commandQueue == nullptr) return false;
     StepperCommandData cmd;
     cmd.command = StepperCommand::DISABLE;
-    cmd.commandId = commandId;
-    
-    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
-        return commandId;
-    }
-    return 0;
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
 }
 
-uint32_t StepperController::emergencyStop() {
-    if (commandQueue == nullptr) return 0;
-    
-    uint32_t commandId = nextCommandId++;
+bool StepperController::emergencyStop() {
+    if (commandQueue == nullptr) return false;
     StepperCommandData cmd;
     cmd.command = StepperCommand::EMERGENCY_STOP;
-    cmd.commandId = commandId;
-    
-    // Emergency stop has higher priority - try to send immediately
-    if (xQueueSend(commandQueue, &cmd, 0) == pdTRUE) {
-        return commandId;
-    }
-    return 0;
+    return xQueueSend(commandQueue, &cmd, 0) == pdTRUE;
 }
 
-uint32_t StepperController::setRunCurrent(int current) {
-    if (commandQueue == nullptr) return 0;
-    
-    uint32_t commandId = nextCommandId++;
+bool StepperController::setRunCurrent(int current) {
+    if (commandQueue == nullptr) return false;
     StepperCommandData cmd;
     cmd.command = StepperCommand::SET_CURRENT;
     cmd.intValue = current;
-    cmd.commandId = commandId;
-    
-    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
-        return commandId;
-    }
-    return 0;
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
 }
 
-uint32_t StepperController::setAcceleration(uint32_t accelerationStepsPerSec2) {
-    if (commandQueue == nullptr) return 0;
-    
-    uint32_t commandId = nextCommandId++;
+bool StepperController::setAcceleration(uint32_t accelerationStepsPerSec2) {
+    if (commandQueue == nullptr) return false;
     StepperCommandData cmd;
     cmd.command = StepperCommand::SET_ACCELERATION;
     cmd.intValue = accelerationStepsPerSec2;
-    cmd.commandId = commandId;
-    
-    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
-        return commandId;
-    }
-    return 0;
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
 }
 
-uint32_t StepperController::resetCounters() {
-    if (commandQueue == nullptr) return 0;
-    
-    uint32_t commandId = nextCommandId++;
+bool StepperController::resetCounters() {
+    if (commandQueue == nullptr) return false;
     StepperCommandData cmd;
     cmd.command = StepperCommand::RESET_COUNTERS;
-    cmd.commandId = commandId;
-    
-    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
-        return commandId;
-    }
-    return 0;
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
 }
 
-uint32_t StepperController::resetStallCount() {
-    if (commandQueue == nullptr) return 0;
-    
-    uint32_t commandId = nextCommandId++;
+bool StepperController::resetStallCount() {
+    if (commandQueue == nullptr) return false;
     StepperCommandData cmd;
     cmd.command = StepperCommand::RESET_STALL_COUNT;
-    cmd.commandId = commandId;
-    
-    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
-        return commandId;
-    }
-    return 0;
+    return xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE;
 }
 
 void StepperController::setSpeedVariationInternal(float strength, uint32_t commandId) {

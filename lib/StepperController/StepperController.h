@@ -90,20 +90,14 @@ struct StepperCommandData {
         bool boolValue;      // for direction, enable/disable
         int intValue;        // for microsteps, current
     };
-    uint32_t commandId;      // unique ID for tracking command results
+    // commandId removed
 };
 
 // Notification structure (for warnings and errors only)
 struct NotificationData {
-    uint32_t commandId;
     NotificationType type;
     char message[128];  // fixed-size buffer to prevent heap fragmentation
-    
-    // Helper constructor to safely set message
-    NotificationData() : commandId(0), type(NotificationType::WARNING) {
-        message[0] = '\0';
-    }
-    
+    NotificationData() : type(NotificationType::WARNING) { message[0] = '\0'; }
     void setMessage(const char* msg) {
         if (msg) {
             strncpy(message, msg, sizeof(message) - 1);
@@ -196,7 +190,7 @@ private:
     
     // Notification queue for warnings and errors only
     QueueHandle_t notificationQueue;
-    uint32_t nextCommandId;
+    // nextCommandId removed
     
     // Status update queue for thread-safe status communication
     QueueHandle_t statusUpdateQueue;
@@ -210,20 +204,20 @@ private:
     inline uint32_t rpmToStepsPerSecond(float rpm) const;  // Inline hint for frequent calls
     
     // Internal methods (called from command processing)
-    void setSpeedInternal(float rpm, uint32_t commandId);
-    void setDirectionInternal(bool clockwise, uint32_t commandId);
-    void enableInternal(uint32_t commandId);
-    void disableInternal(uint32_t commandId);
-    void emergencyStopInternal(uint32_t commandId);
-    void setRunCurrentInternal(int current, uint32_t commandId);
-    void setAccelerationInternal(uint32_t accelerationStepsPerSec2, uint32_t commandId);
-    void resetCountersInternal(uint32_t commandId);
-    void resetStallCountInternal(uint32_t commandId);
-    void setSpeedVariationInternal(float strength, uint32_t commandId);
-    void setSpeedVariationPhaseInternal(float phase, uint32_t commandId);
-    void enableSpeedVariationInternal(uint32_t commandId);
-    void disableSpeedVariationInternal(uint32_t commandId);
-    void requestAllStatusInternal(uint32_t commandId);
+    void setSpeedInternal(float rpm);
+    void setDirectionInternal(bool clockwise);
+    void enableInternal();
+    void disableInternal();
+    void emergencyStopInternal();
+    void setRunCurrentInternal(int current);
+    void setAccelerationInternal(uint32_t accelerationStepsPerSec2);
+    void resetCountersInternal();
+    void resetStallCountInternal();
+    void setSpeedVariationInternal(float strength);
+    void setSpeedVariationPhaseInternal(float phase);
+    void enableSpeedVariationInternal();
+    void disableSpeedVariationInternal();
+    void requestAllStatusInternal();
     
     // Speed variation helper methods
     inline float calculateVariableSpeed() const;  // Inline hint for frequent calls
@@ -235,7 +229,7 @@ private:
     float calculateMaxAllowedBaseSpeed() const; // Calculate max base speed to not exceed MAX_SPEED_RPM
     
     // Helper methods for status reporting
-    void sendNotification(uint32_t commandId, NotificationType type, const String& message = "");
+    void sendNotification(NotificationType type, const String& message = "");
     void publishStatusUpdate(StatusUpdateType type, float value);
     void publishStatusUpdate(StatusUpdateType type, bool value);
     void publishStatusUpdate(StatusUpdateType type, int value);
@@ -243,9 +237,7 @@ private:
     void publishStatusUpdate(StatusUpdateType type, unsigned long value);
     
     // Utility method for command ID generation with overflow protection
-    inline uint32_t getNextCommandId() {
-        return (nextCommandId == UINT32_MAX) ? (nextCommandId = 1) : ++nextCommandId;
-    }
+    // getNextCommandId removed
     
     // Centralized stepper hardware control methods (always publish status when hardware is changed)
     void applyStepperSpeed(uint32_t stepsPerSecond);
@@ -276,15 +268,15 @@ public:
     bool begin();
     
     // Motor control (thread-safe via command queue)
-    uint32_t setSpeed(float rpm);
-    uint32_t setDirection(bool clockwise);
-    uint32_t enable();
-    uint32_t disable();
-    uint32_t emergencyStop();
-    uint32_t setRunCurrent(int current);
-    uint32_t setAcceleration(uint32_t accelerationStepsPerSec2);
-    uint32_t resetCounters();
-    uint32_t resetStallCount();
+    bool setSpeed(float rpm);
+    bool setDirection(bool clockwise);
+    bool enable();
+    bool disable();
+    bool emergencyStop();
+    bool setRunCurrent(int current);
+    bool setAcceleration(uint32_t accelerationStepsPerSec2);
+    bool resetCounters();
+    bool resetStallCount();
     
     // Speed variation control (thread-safe via command queue)
     uint32_t setSpeedVariation(float strength);           // Set variation strength (0.0 to 1.0)

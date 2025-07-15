@@ -179,138 +179,77 @@ void BLEManager::handleCommand(const std::string& command) {
     
     if (strcmp(type, "speed") == 0) {
         float speed = doc["value"];
-        uint32_t commandId = stepperController->setSpeed(speed);
-        if (commandId > 0) {
-            Serial.printf("Speed command queued: %.2f RPM (ID: %u)\n", speed, commandId);
-        } else {
-            Serial.println("Failed to queue speed command");
-            sendNotification(0, "error", "Failed to queue speed command");
-        }
+        stepperController->setSpeed(speed);
+        Serial.printf("Speed command queued: %.2f RPM\n", speed);
     }
     else if (strcmp(type, "direction") == 0) {
         bool clockwise = doc["value"];
-        uint32_t commandId = stepperController->setDirection(clockwise);
-        if (commandId > 0) {
-            Serial.printf("Direction command queued: %s (ID: %u)\n", clockwise ? "clockwise" : "counter-clockwise", commandId);
-        } else {
-            Serial.println("Failed to queue direction command");
-            sendNotification(0, "error", "Failed to queue direction command");
-        }
+        stepperController->setDirection(clockwise);
+        Serial.printf("Direction command queued: %s\n", clockwise ? "clockwise" : "counter-clockwise");
     }
     else if (strcmp(type, "enable") == 0) {
         bool enable = doc["value"];
-        uint32_t commandId = 0;
         if (enable) {
-            commandId = stepperController->enable();
+            stepperController->enable();
         } else {
-            commandId = stepperController->disable();
+            stepperController->disable();
         }
-        if (commandId > 0) {
-            Serial.printf("Motor %s command queued (ID: %u)\n", enable ? "enable" : "disable", commandId);
-        } else {
-            Serial.printf("Failed to queue motor %s command\n", enable ? "enable" : "disable");
-            sendNotification(0, "error", String("Failed to queue motor ") + (enable ? "enable" : "disable") + " command");
-        }
+        Serial.printf("Motor %s command queued\n", enable ? "enable" : "disable");
     }
     else if (strcmp(type, "current") == 0) {
         int current = doc["value"];
         if (current >= 10 && current <= 100) {
-            uint32_t commandId = stepperController->setRunCurrent(current);
-            if (commandId > 0) {
-                Serial.printf("Current command queued: %d%% (ID: %u)\n", current, commandId);
-            } else {
-                Serial.println("Failed to queue current command");
-                sendNotification(0, "error", "Failed to queue current command");
-            }
+            stepperController->setRunCurrent(current);
+            Serial.printf("Current command queued: %d%%\n", current);
         }
     }
     else if (strcmp(type, "reset") == 0) {
-        uint32_t commandId = stepperController->resetCounters();
-        if (commandId > 0) {
-            Serial.printf("Reset counters command queued (ID: %u)\n", commandId);
-        } else {
-            Serial.println("Failed to queue reset counters command");
-            sendNotification(0, "error", "Failed to queue reset counters command");
-        }
+        stepperController->resetCounters();
+        Serial.printf("Reset counters command queued\n");
     }
     else if (strcmp(type, "reset_stall") == 0) {
-        uint32_t commandId = stepperController->resetStallCount();
-        if (commandId > 0) {
-            Serial.printf("Reset stall count command queued (ID: %u)\n", commandId);
-        } else {
-            Serial.println("Failed to queue reset stall count command");
-            sendNotification(0, "error", "Failed to queue reset stall count command");
-        }
+        stepperController->resetStallCount();
+        Serial.printf("Reset stall count command queued\n");
     }
     else if (strcmp(type, "status_request") == 0) {
         // Request all current status from StepperController
         Serial.println("Status request received, requesting all current status...");
-        uint32_t commandId = stepperController->requestAllStatus();
-        if (commandId == 0) {
-            sendNotification(0, "error", "Failed to send status request");
-        }
-        // Note: Success response will come from StepperController when request is processed
+        stepperController->requestAllStatus();
     }
     else if (strcmp(type, "acceleration") == 0) {
         // Set acceleration directly in steps/s²
         uint32_t accelerationStepsPerSec2 = doc["value"];  // Acceleration in steps/s²
         
         if (accelerationStepsPerSec2 >= 100 && accelerationStepsPerSec2 <= 100000) {
-            uint32_t commandId = stepperController->setAcceleration(accelerationStepsPerSec2);
-            if (commandId > 0) {
-                Serial.printf("Acceleration command queued: %u steps/s² (ID: %u)\n", accelerationStepsPerSec2, commandId);
-            } else {
-                Serial.println("Failed to queue acceleration command");
-                sendNotification(0, "error", "Failed to queue acceleration command");
-            }
-            // Note: Success response will come from StepperController when command is processed
+            stepperController->setAcceleration(accelerationStepsPerSec2);
+            Serial.printf("Acceleration command queued: %u steps/s²\n", accelerationStepsPerSec2);
         } else {
             Serial.println("Invalid acceleration parameters");
-            sendNotification(0, "error", "Acceleration must be 100-100000 steps/s²");
+            sendNotification("error", "Acceleration must be 100-100000 steps/s²");
         }
     }
     else if (strcmp(type, "speed_variation_strength") == 0) {
         float strength = doc["value"];
         if (strength >= 0.0f && strength <= 1.0f) {
-            uint32_t commandId = stepperController->setSpeedVariation(strength);
-            if (commandId > 0) {
-                Serial.printf("Speed variation strength command queued: %.2f (ID: %u)\n", strength, commandId);
-            } else {
-                Serial.println("Failed to queue speed variation strength command");
-                sendNotification(0, "error", "Failed to queue speed variation strength command");
-            }
+            stepperController->setSpeedVariation(strength);
+            Serial.printf("Speed variation strength command queued: %.2f\n", strength);
         } else {
             Serial.println("Invalid speed variation strength");
-            sendNotification(0, "error", "Speed variation strength must be 0.0-1.0");
+            sendNotification("error", "Speed variation strength must be 0.0-1.0");
         }
     }
     else if (strcmp(type, "speed_variation_phase") == 0) {
         float phase = doc["value"];
-        uint32_t commandId = stepperController->setSpeedVariationPhase(phase);
-        if (commandId > 0) {
-            Serial.printf("Speed variation phase command queued: %.2f radians (ID: %u)\n", phase, commandId);
-        } else {
-            Serial.println("Failed to queue speed variation phase command");
-            sendNotification(0, "error", "Failed to queue speed variation phase command");
-        }
+        stepperController->setSpeedVariationPhase(phase);
+        Serial.printf("Speed variation phase command queued: %.2f radians\n", phase);
     }
     else if (strcmp(type, "enable_speed_variation") == 0) {
-        uint32_t commandId = stepperController->enableSpeedVariation();
-        if (commandId > 0) {
-            Serial.printf("Enable speed variation command queued (ID: %u)\n", commandId);
-        } else {
-            Serial.println("Failed to queue enable speed variation command");
-            sendNotification(0, "error", "Failed to queue enable speed variation command");
-        }
+        stepperController->enableSpeedVariation();
+        Serial.printf("Enable speed variation command queued\n");
     }
     else if (strcmp(type, "disable_speed_variation") == 0) {
-        uint32_t commandId = stepperController->disableSpeedVariation();
-        if (commandId > 0) {
-            Serial.printf("Disable speed variation command queued (ID: %u)\n", commandId);
-        } else {
-            Serial.println("Failed to queue disable speed variation command");
-            sendNotification(0, "error", "Failed to queue disable speed variation command");
-        }
+        stepperController->disableSpeedVariation();
+        Serial.printf("Disable speed variation command queued\n");
     }
     else {
         Serial.printf("Unknown command type: %s\n", type);
@@ -421,14 +360,14 @@ void BLEManager::processNotifications() {
                 break;
         }
         
-        Serial.printf("Command %u notification: %s", notification.commandId, level.c_str());
+        Serial.printf("Notification: %s", level.c_str());
         if (strlen(notification.message) > 0) {
             Serial.printf(" - %s", notification.message);
         }
         Serial.println();
         
         // Send notification to client
-        sendNotification(notification.commandId, level, String(notification.message));
+        sendNotification(level, String(notification.message));
     }
 }
 
@@ -537,13 +476,12 @@ void BLEManager::sendStatusUpdate(JsonDocument& statusDoc) {
     }
 }
 
-void BLEManager::sendNotification(uint32_t commandId, const String& level, const String& message) {
+void BLEManager::sendNotification(const String& level, const String& message) {
     if (!commandCharacteristic || !deviceConnected) return;
     
     // Use fixed-size JSON document to prevent heap corruption (compatible with ArduinoJson v6)
     JsonDocument doc;
     doc["type"] = "notification";
-    doc["command_id"] = commandId;
     doc["level"] = level;
     if (message.length() > 0 && message.length() < 128) { // Prevent buffer overflow
         doc["message"] = message;
@@ -582,13 +520,8 @@ void BLEManager::sendAllCurrentStatus() {
     Serial.println("Requesting all current status from StepperController...");
     
     // Use the thread-safe command queue to request all status information
-    uint32_t commandId = stepperController->requestAllStatus();
-    
-    if (commandId > 0) {
-        Serial.printf("Status request sent with command ID: %u\n", commandId);
-    } else {
-        Serial.println("Failed to send status request to StepperController");
-    }
+    stepperController->requestAllStatus();
+    Serial.println("Status request sent");
 }
 
 // ...existing code...

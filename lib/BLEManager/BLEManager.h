@@ -72,7 +72,7 @@ public:
     void processStatusUpdates(); // Process status updates from StepperController
     void addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate); // Helper to add status to JSON
     void sendStatusUpdate(JsonDocument& statusDoc); // Send a status update JSON
-    void sendNotification(uint32_t commandId, const String& level, const String& message = "");
+    void sendNotification(const String& level, const String& message = "");
     void sendAllCurrentStatus(); // Send all current status information to newly connected client
     
     // Handle incoming commands
