@@ -619,6 +619,24 @@ void StepperController::setSpeedInternal(float rpm) {
 void StepperController::setDirectionInternal(bool clockwise) {
     this->clockwise = clockwise;
     
+    // If motor is currently enabled and running, apply direction change immediately
+    if (motorEnabled && stepper) {
+        MoveResultCode result;
+        if (clockwise) {
+            result = stepper->runForward();
+        } else {
+            result = stepper->runBackward();
+        }
+        
+        if (result != MOVE_OK) {
+            Serial.printf("WARNING: Failed to change direction while running (result code: %d)\n", (int)result);
+            sendNotification(NotificationType::WARNING, 
+                        "Direction change applied but motor may need restart");
+        } else {
+            Serial.printf("Direction changed to %s while running\n", clockwise ? "clockwise" : "counter-clockwise");
+        }
+    }
+    
     // Save settings only if not during initialization
     if (!isInitializing) {
         saveSettings();

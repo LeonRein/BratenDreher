@@ -472,6 +472,13 @@ class SpeedControl extends Control {
                 currentSpeedElement.textContent = `${statusUpdate.currentSpeed.toFixed(1)} RPM`;
                 currentSpeedElement.style.opacity = '1';
             }
+            
+            // Update the current speed indicator under the slider
+            const currentSpeedIndicator = this.parent.currentSpeedIndicator;
+            if (currentSpeedIndicator) {
+                currentSpeedIndicator.textContent = `${statusUpdate.currentSpeed.toFixed(1)} RPM`;
+                currentSpeedIndicator.style.opacity = '1';
+            }
         }
     }
 }
@@ -895,6 +902,7 @@ class BratenDreherBLE {
         this.motorToggle = document.getElementById('motorToggle');
         this.speedSlider = document.getElementById('speedSlider');
         this.speedValue = document.getElementById('speedValue');
+        this.currentSpeedIndicator = document.getElementById('currentSpeedIndicator');
         this.clockwiseBtn = document.getElementById('clockwiseBtn');
         this.counterclockwiseBtn = document.getElementById('counterclockwiseBtn');
         this.emergencyStopBtn = document.getElementById('emergencyStopBtn');
@@ -1619,6 +1627,7 @@ class BratenDreherBLE {
         // Initialize status display elements that aren't controlled by specific controls
         const statusElements = [
             this.currentSpeed,
+            this.currentSpeedIndicator,
             this.lastUpdate
         ];
         

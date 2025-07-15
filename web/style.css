@@ -290,6 +290,31 @@ body {
     gap: 8px;
 }
 
+/* Current Speed Indicator */
+.current-speed-indicator {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.current-speed-label {
+    color: #64748b;
+    font-weight: 500;
+}
+
+.current-speed-value {
+    color: #1e293b;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+}
+
 .preset-btn {
     flex: 1;
     padding: 8px 12px;

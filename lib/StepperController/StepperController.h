@@ -30,8 +30,8 @@
 #define MAX_SPEED_RPM               30.0f  // Maximum speed (0.5 RPS after gear reduction)
 
 // Timing configuration
-#define STATUS_UPDATE_INTERVAL      500    // Status update every 500ms
-#define MOTOR_SPEED_UPDATE_INTERVAL 50     // Speed update every 50ms for smooth variation
+#define STATUS_UPDATE_INTERVAL      100    // Status update every 500ms
+#define MOTOR_SPEED_UPDATE_INTERVAL 10     // Speed update every 50ms for smooth variation
 
 // Queue size configuration
 #define COMMAND_QUEUE_SIZE          20     // Command queue size
