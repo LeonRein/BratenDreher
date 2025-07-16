@@ -8,6 +8,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "Task.h"
+#include "SystemStatus.h"
+#include "SystemCommand.h"
 
 // Hardware pin definitions (from PD-Stepper example)
 #define TMC_EN_PIN          21
@@ -33,110 +35,6 @@
 #define STATUS_UPDATE_INTERVAL      100    // Status update every 500ms
 #define MOTOR_SPEED_UPDATE_INTERVAL 10     // Speed update every 50ms for smooth variation
 
-// Queue size configuration
-#define COMMAND_QUEUE_SIZE          20     // Command queue size
-#define NOTIFICATION_QUEUE_SIZE     10     // Notification queue size (smaller since only warnings/errors)  
-#define STATUS_UPDATE_QUEUE_SIZE    30     // Status update queue size
-
-// Command types for inter-task communication
-enum class StepperCommand {
-    SET_SPEED,
-    SET_DIRECTION,
-    ENABLE,
-    DISABLE,
-    EMERGENCY_STOP,
-    SET_CURRENT,
-    SET_ACCELERATION,
-    RESET_COUNTERS,
-    RESET_STALL_COUNT,
-    SET_SPEED_VARIATION,
-    SET_SPEED_VARIATION_PHASE,
-    ENABLE_SPEED_VARIATION,
-    DISABLE_SPEED_VARIATION,
-    REQUEST_ALL_STATUS  // Request all current status values
-};
-
-// Notification types (for warnings and errors only)
-enum class NotificationType {
-    WARNING,    // Success with warning message
-    ERROR       // Error occurred
-};
-
-// Status update types for inter-task communication
-enum class StatusUpdateType {
-    SPEED_SETPOINT_CHANGED,     // User setpoint changed (for UI controls)
-    DIRECTION_CHANGED,
-    ENABLED_CHANGED,
-    CURRENT_CHANGED,
-    ACCELERATION_CHANGED,
-    SPEED_VARIATION_ENABLED_CHANGED,
-    SPEED_VARIATION_STRENGTH_CHANGED,
-    SPEED_VARIATION_PHASE_CHANGED,
-    // Periodic updates - now separate for each value
-    SPEED_UPDATE,
-    TOTAL_REVOLUTIONS_UPDATE,
-    RUNTIME_UPDATE,
-    STALL_DETECTED_UPDATE,
-    STALL_COUNT_UPDATE,
-    TMC2209_STATUS_UPDATE
-};
-
-// Command data structure
-struct StepperCommandData {
-    StepperCommand command;
-    union {
-        float floatValue;    // for speed
-        bool boolValue;      // for direction, enable/disable
-        int intValue;        // for microsteps, current
-    };
-};
-
-// Notification structure (for warnings and errors only)
-struct NotificationData {
-    NotificationType type;
-    char message[128];  // fixed-size buffer to prevent heap fragmentation
-    NotificationData() : type(NotificationType::WARNING) { message[0] = '\0'; }
-    void setMessage(const char* msg) {
-        if (msg) {
-            strncpy(message, msg, sizeof(message) - 1);
-            message[sizeof(message) - 1] = '\0';
-        } else {
-            message[0] = '\0';
-        }
-    }
-};
-
-// Status update structure
-struct StatusUpdateData {
-    StatusUpdateType type;
-    union {
-        float floatValue;    // for speed, acceleration, revolutions, etc.
-        bool boolValue;      // for direction, enabled, etc.
-        int intValue;        // for current, counts
-        uint32_t uint32Value; // for acceleration
-        unsigned long ulongValue; // for runtime, timestamps
-    };
-    // Helper constructors
-    StatusUpdateData() : type(StatusUpdateType::SPEED_UPDATE) {
-        floatValue = 0.0f;
-    }
-    StatusUpdateData(StatusUpdateType t, float value) : type(t) {
-        floatValue = value;
-    }
-    StatusUpdateData(StatusUpdateType t, bool value) : type(t) {
-        boolValue = value;
-    }
-    StatusUpdateData(StatusUpdateType t, int value) : type(t) {
-        intValue = value;
-    }
-    StatusUpdateData(StatusUpdateType t, uint32_t value) : type(t) {
-        uint32Value = value;
-    }
-    StatusUpdateData(StatusUpdateType t, unsigned long value) : type(t) {
-        ulongValue = value;
-    }
-};
-
 class StepperController : public Task {
 private:
     bool isInitializing; // True during construction/initialization, false otherwise
@@ -153,17 +51,6 @@ private:
     float setpointRPM;         // Target RPM set by user/command
     int runCurrent;
     
-    // Acceleration tracking
-    uint32_t setpointAcceleration;   // Target acceleration in steps/s²
-    
-    // Speed variation settings
-    bool speedVariationEnabled;
-    float speedVariationStrength;    // 0.0 to 1.0 (0% to 100% variation)
-    float speedVariationPhase;       // Phase offset in radians (0 to 2*PI)
-    int32_t speedVariationStartPosition; // Position where variation was enabled
-    float speedVariationK;           // Internal k parameter (derived from strength)
-    float speedVariationK0;          // Compensation factor k0 = sqrt(1 - k²)
-    
     // State tracking
     bool motorEnabled;
     bool clockwise;
@@ -177,14 +64,20 @@ private:
     unsigned long lastStallTime;
     uint16_t stallCount;
     
-    // Command queue for thread-safe operation
-    QueueHandle_t commandQueue;
+    // Acceleration tracking
+    uint32_t setpointAcceleration;   // Target acceleration in steps/s²
     
-    // Notification queue for warnings and errors only
-    QueueHandle_t notificationQueue;
+    // Speed variation settings
+    bool speedVariationEnabled;
+    float speedVariationStrength;    // 0.0 to 1.0 (0% to 100% variation)
+    float speedVariationPhase;       // Phase offset in radians (0 to 2*PI)
+    int32_t speedVariationStartPosition; // Position where variation was enabled
+    float speedVariationK;           // Internal k parameter (derived from strength)
+    float speedVariationK0;          // Compensation factor k0 = sqrt(1 - k²)
     
-    // Status update queue for thread-safe status communication
-    QueueHandle_t statusUpdateQueue;
+    // Cached references to system singletons
+    SystemStatus& systemStatus;
+    SystemCommand& systemCommand;
     
     // Helper methods
     bool initPreferences();
@@ -218,14 +111,6 @@ private:
     void updateSpeedForVariableSpeed();    // Update base speed for variable speed constraints
     void updateSpeedVariationParameters(); // Helper to calculate k and k0
     float calculateMaxAllowedBaseSpeed() const; // Calculate max base speed to not exceed MAX_SPEED_RPM
-    
-    // Helper methods for status reporting
-    void sendNotification(NotificationType type, const String& message = "");
-    void publishStatusUpdate(StatusUpdateType type, float value);
-    void publishStatusUpdate(StatusUpdateType type, bool value);
-    void publishStatusUpdate(StatusUpdateType type, int value);
-    void publishStatusUpdate(StatusUpdateType type, uint32_t value);
-    void publishStatusUpdate(StatusUpdateType type, unsigned long value);
     
     // Centralized stepper hardware control methods (always publish status when hardware is changed)
     void applyStepperSetpointSpeed(float rpm);            // Set target speed in RPM and publish setpoint update
@@ -287,15 +172,6 @@ public:
     
     // Status request (thread-safe via command queue)
     uint32_t requestAllStatus();                           // Request all current status to be published
-       
-    // Notification retrieval (thread-safe)
-    bool getNotification(NotificationData& notification); // non-blocking, returns false if no notification available
-    
-    // Status update retrieval (thread-safe)
-    bool getStatusUpdate(StatusUpdateData& status); // non-blocking, returns false if no update available
-    
-    // Stall detection configuration
-    void setStallGuardThreshold(uint8_t threshold); // 0 = most sensitive, 255 = least sensitive
-};
+    };
 
 #endif // STEPPER_CONTROLLER_H

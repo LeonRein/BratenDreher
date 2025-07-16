@@ -11,9 +11,12 @@
 #include <string>
 #include <ArduinoJson.h>
 #include "Task.h"
+#include "SystemStatus.h"
+#include "SystemCommand.h"
 
 // Forward declaration (header will be included in .cpp file)
-class StepperController;
+class SystemStatus;
+class SystemCommand;
 struct NotificationData;
 struct StatusUpdateData;
 
@@ -40,8 +43,11 @@ private:
     bool deviceConnected;
     bool oldDeviceConnected;
     
-    // Reference to stepper controller
-    StepperController* stepperController;
+    // Cached reference to SystemStatus singleton
+    SystemStatus& systemStatus;
+    
+    // Cached reference to SystemCommand singleton  
+    SystemCommand& systemCommand;
     
     // Command queue for safe processing using FreeRTOS queue
     QueueHandle_t commandQueue;
@@ -61,7 +67,7 @@ public:
     
     // Initialization
     bool begin(const char* deviceName = "BratenDreher");
-    void setStepperController(StepperController* controller);
+    // setStepperController method removed - using SystemCommand singleton directly
     
     // Connection status
     bool isConnected() const { return deviceConnected; }
