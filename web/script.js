@@ -934,6 +934,7 @@ class PowerDeliveryControl extends Control {
         this.powerGoodElement = powerGoodElement;
         this.negotiatedVoltageElement = negotiatedVoltageElement;
         this.currentVoltageElement = currentVoltageElement;
+        this.negotiationTimeout = null;
         
         // Add all status elements as additional elements
         this.addAdditionalElement(this.statusElement, { applyDisabled: false });
@@ -961,10 +962,46 @@ class PowerDeliveryControl extends Control {
                 const selectedVoltage = parseInt(this.element.value);
                 if (selectedVoltage && this.parent) {
                     console.log(`PowerDelivery: Requesting voltage change to ${selectedVoltage}V`);
+                    
+                    // Provide immediate visual feedback
+                    this.showNegotiationStarted();
+                    
                     // Send power delivery command to set target voltage and start negotiation
                     this.parent.sendCommand('pd_voltage', selectedVoltage);
                 }
             });
+        }
+    }
+
+    showNegotiationStarted() {
+        // Update status to show negotiation is starting
+        this.statusElement.textContent = 'Negotiating...';
+        this.statusElement.className = 'power-value status-warning negotiating';
+        this.statusElement.style.opacity = '1.0';
+        
+        // Temporarily disable the negotiate button and show feedback
+        this.negotiateButton.disabled = true;
+        this.negotiateButton.textContent = '🔄 Negotiating...';
+        this.negotiateButton.className = 'btn btn-secondary negotiating';
+        this.negotiateButton.style.opacity = '0.8';
+        
+        // Set a timeout to re-enable button if no response (fallback)
+        if (this.negotiationTimeout) {
+            clearTimeout(this.negotiationTimeout);
+        }
+        this.negotiationTimeout = setTimeout(() => {
+            this.resetNegotiateButton();
+        }, 10000); // 10 second timeout for button reset
+    }
+
+    resetNegotiateButton() {
+        this.negotiateButton.disabled = false;
+        this.negotiateButton.textContent = '🔌 Renegotiate';
+        this.negotiateButton.className = 'btn btn-secondary';
+        this.negotiateButton.style.opacity = '1.0';
+        if (this.negotiationTimeout) {
+            clearTimeout(this.negotiationTimeout);
+            this.negotiationTimeout = null;
         }
     }
 
@@ -980,8 +1017,12 @@ class PowerDeliveryControl extends Control {
                           { text: 'Unknown', class: 'status-unknown' };
             
             this.statusElement.textContent = status.text;
+            // Remove negotiating class and apply the appropriate status class
             this.statusElement.className = `power-value ${status.class}`;
             this.statusElement.style.opacity = '1.0';
+            
+            // Reset negotiate button when we receive any status update
+            this.resetNegotiateButton();
             
             // Show fallback mode notice if PD failed/timed out
             if (statusUpdate.pdNegotiationStatus === 3 || statusUpdate.pdNegotiationStatus === 4) {

@@ -211,6 +211,8 @@ void BLEManager::handleCommand(const std::string& command) {
         Serial.println("Status request received, requesting all current status...");
         StepperCommandData cmd(StepperCommand::REQUEST_ALL_STATUS);
         systemCommand.sendCommand(cmd);
+        PowerDeliveryCommandData pdCmd(PowerDeliveryCommand::REQUEST_ALL_STATUS);
+        systemCommand.sendPowerDeliveryCommand(pdCmd);
     }
     else if (strcmp(type, "acceleration") == 0) {
         // Set acceleration directly in steps/s²

@@ -41,8 +41,8 @@
 
 // Timing configuration
 #define PD_STATUS_UPDATE_INTERVAL       500     // Update every 500ms
-#define PD_VOLTAGE_MEASURE_INTERVAL     100     // Measure voltage every 100ms
-#define PD_NEGOTIATION_TIMEOUT          5000    // 5 second timeout for negotiation
+#define PD_VOLTAGE_MEASURE_INTERVAL     500     // Measure voltage every 100ms
+#define PD_NEGOTIATION_TIMEOUT          1000    // 5 second timeout for negotiation
 #define PD_POWER_GOOD_DEBOUNCE          100     // Debounce power good signal
 
 // Power delivery states
