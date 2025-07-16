@@ -22,9 +22,7 @@ enum class StepperCommand {
 // Power delivery command types
 enum class PowerDeliveryCommand {
     SET_TARGET_VOLTAGE,         // Set target voltage for PD negotiation
-    START_NEGOTIATION,          // Start power delivery negotiation
-    STOP_NEGOTIATION,           // Stop power delivery negotiation
-    REQUEST_STATUS              // Request current PD status
+    REQUEST_ALL_STATUS
 };
 
 // Command data structure
@@ -67,8 +65,7 @@ struct PowerDeliveryCommandData {
         int intValue;        // for voltage selection
     };
     
-    // Helper constructors
-    PowerDeliveryCommandData() : command(PowerDeliveryCommand::REQUEST_STATUS) {
+    PowerDeliveryCommandData() : command(PowerDeliveryCommand::REQUEST_ALL_STATUS) {
         floatValue = 0.0f;
     }
     PowerDeliveryCommandData(PowerDeliveryCommand cmd) : command(cmd) {

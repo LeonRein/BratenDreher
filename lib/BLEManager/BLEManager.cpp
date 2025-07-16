@@ -252,6 +252,18 @@ void BLEManager::handleCommand(const std::string& command) {
         systemCommand.sendCommand(cmd);
         Serial.printf("Disable speed variation command queued\n");
     }
+    else if (strcmp(type, "pd_voltage") == 0) {
+        // Set power delivery target voltage and start negotiation
+        int voltage = doc["value"];
+        if (voltage >= 5 && voltage <= 20) {
+            PowerDeliveryCommandData cmd(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
+            systemCommand.sendPowerDeliveryCommand(cmd);
+            
+            Serial.printf("Power delivery voltage set to %dV and negotiation started\n", voltage);
+        } else {
+            Serial.printf("Invalid voltage value: %d (must be 5-20V)\n", voltage);
+        }
+    }
     else {
         Serial.printf("Unknown command type: %s\n", type);
     }
@@ -481,10 +493,15 @@ void BLEManager::sendAllCurrentStatus() {
         return;
     }
     
-    Serial.println("Requesting all current status from StepperController...");
+    Serial.println("Requesting all current status from StepperController and PowerDeliveryTask...");
     
     // Use the thread-safe SystemCommand to request all status information
-    StepperCommandData cmd(StepperCommand::REQUEST_ALL_STATUS);
-    systemCommand.sendCommand(cmd);
-    Serial.println("Status request sent");
+    StepperCommandData stepperCmd(StepperCommand::REQUEST_ALL_STATUS);
+    systemCommand.sendCommand(stepperCmd);
+    
+    // Also request power delivery status
+    PowerDeliveryCommandData pdCmd(PowerDeliveryCommand::REQUEST_ALL_STATUS);
+    systemCommand.sendPowerDeliveryCommand(pdCmd);
+    
+    Serial.println("Status requests sent");
 }

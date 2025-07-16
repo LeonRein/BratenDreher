@@ -47,22 +47,16 @@ void PowerDeliveryTask::run() {
         // Process incoming commands
         processCommands();
         
-        // Check power good state with debouncing
+        // Check power good state with debouncing (publishes on change)
         checkPowerGood();
         
-        // Update negotiation state
+        // Update negotiation state (publishes on change)
         updateNegotiationState();
         
-        // Measure voltage at regular intervals
+        // Measure voltage at regular intervals (publishes on measurement)
         if (currentTime - lastVoltageUpdate >= PD_VOLTAGE_MEASURE_INTERVAL) {
             measureVoltage();
             lastVoltageUpdate = currentTime;
-        }
-        
-        // Publish status updates at regular intervals
-        if (currentTime - lastStatusUpdate >= PD_STATUS_UPDATE_INTERVAL) {
-            publishStatusUpdates();
-            lastStatusUpdate = currentTime;
         }
         
         // Small delay to prevent overwhelming the system
@@ -155,7 +149,6 @@ void PowerDeliveryTask::measureVoltage() {
     int adcValue = analogRead(VBUS_PIN);
     currentVoltage = adcValue * (VREF / ADC_RESOLUTION) / DIV_RATIO;
     
-    // Publish voltage measurement
     SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_CURRENT_VOLTAGE, currentVoltage);
 }
 
@@ -204,28 +197,22 @@ void PowerDeliveryTask::updateNegotiationState() {
         if ((currentTime - negotiationStartTime) >= PD_NEGOTIATION_TIMEOUT) {
             negotiationState = PDNegotiationState::TIMEOUT;
             Serial.println("PowerDeliveryTask: Negotiation timed out");
+            
+            // Publish negotiation status change
+            SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATION_STATUS, (float)static_cast<int>(negotiationState));
             SystemStatus::getInstance().sendNotification(NotificationType::ERROR, "PD negotiation timeout");
         }
     }
 }
 
 void PowerDeliveryTask::publishStatusUpdates() {
-    // Publish negotiation status
+    // Publish all current status values (used for initial status and request all status)
     SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATION_STATUS, (float)static_cast<int>(negotiationState));
-    
-    // Publish power good status
     SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_POWER_GOOD_STATUS, powerGoodState);
-    
-    // Publish current voltage measurement
     SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_CURRENT_VOLTAGE, currentVoltage);
     
-    // Publish negotiated voltage if available
-    if (negotiatedVoltage > 0) {
-        SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATED_VOLTAGE, (float)negotiatedVoltage);
-    } else {
-        // Publish 0 to clear any previous value
-        SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATED_VOLTAGE, 0.0f);
-    }
+    // Publish negotiated voltage (0 if not negotiated)
+    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATED_VOLTAGE, (float)negotiatedVoltage);
 }
 
 void PowerDeliveryTask::processCommands() {
@@ -236,20 +223,12 @@ void PowerDeliveryTask::processCommands() {
         switch (command.command) {
             case PowerDeliveryCommand::SET_TARGET_VOLTAGE:
                 targetVoltage = command.intValue;
+                startNegotiation(targetVoltage);
                 saveSettings();
                 Serial.printf("PowerDeliveryTask: Target voltage set to %dV\n", targetVoltage);
                 break;
                 
-            case PowerDeliveryCommand::START_NEGOTIATION:
-                startNegotiation(targetVoltage);
-                break;
-                
-            case PowerDeliveryCommand::STOP_NEGOTIATION:
-                negotiationState = PDNegotiationState::IDLE;
-                Serial.println("PowerDeliveryTask: Negotiation stopped");
-                break;
-                
-            case PowerDeliveryCommand::REQUEST_STATUS:
+            case PowerDeliveryCommand::REQUEST_ALL_STATUS:
                 publishStatusUpdates();
                 break;
                 
@@ -301,12 +280,4 @@ int PowerDeliveryTask::getNegotiatedVoltage() const {
 
 PDNegotiationState PowerDeliveryTask::getNegotiationState() const {
     return negotiationState;
-}
-
-bool PowerDeliveryTask::setTargetVoltage(int voltage) {
-    return SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
-}
-
-bool PowerDeliveryTask::requestStatus() {
-    return SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::REQUEST_STATUS);
 }
