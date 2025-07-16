@@ -90,7 +90,6 @@ void StepperController::applyStop() {
     stepper->stopMove();
     motorEnabled = false;
     publishTMC2209Communication();
-    stepperDriver.disable();
 
     systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
 }
@@ -234,8 +233,6 @@ bool StepperController::begin() {
     digitalWrite(MS1_PIN, LOW);
     digitalWrite(MS2_PIN, LOW);
     
-    // Enable driver (will be controlled via FastAccelStepper)
-    digitalWrite(TMC_EN_PIN, LOW);
     
     // Initialize TMC2209
     stepperDriver.setup(serialStream, 115200, TMC2209::SERIAL_ADDRESS_0, TMC_RX_PIN, TMC_TX_PIN);
@@ -271,6 +268,7 @@ bool StepperController::begin() {
     
     // Configure FastAccelStepper
     stepper->setDirectionPin(DIR_PIN);
+    stepper->setEnablePin(TMC_EN_PIN);
     stepper->setAutoEnable(true);
     
     // Set delays for enable/disable
@@ -332,19 +330,15 @@ bool StepperController::initPreferences() {
 void StepperController::configureDriver() {
     stepperDriver.setRunCurrent(runCurrent);
     stepperDriver.setMicrostepsPerStep(MICRO_STEPS);
-    stepperDriver.enableAutomaticCurrentScaling();
-    
-    // Note: StallGuard typically requires SpreadCycle mode (not StealthChop)
-    // We'll enable StealthChop for quiet operation but may need to disable it for stall detection
-    stepperDriver.enableStealthChop();
-    stepperDriver.setCoolStepDurationThreshold(5000);
-    
-    // Configure StallGuard for stall detection
-    // Setting threshold automatically enables StallGuard functionality
-    stepperDriver.setStallGuardThreshold(200); // Sensitivity: 0 (most sensitive) to 255 (least sensitive)
+    stepperDriver.enableAutomaticCurrentScaling(); //current control mode
+    //  stepperDriver.enableCoolStep();
+    stepperDriver.enableStealthChop(); //stealth chop needs to be enabled for stall detect
+    stepperDriver.setCoolStepDurationThreshold(5000); //TCOOLTHRS (DIAG only enabled when TSTEP smaller than this)
     
     // Update communication status after configuration
     bool newTmc2209Status = stepperDriver.isSetupAndCommunicating();
+
+
     
     // Publish TMC2209 status update if communication status changed
     if (newTmc2209Status != tmc2209Initialized) {
@@ -379,7 +373,7 @@ bool StepperController::checkPowerDeliveryReady() {
         PDNegotiationState state = pdTask.getNegotiationState();
         
         // If negotiation timed out or failed, assume no PD adapter and allow operation
-        if (state == PDNegotiationState::TIMEOUT || state == PDNegotiationState::FAILED) {
+        if (state == PDNegotiationState::FAILED) {
             if (!powerDeliveryReady) {
                 powerDeliveryReady = true;
                 Serial.println("StepperController: No PD adapter detected, allowing operation without PD safety");
@@ -464,6 +458,7 @@ void StepperController::run() {
             // Check power delivery status and disable motor if power is lost
             if (motorEnabled && !checkPowerDeliveryReady()) {
                 Serial.println("StepperController: Power delivery lost, disabling motor");
+                systemStatus.sendNotification(NotificationType::ERROR, "Power delivery lost, disabling motor");
                 applyStop();
             }
             

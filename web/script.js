@@ -927,9 +927,10 @@ class StatisticsControl extends Control {
 
 // Specialized control for Power Delivery management
 class PowerDeliveryControl extends Control {
-    constructor(voltageSelectElement, negotiateButton, statusElement, powerGoodElement, negotiatedVoltageElement, currentVoltageElement, options = {}) {
+    constructor(voltageSelectElement, negotiateButton, autoNegotiateButton, statusElement, powerGoodElement, negotiatedVoltageElement, currentVoltageElement, options = {}) {
         super(voltageSelectElement, null, options); // Use voltage select as main element
         this.negotiateButton = negotiateButton;
+        this.autoNegotiateButton = autoNegotiateButton;
         this.statusElement = statusElement;
         this.powerGoodElement = powerGoodElement;
         this.negotiatedVoltageElement = negotiatedVoltageElement;
@@ -942,17 +943,18 @@ class PowerDeliveryControl extends Control {
         this.addAdditionalElement(this.negotiatedVoltageElement, { applyDisabled: false });
         this.addAdditionalElement(this.currentVoltageElement, { applyDisabled: false });
         this.addAdditionalElement(this.negotiateButton, { applyDisabled: true });
+        this.addAdditionalElement(this.autoNegotiateButton, { applyDisabled: true });
         
         // Initialize with disabled state
         this.setDisplayState(CONTROL_STATES.DISABLED);
         
-        // State mapping for negotiation status
+        // State mapping for negotiation status (simplified states)
         this.negotiationStates = {
             0: { text: 'Idle', class: 'status-unknown' },
             1: { text: 'Negotiating...', class: 'status-warning' },
             2: { text: 'Success', class: 'status-success' },
             3: { text: 'Failed (No PD Adapter)', class: 'status-error' },
-            4: { text: 'Timeout (No PD Adapter)', class: 'status-error' }
+            4: { text: 'Auto-Negotiating...', class: 'status-warning' }
         };
     }
 
@@ -964,41 +966,73 @@ class PowerDeliveryControl extends Control {
                     console.log(`PowerDelivery: Requesting voltage change to ${selectedVoltage}V`);
                     
                     // Provide immediate visual feedback
-                    this.showNegotiationStarted();
+                    this.showNegotiationStarted(false); // false = single voltage negotiation
                     
                     // Send power delivery command to set target voltage and start negotiation
                     this.bratendreherble.sendCommand('pd_voltage', selectedVoltage);
                 }
             });
         }
+        
+        if (this.autoNegotiateButton) {
+            this.autoNegotiateButton.addEventListener('click', () => {
+                if (this.bratendreherble) {
+                    console.log('PowerDelivery: Requesting auto-negotiation for highest voltage');
+                    
+                    // Provide immediate visual feedback
+                    this.showNegotiationStarted(true); // true = auto-negotiation
+                    
+                    // Send power delivery command for auto-negotiation
+                    this.bratendreherble.sendCommand('pd_auto_negotiate', 1);
+                }
+            });
+        }
     }
 
-    showNegotiationStarted() {
+    showNegotiationStarted(isAutoNegotiation = false) {
         // Update status to show negotiation is starting
-        this.statusElement.textContent = 'Negotiating...';
+        if (isAutoNegotiation) {
+            this.statusElement.textContent = 'Auto-Negotiating...';
+        } else {
+            this.statusElement.textContent = 'Negotiating...';
+        }
         this.statusElement.className = 'power-value status-warning negotiating';
         this.statusElement.style.opacity = '1.0';
         
-        // Temporarily disable the negotiate button and show feedback
+        // Temporarily disable both buttons and show feedback
         this.negotiateButton.disabled = true;
-        this.negotiateButton.textContent = '🔄 Negotiating...';
-        this.negotiateButton.className = 'btn btn-secondary negotiating';
-        this.negotiateButton.style.opacity = '0.8';
+        this.autoNegotiateButton.disabled = true;
         
-        // Set a timeout to re-enable button if no response (fallback)
+        if (isAutoNegotiation) {
+            this.autoNegotiateButton.textContent = '🔄 Auto-Negotiating...';
+            this.autoNegotiateButton.className = 'btn btn-primary negotiating';
+            this.autoNegotiateButton.style.opacity = '0.8';
+        } else {
+            this.negotiateButton.textContent = '🔄 Negotiating...';
+            this.negotiateButton.className = 'btn btn-secondary negotiating';
+            this.negotiateButton.style.opacity = '0.8';
+        }
+        
+        // Set a timeout to re-enable buttons if no response (fallback)
         if (this.negotiationTimeout) {
             clearTimeout(this.negotiationTimeout);
         }
         this.negotiationTimeout = setTimeout(() => {
-            this.resetNegotiateButton();
-        }, 10000); // 10 second timeout for button reset
+            this.resetNegotiateButtons();
+        }, 15000); // 15 second timeout for auto-negotiation (longer than single)
     }
 
-    resetNegotiateButton() {
+    resetNegotiateButtons() {
         this.negotiateButton.disabled = false;
         this.negotiateButton.textContent = '🔌 Renegotiate';
         this.negotiateButton.className = 'btn btn-secondary';
         this.negotiateButton.style.opacity = '1.0';
+        
+        this.autoNegotiateButton.disabled = false;
+        this.autoNegotiateButton.textContent = '⚡ Auto-Negotiate Highest Power';
+        this.autoNegotiateButton.className = 'btn btn-primary';
+        this.autoNegotiateButton.style.opacity = '1.0';
+        
         if (this.negotiationTimeout) {
             clearTimeout(this.negotiationTimeout);
             this.negotiationTimeout = null;
@@ -1031,18 +1065,31 @@ class PowerDeliveryControl extends Control {
                           { text: `Unknown (${statusUpdate.pdNegotiationStatus})`, class: 'status-error' };
             
             this.statusElement.textContent = status.text;
-            // Remove negotiating class and apply the appropriate status class
-            this.statusElement.className = `power-value ${status.class}`;
+            
+            // Apply status class, keeping negotiating class for active negotiations
+            if (statusValue === 1 || statusValue === 4) { // NEGOTIATING or AUTO_NEGOTIATING
+                this.statusElement.className = `power-value ${status.class} negotiating`;
+            } else {
+                this.statusElement.className = `power-value ${status.class}`;
+            }
             this.statusElement.style.opacity = '1.0';
             
-            // Reset negotiate button when we receive any status update
-            this.resetNegotiateButton();
+            // Only reset negotiate buttons when negotiation is complete (not in progress)
+            if (statusValue !== 1 && statusValue !== 4) { // Not NEGOTIATING or AUTO_NEGOTIATING
+                this.resetNegotiateButtons();
+            }
             
-            // Show fallback mode notice if PD failed/timed out
-            if (statusValue === 3 || statusValue === 4) {
+            // Show fallback mode notice if PD failed
+            if (statusValue === 3) { // FAILED
                 this.showFallbackNotice();
             } else {
                 this.hideFallbackNotice();
+            }
+            
+            // Update voltage selector when negotiation succeeds
+            if (statusValue === 2 && statusUpdate.pdNegotiatedVoltage > 0) { // SUCCESS
+                this.element.value = statusUpdate.pdNegotiatedVoltage;
+                console.log(`PowerDelivery: Negotiation successful, updated voltage selector to ${statusUpdate.pdNegotiatedVoltage}V`);
             }
         }
         
@@ -1238,6 +1285,7 @@ class BratenDreherBLE {
         // Power delivery elements
         this.voltageSelect = document.getElementById('voltageSelect');
         this.negotiateBtn = document.getElementById('negotiateBtn');
+        this.autoNegotiateBtn = document.getElementById('autoNegotiateBtn');
         this.pdStatus = document.getElementById('pdStatus');
         this.pdPowerGood = document.getElementById('pdPowerGood');
         this.pdNegotiatedVoltage = document.getElementById('pdNegotiatedVoltage');
@@ -2126,6 +2174,7 @@ class BratenDreherBLE {
         this.controls.set('powerDelivery', new PowerDeliveryControl(
             this.voltageSelect,
             this.negotiateBtn,
+            this.autoNegotiateBtn,
             this.pdStatus,
             this.pdPowerGood,
             this.pdNegotiatedVoltage,

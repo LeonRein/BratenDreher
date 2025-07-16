@@ -3,6 +3,9 @@
 // Singleton instance
 static PowerDeliveryTask* pdTaskInstance = nullptr;
 
+// Static voltage array for auto-negotiation (highest to lowest)
+const int PowerDeliveryTask::autoNegotiationVoltages[5] = {PD_VOLTAGE_20V, PD_VOLTAGE_15V, PD_VOLTAGE_12V, PD_VOLTAGE_9V, PD_VOLTAGE_5V};
+
 PowerDeliveryTask::PowerDeliveryTask() 
     : Task("PowerDeliveryTask", 4096, 2, 1), // Stack: 4KB, Priority: 2, Core: 1
       targetVoltage(PD_VOLTAGE_12V),
@@ -12,6 +15,9 @@ PowerDeliveryTask::PowerDeliveryTask()
       powerGoodDebounceTime(0),
       negotiationState(PDNegotiationState::IDLE),
       negotiationStartTime(0),
+      isAutoNegotiating(false),
+      autoNegotiationVoltageIndex(0),
+      autoNegotiationHighestVoltage(0),
       lastStatusUpdate(0),
       lastVoltageUpdate(0),
       isInitialized(false) {
@@ -39,8 +45,8 @@ void PowerDeliveryTask::run() {
     isInitialized = true;
     Serial.println("PowerDeliveryTask: Initialization complete");
     
-    // Start with default voltage negotiation
-    applyNegotiationVoltage(targetVoltage);
+    // Start with automatic highest voltage negotiation
+    autoNegotiateHighestVoltageInternal();
     
     // Main task loop
     while (true) {
@@ -211,19 +217,31 @@ void PowerDeliveryTask::publishPeriodicStatusUpdates() {
 // ============================================================================
 
 void PowerDeliveryTask::updateNegotiationState() {
-    // Only process state changes during active negotiation
-    if (negotiationState != PDNegotiationState::NEGOTIATING) {
-        return;
-    }
-    
     unsigned long currentTime = millis();
     
+    // Handle different negotiation states
+    switch (negotiationState) {
+        case PDNegotiationState::NEGOTIATING:
+            handleSingleVoltageNegotiation(currentTime);
+            break;
+            
+        case PDNegotiationState::AUTO_NEGOTIATING:
+            handleAutoNegotiation(currentTime);
+            break;
+            
+        default:
+            // No active negotiation
+            break;
+    }
+}
+
+void PowerDeliveryTask::handleSingleVoltageNegotiation(unsigned long currentTime) {
     // Check for successful negotiation (PG is good)
     bool currentPGState = pdCheckPowerGood();
     if (currentPGState) {
         negotiationState = PDNegotiationState::SUCCESS;
         negotiatedVoltage = targetVoltage;
-        Serial.printf("PowerDeliveryTask: Negotiation successful at %dV\n", negotiatedVoltage);
+        Serial.printf("PowerDeliveryTask: Single voltage negotiation successful at %dV\n", negotiatedVoltage);
         
         // Publish immediate status updates
         publishNegotiationStatus();
@@ -231,16 +249,67 @@ void PowerDeliveryTask::updateNegotiationState() {
         return;
     }
     
-    // Check for timeout
+    // Check for timeout (treat as FAILED)
     if (currentTime - negotiationStartTime >= PD_NEGOTIATION_TIMEOUT) {
-        negotiationState = PDNegotiationState::TIMEOUT;
+        negotiationState = PDNegotiationState::FAILED;
         negotiatedVoltage = 0;
-        Serial.printf("PowerDeliveryTask: Negotiation timeout after %dms\n", PD_NEGOTIATION_TIMEOUT);
+        Serial.printf("PowerDeliveryTask: Single voltage negotiation failed (timeout) after %dms\n", PD_NEGOTIATION_TIMEOUT);
         
         // Publish immediate status updates
         publishNegotiationStatus();
         publishVoltageStatus();
         return;
+    }
+}
+
+void PowerDeliveryTask::handleAutoNegotiation(unsigned long currentTime) {
+    // Check for successful negotiation (PG is good)
+    bool currentPGState = pdCheckPowerGood();
+    if (currentPGState) {
+        // Success! This voltage works
+        autoNegotiationHighestVoltage = autoNegotiationVoltages[autoNegotiationVoltageIndex];
+        negotiationState = PDNegotiationState::SUCCESS;
+        negotiatedVoltage = autoNegotiationHighestVoltage;
+        targetVoltage = autoNegotiationHighestVoltage; // Update target to match
+        isAutoNegotiating = false;
+        
+        Serial.printf("PowerDeliveryTask: Auto-negotiation successful! Highest voltage: %dV\n", autoNegotiationHighestVoltage);
+        
+        // Publish immediate status updates
+        publishNegotiationStatus();
+        publishVoltageStatus();
+        return;
+    }
+    
+    // Check for timeout on current voltage
+    if (currentTime - negotiationStartTime >= PD_NEGOTIATION_TIMEOUT) {
+        // This voltage failed, try next lower voltage
+        autoNegotiationVoltageIndex++;
+        
+        if (autoNegotiationVoltageIndex >= 5) {
+            // All voltages failed
+            negotiationState = PDNegotiationState::FAILED;
+            negotiatedVoltage = 0;
+            isAutoNegotiating = false;
+            Serial.println("PowerDeliveryTask: Auto-negotiation failed - no voltages work");
+            
+            // Publish immediate status updates
+            publishNegotiationStatus();
+            publishVoltageStatus();
+            return;
+        }
+        
+        // Try next voltage
+        int nextVoltage = autoNegotiationVoltages[autoNegotiationVoltageIndex];
+        Serial.printf("PowerDeliveryTask: Auto-negotiation - trying next voltage: %dV (attempt %d/5)\n", 
+                     nextVoltage, autoNegotiationVoltageIndex + 1);
+        
+        // Configure hardware for next voltage
+        pdConfigureVoltage(nextVoltage);
+        negotiationStartTime = currentTime; // Reset timeout for new voltage
+        
+        // Update status to show progress
+        publishNegotiationStatus();
     }
 }
 
@@ -256,6 +325,10 @@ void PowerDeliveryTask::processCommands() {
         switch (command.command) {
             case PowerDeliveryCommand::SET_TARGET_VOLTAGE:
                 setTargetVoltageInternal(command.intValue);
+                break;
+                
+            case PowerDeliveryCommand::AUTO_NEGOTIATE_HIGHEST:
+                autoNegotiateHighestVoltageInternal();
                 break;
                 
             case PowerDeliveryCommand::REQUEST_ALL_STATUS:
@@ -286,6 +359,35 @@ void PowerDeliveryTask::setTargetVoltageInternal(int voltage) {
     applyNegotiationVoltage(voltage);
     
     Serial.printf("PowerDeliveryTask: Target voltage set to %dV\n", voltage);
+}
+
+void PowerDeliveryTask::autoNegotiateHighestVoltageInternal() {
+    if (!isInitialized) {
+        Serial.println("WARNING: Cannot start auto-negotiation - hardware not initialized");
+        return;
+    }
+    
+    Serial.println("PowerDeliveryTask: Starting auto-negotiation for highest available voltage");
+    
+    // Reset auto-negotiation state
+    isAutoNegotiating = true;
+    autoNegotiationVoltageIndex = 0; // Start with highest voltage (20V)
+    autoNegotiationHighestVoltage = 0;
+    negotiationState = PDNegotiationState::AUTO_NEGOTIATING;
+    negotiationStartTime = millis();
+    negotiatedVoltage = 0; // Reset until we find a working voltage
+    
+    // Start with the highest voltage
+    int startVoltage = autoNegotiationVoltages[0]; // 20V
+    targetVoltage = startVoltage; // Set target for status reporting
+    
+    Serial.printf("PowerDeliveryTask: Auto-negotiation starting with %dV (attempt 1/5)\n", startVoltage);
+    
+    // Configure hardware for first voltage
+    pdConfigureVoltage(startVoltage);
+    
+    // Publish status update
+    publishNegotiationStatus();
 }
 
 void PowerDeliveryTask::requestAllStatusInternal() {
@@ -331,9 +433,10 @@ bool PowerDeliveryTask::startNegotiation(int voltage) {
 }
 
 bool PowerDeliveryTask::isNegotiationComplete() const {
-    return (negotiationState == PDNegotiationState::SUCCESS || 
-            negotiationState == PDNegotiationState::FAILED ||
-            negotiationState == PDNegotiationState::TIMEOUT);
+    // Check if negotiation is complete (either success or failure)
+    // Using integer comparison to avoid enum issues
+    int state = static_cast<int>(negotiationState);
+    return (state == 2 || state == 3); // SUCCESS=2, FAILED=3
 }
 
 bool PowerDeliveryTask::isPowerGood() const {
@@ -357,6 +460,11 @@ PDNegotiationState PowerDeliveryTask::getNegotiationState() const {
 
 bool PowerDeliveryTask::setTargetVoltage(int voltage) {
     SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
+    return true;
+}
+
+bool PowerDeliveryTask::autoNegotiateHighestVoltage() {
+    SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::AUTO_NEGOTIATE_HIGHEST, 0);
     return true;
 }
 

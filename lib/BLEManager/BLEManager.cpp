@@ -266,6 +266,13 @@ void BLEManager::handleCommand(const std::string& command) {
             Serial.printf("Invalid voltage value: %d (must be 5-20V)\n", voltage);
         }
     }
+    else if (strcmp(type, "pd_auto_negotiate") == 0) {
+        // Start auto-negotiation for highest available voltage
+        PowerDeliveryCommandData cmd(PowerDeliveryCommand::AUTO_NEGOTIATE_HIGHEST);
+        systemCommand.sendPowerDeliveryCommand(cmd);
+        
+        Serial.printf("Power delivery auto-negotiation started\n");
+    }
     else {
         Serial.printf("Unknown command type: %s\n", type);
     }

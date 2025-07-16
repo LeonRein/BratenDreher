@@ -897,11 +897,30 @@ body {
 }
 
 .btn.negotiating {
-    animation: pdPulse 1.5s ease-in-out infinite;
+    animation: pdPulse 1.5s ease-in-out infinite !important;
+    pointer-events: none; /* Prevent additional clicks during negotiation */
 }
 
 .status-warning.negotiating {
-    animation: pdPulse 2s ease-in-out infinite;
+    animation: pdPulse 2s ease-in-out infinite !important;
+}
+
+/* Auto-negotiate button styling */
+.power-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.power-controls > button {
+    width: 100%;
+}
+
+/* Enhanced button layout for power controls */
+.power-controls .btn {
+    margin: 5px 0;
+    min-height: 40px;
 }
 
 /* Animations */

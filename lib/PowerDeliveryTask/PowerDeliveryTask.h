@@ -45,10 +45,10 @@
 // Power delivery states
 enum class PDNegotiationState {
     IDLE,                   // Not negotiating
-    NEGOTIATING,           // Negotiation in progress
+    NEGOTIATING,           // Single voltage negotiation in progress
     SUCCESS,               // Negotiation successful
-    FAILED,                // Negotiation failed
-    TIMEOUT                // Negotiation timed out
+    FAILED,                // Negotiation failed (includes timeout and auto-failed)
+    AUTO_NEGOTIATING       // Auto-negotiating highest voltage
 };
 
 class PowerDeliveryTask : public Task {
@@ -61,6 +61,12 @@ private:
     unsigned long powerGoodDebounceTime;
     PDNegotiationState negotiationState;
     unsigned long negotiationStartTime;
+    
+    // Auto-negotiation state variables
+    bool isAutoNegotiating;
+    int autoNegotiationVoltageIndex;
+    static const int autoNegotiationVoltages[5]; // Available voltages in descending order
+    int autoNegotiationHighestVoltage;
     
     // Timing variables
     unsigned long lastStatusUpdate;
@@ -88,10 +94,13 @@ private:
     
     // State machine and command processing
     void updateNegotiationState();
+    void handleSingleVoltageNegotiation(unsigned long currentTime);
+    void handleAutoNegotiation(unsigned long currentTime);
     void processCommands();
     
     // Internal command processors (with validation)
     void setTargetVoltageInternal(int voltage);
+    void autoNegotiateHighestVoltageInternal();
     void requestAllStatusInternal();
     
     // Initialization and settings
@@ -114,6 +123,7 @@ public:
     
     // Command interface (thread-safe)
     bool setTargetVoltage(int voltage);
+    bool autoNegotiateHighestVoltage();
     bool requestStatus();
     
     // Static method to get singleton instance

@@ -22,6 +22,7 @@ enum class StepperCommand {
 // Power delivery command types
 enum class PowerDeliveryCommand {
     SET_TARGET_VOLTAGE,         // Set target voltage for PD negotiation
+    AUTO_NEGOTIATE_HIGHEST,     // Automatically find and negotiate highest available voltage
     REQUEST_ALL_STATUS              // Request all status updates
 };
 
