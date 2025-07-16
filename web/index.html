@@ -196,6 +196,44 @@
             </div>
         </div>
 
+        <!-- Power Delivery Status -->
+        <div class="card power-card">
+            <h2>⚡ Power Delivery</h2>
+            <div class="power-status">
+                <div class="power-status-grid">
+                    <div class="power-item">
+                        <span class="power-label">Status:</span>
+                        <span id="pdStatus" class="power-value status-unknown">Unknown</span>
+                    </div>
+                    <div class="power-item">
+                        <span class="power-label">Power Good:</span>
+                        <span id="pdPowerGood" class="power-value status-unknown">Unknown</span>
+                    </div>
+                    <div class="power-item">
+                        <span class="power-label">Negotiated:</span>
+                        <span id="pdNegotiatedVoltage" class="power-value">- V</span>
+                    </div>
+                    <div class="power-item">
+                        <span class="power-label">Current:</span>
+                        <span id="pdCurrentVoltage" class="power-value">- V</span>
+                    </div>
+                </div>
+                <div class="power-controls">
+                    <label for="voltageSelect">Target Voltage:</label>
+                    <select id="voltageSelect" class="voltage-select">
+                        <option value="5">5V</option>
+                        <option value="9">9V</option>
+                        <option value="12" selected>12V</option>
+                        <option value="15">15V</option>
+                        <option value="20">20V</option>
+                    </select>
+                    <button id="negotiateBtn" class="btn btn-secondary">
+                        🔌 Renegotiate
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Stall Detection -->
         <div class="card stall-card">
             <h2>Stall Detection</h2>

@@ -17,10 +17,12 @@
 
 // Queue size configuration
 #define COMMAND_QUEUE_SIZE          20     // Command queue size
+#define PD_COMMAND_QUEUE_SIZE       10     // Power delivery command queue size
 
 class SystemCommand {
 private:
     QueueHandle_t commandQueue;
+    QueueHandle_t pdCommandQueue;  // Separate queue for power delivery commands
     
     // Singleton implementation
     SystemCommand();
@@ -53,6 +55,19 @@ public:
     bool hasCommands() const;
     UBaseType_t getPendingCommandCount() const;
     void clearCommands();
+    
+    // Power delivery command management (thread-safe)
+    bool sendPowerDeliveryCommand(const PowerDeliveryCommandData& command, TickType_t timeout = pdMS_TO_TICKS(10));
+    bool sendPowerDeliveryCommand(PowerDeliveryCommand cmd, TickType_t timeout = pdMS_TO_TICKS(10));
+    bool sendPowerDeliveryCommand(PowerDeliveryCommand cmd, float value, TickType_t timeout = pdMS_TO_TICKS(10));
+    bool sendPowerDeliveryCommand(PowerDeliveryCommand cmd, bool value, TickType_t timeout = pdMS_TO_TICKS(10));
+    bool sendPowerDeliveryCommand(PowerDeliveryCommand cmd, int value, TickType_t timeout = pdMS_TO_TICKS(10));
+    
+    // Power delivery command retrieval (thread-safe)
+    bool getPowerDeliveryCommand(PowerDeliveryCommandData& command, TickType_t timeout = portMAX_DELAY);
+    bool hasPowerDeliveryCommands() const;
+    UBaseType_t getPendingPowerDeliveryCommandCount() const;
+    void clearPowerDeliveryCommands();
 };
 
 #endif // SYSTEM_COMMAND_H

@@ -1,3 +1,6 @@
+#ifndef COMMAND_TYPES_H
+#define COMMAND_TYPES_H
+
 // Command types for inter-task communication
 enum class StepperCommand {
     SET_SPEED,
@@ -14,6 +17,14 @@ enum class StepperCommand {
     ENABLE_SPEED_VARIATION,
     DISABLE_SPEED_VARIATION,
     REQUEST_ALL_STATUS  // Request all current status values
+};
+
+// Power delivery command types
+enum class PowerDeliveryCommand {
+    SET_TARGET_VOLTAGE,         // Set target voltage for PD negotiation
+    START_NEGOTIATION,          // Start power delivery negotiation
+    STOP_NEGOTIATION,           // Stop power delivery negotiation
+    REQUEST_STATUS              // Request current PD status
 };
 
 // Command data structure
@@ -46,3 +57,32 @@ struct StepperCommandData {
         uint32Value = value;
     }
 };
+
+// Power delivery command data structure
+struct PowerDeliveryCommandData {
+    PowerDeliveryCommand command;
+    union {
+        float floatValue;    // for voltage setting
+        bool boolValue;      // for enable/disable
+        int intValue;        // for voltage selection
+    };
+    
+    // Helper constructors
+    PowerDeliveryCommandData() : command(PowerDeliveryCommand::REQUEST_STATUS) {
+        floatValue = 0.0f;
+    }
+    PowerDeliveryCommandData(PowerDeliveryCommand cmd) : command(cmd) {
+        floatValue = 0.0f;
+    }
+    PowerDeliveryCommandData(PowerDeliveryCommand cmd, float value) : command(cmd) {
+        floatValue = value;
+    }
+    PowerDeliveryCommandData(PowerDeliveryCommand cmd, bool value) : command(cmd) {
+        boolValue = value;
+    }
+    PowerDeliveryCommandData(PowerDeliveryCommand cmd, int value) : command(cmd) {
+        intValue = value;
+    }
+};
+
+#endif // COMMAND_TYPES_H

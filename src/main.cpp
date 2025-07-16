@@ -3,10 +3,12 @@
 #include "BLEManager.h"
 #include "SystemStatus.h"
 #include "SystemCommand.h"
+#include "PowerDeliveryTask.h"
 
 // Global task objects
 StepperController stepperController;
 BLEManager bleManager;
+PowerDeliveryTask& powerDeliveryTask = PowerDeliveryTask::getInstance();
 
 // Status LED
 const int STATUS_LED_PIN = LED_BUILTIN;
@@ -56,7 +58,15 @@ void setup() {
     
     // BLE manager now uses SystemCommand singleton directly - no need to connect to stepper controller
     
-    // Start tasks
+    // Start tasks - PowerDeliveryTask must start first
+    if (!powerDeliveryTask.start()) {
+        Serial.println("Failed to start Power Delivery Task!");
+        while (1) {
+            digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
+            delay(50);
+        }
+    }
+    
     if (!stepperController.start()) {
         Serial.println("Failed to start Stepper Task!");
         while (1) {

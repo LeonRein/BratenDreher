@@ -439,6 +439,96 @@ body {
     text-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
+/* Power Delivery Section */
+.power-card {
+    border-left: 3px solid #10b981;
+}
+
+.power-status-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.power-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(16, 185, 129, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.power-label {
+    font-weight: 500;
+    color: #374151;
+}
+
+.power-value {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.status-unknown {
+    color: #6b7280;
+}
+
+.status-success {
+    color: #10b981;
+}
+
+.status-error {
+    color: #ef4444;
+}
+
+.status-warning {
+    color: #f59e0b;
+}
+
+.power-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: rgba(16, 185, 129, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.voltage-select {
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: white;
+    font-size: 0.9rem;
+    min-width: 80px;
+}
+
+.voltage-select:focus {
+    outline: none;
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.power-fallback-notice {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 8px;
+    color: #d97706;
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: none;
+}
+
+.power-fallback-notice:before {
+    content: '⚠️ ';
+    margin-right: 8px;
+}
+
 /* Stall Detection Section */
 .stall-card {
     border-left: 3px solid #f59e0b;

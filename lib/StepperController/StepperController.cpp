@@ -1,5 +1,6 @@
 // Always include the header first to ensure class/type declarations
 #include "StepperController.h"
+#include "PowerDeliveryTask.h"
 
 void StepperController::applyStepperSetpointSpeed(float rpm) {
     if (!stepper) {
@@ -31,6 +32,14 @@ void StepperController::applyRunClockwise() {
         Serial.println("WARNING: Cannot set direction - stepper not initialized");
         return;
     }
+    
+    // Check power delivery and warn if not optimal, but still allow operation
+    PowerDeliveryTask& pdTask = PowerDeliveryTask::getInstance();
+    if (pdTask.isNegotiationComplete() && pdTask.getNegotiationState() == PDNegotiationState::SUCCESS && !pdTask.isPowerGood()) {
+        Serial.println("WARNING: Power delivery indicates power not good, but enabling motor anyway");
+    } else if (!pdTask.isNegotiationComplete()) {
+        Serial.println("INFO: Motor enabled without power delivery negotiation (no PD adapter or still negotiating)");
+    }
 
     if(!motorEnabled) {
         publishTMC2209Communication();
@@ -49,6 +58,14 @@ void StepperController::applyRunCounterClockwise() {
     if (!stepper) {
         Serial.println("WARNING: Cannot set direction - stepper not initialized");
         return;
+    }
+    
+    // Check power delivery and warn if not optimal, but still allow operation
+    PowerDeliveryTask& pdTask = PowerDeliveryTask::getInstance();
+    if (pdTask.isNegotiationComplete() && pdTask.getNegotiationState() == PDNegotiationState::SUCCESS && !pdTask.isPowerGood()) {
+        Serial.println("WARNING: Power delivery indicates power not good, but enabling motor anyway");
+    } else if (!pdTask.isNegotiationComplete()) {
+        Serial.println("INFO: Motor enabled without power delivery negotiation (no PD adapter or still negotiating)");
     }
 
     if(!motorEnabled) {
@@ -187,7 +204,7 @@ StepperController::StepperController()
     : Task("Stepper_Task", 4096, 1, 1), // Task name, 4KB stack, priority 1, core 1
       stepper(nullptr), serialStream(Serial2), setpointRPM(1.0f),
       runCurrent(30), motorEnabled(false), clockwise(true),
-      startTime(0), totalMicroSteps(0), isFirstStart(true), tmc2209Initialized(false),
+      startTime(0), totalMicroSteps(0), isFirstStart(true), tmc2209Initialized(false), powerDeliveryReady(false),
       stallDetected(false), lastStallTime(0), stallCount(0),
       setpointAcceleration(0),  // Will be set during initialization
       speedVariationEnabled(false), speedVariationStrength(0.0f), speedVariationPhase(0.0f), speedVariationStartPosition(0),
@@ -344,6 +361,41 @@ void StepperController::configureDriver() {
     }
 }
 
+bool StepperController::checkPowerDeliveryReady() {
+    PowerDeliveryTask& pdTask = PowerDeliveryTask::getInstance();
+    
+    // Check if power delivery is ready (successful negotiation AND power good)
+    if (pdTask.isNegotiationComplete() && pdTask.isPowerGood()) {
+        if (!powerDeliveryReady) {
+            powerDeliveryReady = true;
+            Serial.printf("StepperController: Power delivery ready - %dV negotiated, %0.1fV measured\n", 
+                         pdTask.getNegotiatedVoltage(), pdTask.getCurrentVoltage());
+        }
+        return true;
+    }
+    
+    // If negotiation is complete but failed, check if it's because no PD adapter is connected
+    if (pdTask.isNegotiationComplete() && !pdTask.isPowerGood()) {
+        PDNegotiationState state = pdTask.getNegotiationState();
+        
+        // If negotiation timed out or failed, assume no PD adapter and allow operation
+        if (state == PDNegotiationState::TIMEOUT || state == PDNegotiationState::FAILED) {
+            if (!powerDeliveryReady) {
+                powerDeliveryReady = true;
+                Serial.println("StepperController: No PD adapter detected, allowing operation without PD safety");
+            }
+            return true;
+        }
+    }
+    
+    // If we get here, either negotiation is still in progress or power was lost
+    if (powerDeliveryReady) {
+        powerDeliveryReady = false;
+        Serial.println("StepperController: Power delivery lost or negotiation in progress");
+    }
+    return false;
+}
+
 uint32_t StepperController::rpmToStepsPerSecond(float rpm) const {
     // Optimized calculation
     // Formula: (rpm * GEAR_RATIO * STEPS_PER_REVOLUTION * MICRO_STEPS) / 60.0f
@@ -357,6 +409,27 @@ uint32_t StepperController::rpmToStepsPerSecond(float rpm) const {
 
 void StepperController::run() {
     Serial.println("Stepper Task started");
+    
+    // Wait for power delivery negotiation with timeout
+    Serial.println("Waiting for power delivery negotiation...");
+    unsigned long pdWaitStart = millis();
+    const unsigned long PD_WAIT_TIMEOUT = 10000; // 10 second timeout
+    bool pdTimedOut = false;
+    
+    while (!checkPowerDeliveryReady() && !pdTimedOut) {
+        if (millis() - pdWaitStart >= PD_WAIT_TIMEOUT) {
+            pdTimedOut = true;
+            Serial.println("StepperController: Power delivery negotiation timed out");
+            Serial.println("StepperController: Proceeding with stepper initialization (no PD adapter or negotiation failed)");
+            Serial.println("StepperController: Motor control will be available but without PD safety features");
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(500)); // Check every 500ms
+        }
+    }
+    
+    if (!pdTimedOut) {
+        Serial.println("StepperController: Power delivery negotiation successful, proceeding with full safety features");
+    }
     
     // Initialize stepper controller
     if (!begin()) {
@@ -388,6 +461,12 @@ void StepperController::run() {
         
         // Perform periodic status updates if due
         if (isUpdateDue(nextPeriodicUpdate)) {
+            // Check power delivery status and disable motor if power is lost
+            if (motorEnabled && !checkPowerDeliveryReady()) {
+                Serial.println("StepperController: Power delivery lost, disabling motor");
+                applyStop();
+            }
+            
             publishPeriodicStatusUpdates();
             nextPeriodicUpdate = currentTime + STATUS_UPDATE_INTERVAL;
         }

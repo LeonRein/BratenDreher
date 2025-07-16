@@ -34,7 +34,12 @@ enum class StatusUpdateType {
     RUNTIME_UPDATE,
     STALL_DETECTED_UPDATE,
     STALL_COUNT_UPDATE,
-    TMC2209_STATUS_UPDATE
+    TMC2209_STATUS_UPDATE,
+    // Power Delivery status updates
+    PD_NEGOTIATION_STATUS,      // Power delivery negotiation status
+    PD_NEGOTIATED_VOLTAGE,      // Negotiated voltage from PD chip
+    PD_CURRENT_VOLTAGE,         // Current measured voltage
+    PD_POWER_GOOD_STATUS        // Power good signal status
 };
 
 // Notification structure (for warnings and errors only)

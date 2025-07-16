@@ -403,6 +403,18 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
         case StatusUpdateType::TMC2209_STATUS_UPDATE:
             doc["tmc2209Status"] = statusUpdate.boolValue;
             break;
+        case StatusUpdateType::PD_NEGOTIATION_STATUS:
+            doc["pdNegotiationStatus"] = statusUpdate.intValue;
+            break;
+        case StatusUpdateType::PD_NEGOTIATED_VOLTAGE:
+            doc["pdNegotiatedVoltage"] = statusUpdate.floatValue;
+            break;
+        case StatusUpdateType::PD_CURRENT_VOLTAGE:
+            doc["pdCurrentVoltage"] = statusUpdate.floatValue;
+            break;
+        case StatusUpdateType::PD_POWER_GOOD_STATUS:
+            doc["pdPowerGood"] = statusUpdate.boolValue;
+            break;
     }
 }
 

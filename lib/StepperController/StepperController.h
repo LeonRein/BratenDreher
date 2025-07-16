@@ -11,6 +11,9 @@
 #include "SystemStatus.h"
 #include "SystemCommand.h"
 
+// Forward declarations
+class PowerDeliveryTask;
+
 // Hardware pin definitions (from PD-Stepper example)
 #define TMC_EN_PIN          21
 #define STEP_PIN            5
@@ -58,6 +61,7 @@ private:
     unsigned long totalMicroSteps;
     bool isFirstStart;
     bool tmc2209Initialized;  // Track TMC2209 driver initialization status
+    bool powerDeliveryReady;  // Track if power delivery negotiation is complete
     
     // Stall detection
     bool stallDetected;
@@ -85,6 +89,7 @@ private:
     void loadSettings();
     void configureDriver();
     void configureStallDetection(bool enableStealthChop = true);
+    bool checkPowerDeliveryReady();    // Check if power delivery is ready for stepper initialization
     inline uint32_t rpmToStepsPerSecond(float rpm) const;  // Inline hint for frequent calls
     
     // Internal methods (called from command processing)

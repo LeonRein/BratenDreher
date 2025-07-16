@@ -925,6 +925,125 @@ class StatisticsControl extends Control {
     }
 }
 
+// Specialized control for Power Delivery management
+class PowerDeliveryControl extends Control {
+    constructor(voltageSelectElement, negotiateButton, statusElement, powerGoodElement, negotiatedVoltageElement, currentVoltageElement, options = {}) {
+        super(voltageSelectElement, null, options); // Use voltage select as main element
+        this.negotiateButton = negotiateButton;
+        this.statusElement = statusElement;
+        this.powerGoodElement = powerGoodElement;
+        this.negotiatedVoltageElement = negotiatedVoltageElement;
+        this.currentVoltageElement = currentVoltageElement;
+        
+        // Add all status elements as additional elements
+        this.addAdditionalElement(this.statusElement, { applyDisabled: false });
+        this.addAdditionalElement(this.powerGoodElement, { applyDisabled: false });
+        this.addAdditionalElement(this.negotiatedVoltageElement, { applyDisabled: false });
+        this.addAdditionalElement(this.currentVoltageElement, { applyDisabled: false });
+        this.addAdditionalElement(this.negotiateButton, { applyDisabled: true });
+        
+        // Initialize with disabled state
+        this.setDisplayState(CONTROL_STATES.DISABLED);
+        
+        // State mapping for negotiation status
+        this.negotiationStates = {
+            0: { text: 'Idle', class: 'status-unknown' },
+            1: { text: 'Negotiating...', class: 'status-warning' },
+            2: { text: 'Success', class: 'status-success' },
+            3: { text: 'Failed (No PD Adapter)', class: 'status-error' },
+            4: { text: 'Timeout (No PD Adapter)', class: 'status-error' }
+        };
+    }
+
+    bindEvents() {
+        if (this.negotiateButton && this.element) {
+            this.negotiateButton.addEventListener('click', () => {
+                const selectedVoltage = parseInt(this.element.value);
+                if (selectedVoltage && this.parent) {
+                    console.log(`PowerDelivery: Requesting voltage change to ${selectedVoltage}V`);
+                    // Send power delivery command to set target voltage and start negotiation
+                    this.parent.sendCommand('pd_voltage', selectedVoltage);
+                }
+            });
+        }
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        // Call parent to get common timeout clearing and retry reset
+        super.handleStatusUpdate(statusUpdate);
+        
+        // Update negotiation status
+        if (statusUpdate.pdNegotiationStatus !== undefined) {
+            this.setDisplayState('VALID');
+            
+            const status = this.negotiationStates[statusUpdate.pdNegotiationStatus] || 
+                          { text: 'Unknown', class: 'status-unknown' };
+            
+            this.statusElement.textContent = status.text;
+            this.statusElement.className = `power-value ${status.class}`;
+            this.statusElement.style.opacity = '1.0';
+            
+            // Show fallback mode notice if PD failed/timed out
+            if (statusUpdate.pdNegotiationStatus === 3 || statusUpdate.pdNegotiationStatus === 4) {
+                this.showFallbackNotice();
+            } else {
+                this.hideFallbackNotice();
+            }
+        }
+        
+        // Update power good status
+        if (statusUpdate.pdPowerGood !== undefined) {
+            this.setDisplayState('VALID');
+            
+            this.powerGoodElement.textContent = statusUpdate.pdPowerGood ? 'Good' : 'Bad';
+            this.powerGoodElement.className = statusUpdate.pdPowerGood ? 
+                'power-value status-success' : 'power-value status-error';
+            this.powerGoodElement.style.opacity = '1.0';
+        }
+        
+        // Update negotiated voltage
+        if (statusUpdate.pdNegotiatedVoltage !== undefined) {
+            this.setDisplayState('VALID');
+            
+            this.negotiatedVoltageElement.textContent = statusUpdate.pdNegotiatedVoltage > 0 ? 
+                `${statusUpdate.pdNegotiatedVoltage}V` : '- V';
+            this.negotiatedVoltageElement.style.opacity = '1.0';
+        }
+        
+        // Update current voltage measurement
+        if (statusUpdate.pdCurrentVoltage !== undefined) {
+            this.setDisplayState('VALID');
+            
+            this.currentVoltageElement.textContent = `${statusUpdate.pdCurrentVoltage.toFixed(1)}V`;
+            this.currentVoltageElement.style.opacity = '1.0';
+        }
+    }
+    
+    showFallbackNotice() {
+        // Find or create fallback notice
+        let notice = document.getElementById('pdFallbackNotice');
+        if (!notice) {
+            notice = document.createElement('div');
+            notice.id = 'pdFallbackNotice';
+            notice.className = 'power-fallback-notice';
+            notice.innerHTML = '⚠️ Power Delivery not available - running in fallback mode. Motor control is still functional.';
+            
+            // Insert after power status grid
+            const powerCard = this.statusElement.closest('.power-card');
+            const powerStatus = powerCard.querySelector('.power-status');
+            powerStatus.appendChild(notice);
+        }
+        notice.style.display = 'block';
+    }
+    
+    hideFallbackNotice() {
+        const notice = document.getElementById('pdFallbackNotice');
+        if (notice) {
+            notice.style.display = 'none';
+        }
+    }
+}
+
 class BratenDreherBLE {
     constructor() {
         // Motor specifications for acceleration conversion
@@ -1060,6 +1179,14 @@ class BratenDreherBLE {
         this.totalRevolutions = document.getElementById('totalRevolutions');
         this.runTime = document.getElementById('runTime');
         this.avgSpeed = document.getElementById('avgSpeed');
+        
+        // Power delivery elements
+        this.voltageSelect = document.getElementById('voltageSelect');
+        this.negotiateBtn = document.getElementById('negotiateBtn');
+        this.pdStatus = document.getElementById('pdStatus');
+        this.pdPowerGood = document.getElementById('pdPowerGood');
+        this.pdNegotiatedVoltage = document.getElementById('pdNegotiatedVoltage');
+        this.pdCurrentVoltage = document.getElementById('pdCurrentVoltage');
         
         // Preset buttons
         this.presetBtns = document.querySelectorAll('.preset-btn');
@@ -1782,7 +1909,11 @@ class BratenDreherBLE {
             this.variableSpeedStatus,
             this.totalRevolutions,
             this.runTime,
-            this.avgSpeed
+            this.avgSpeed,
+            this.pdStatus,
+            this.pdPowerGood,
+            this.pdNegotiatedVoltage,
+            this.pdCurrentVoltage
         ];
         
         statusElements.forEach(element => {
@@ -1934,6 +2065,16 @@ class BratenDreherBLE {
             this.tmc2209Status,
             this.stallStatus,
             this.stallCount
+        ));
+
+        // Power delivery control
+        this.controls.set('powerDelivery', new PowerDeliveryControl(
+            this.voltageSelect,
+            this.negotiateBtn,
+            this.pdStatus,
+            this.pdPowerGood,
+            this.pdNegotiatedVoltage,
+            this.pdCurrentVoltage
         ));
 
         // Statistics control with calculation logic
