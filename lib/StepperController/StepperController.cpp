@@ -126,6 +126,7 @@ void StepperController::publishStallDetection() {
             stallDetected = true;
             lastStallTime = millis();
             stallCount++;
+            systemStatus.sendNotification(NotificationType::WARNING, "Stall detected! Check motor load or settings.");
             Serial.printf("STALL DETECTED! Count: %d, Time: %lu\n", stallCount, lastStallTime);
             Serial.println("Consider: reducing speed, increasing current, or checking load");
         } else if (!diagPinHigh && stallDetected) {
@@ -470,6 +471,7 @@ void StepperController::publishPeriodicStatusUpdates() {
     publishCurrentRPM();
     publishTotalRevolutions();
     publishRuntime();
+    publishStallDetection();
 }
 
 void StepperController::processCommand(const StepperCommandData& cmd) {

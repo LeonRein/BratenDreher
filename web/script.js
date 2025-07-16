@@ -48,7 +48,7 @@ class Control {
         this.timeoutTimer = null; // Add timeout timer
         this.retryAttempt = 0; // Track retry attempts
         this.lastCommandValue = null; // Store last command value for retry
-        this.parent = null;
+        this.bratendreherble = null;
         
         // Additional UI elements that should follow the same state as the main element
         this.additionalElements = [];
@@ -57,8 +57,8 @@ class Control {
         this.setDisplayState(CONTROL_STATES.DISABLED);
     }
 
-    setParent(parent) {
-        this.parent = parent;
+    setBratenDreherBLE(bratendreherble) {
+        this.bratendreherble = bratendreherble;
     }
 
     /**
@@ -152,7 +152,7 @@ class Control {
     }
 
     async sendCommand(rawValue) {
-        if (!this.parent || !this.options.commandType) {
+        if (!this.bratendreherble || !this.options.commandType) {
             console.error('Control not properly configured for command sending');
             return false;
         }
@@ -166,7 +166,7 @@ class Control {
         // Apply value transformation
         let transformedValue = this.options.valueTransform ? this.options.valueTransform(rawValue) : rawValue;
 
-        const success = await this.parent.sendCommand(this.options.commandType, transformedValue, this.options.additionalParams || {});
+        const success = await this.bratendreherble.sendCommand(this.options.commandType, transformedValue, this.options.additionalParams || {});
 
         if (success) {
             // Start timeout timer to detect lost status updates
@@ -182,7 +182,7 @@ class Control {
 
     // Generic method for sending custom commands with timeout handling
     async sendCustomCommand(commandType, value, additionalParams = {}, customTimeout = null) {
-        if (!this.parent) {
+        if (!this.bratendreherble) {
             console.error('Control not properly configured for command sending');
             return false;
         }
@@ -197,7 +197,7 @@ class Control {
         // Set state to outdated when command is sent
         this.setDisplayState(CONTROL_STATES.OUTDATED);
 
-        const success = await this.parent.sendCommand(commandType, value, additionalParams);
+        const success = await this.bratendreherble.sendCommand(commandType, value, additionalParams);
         
         if (success) {
             // Start timeout timer to detect lost status updates
@@ -233,8 +233,8 @@ class Control {
             this.setDisplayState(CONTROL_STATES.TIMEOUT);
             
             // Show warning to user about communication failure
-            if (this.parent && this.parent.showWarning) {
-                this.parent.showWarning(`Command ${commandType} failed after retry. Check connection.`);
+            if (this.bratendreherble && this.bratendreherble.showWarning) {
+                this.bratendreherble.showWarning(`Command ${commandType} failed after retry. Check connection.`);
             }
             
             // Reset retry state
@@ -265,8 +265,8 @@ class Control {
             this.setDisplayState('TIMEOUT');
             
             // Show warning to user about communication failure
-            if (this.parent && this.parent.showWarning) {
-                this.parent.showWarning(`Command ${this.options.commandType} failed after retry. Check connection.`);
+            if (this.bratendreherble && this.bratendreherble.showWarning) {
+                this.bratendreherble.showWarning(`Command ${this.options.commandType} failed after retry. Check connection.`);
             }
             
             // Reset retry state
@@ -708,7 +708,7 @@ class AccelerationControl extends Control {
             // Set valid state since we received acceleration data
             this.setDisplayState('VALID');
             
-            const accelerationTimeDisplay = this.parent.accelerationToTime(statusUpdate.acceleration).toFixed(1);
+            const accelerationTimeDisplay = this.bratendreherble.accelerationToTime(statusUpdate.acceleration).toFixed(1);
             this.currentAccelerationElement.textContent = `${accelerationTimeDisplay}s to max`;
             this.currentAccelerationElement.style.opacity = '1.0'; // VALID state - data received
             
@@ -726,7 +726,7 @@ class AccelerationControl extends Control {
             
             // Update acceleration slider if significantly different
             const currentSliderTime = parseFloat(this.element.value);
-            const deviceTime = parseFloat(this.parent.accelerationToTime(statusUpdate.acceleration).toFixed(1));
+            const deviceTime = parseFloat(this.bratendreherble.accelerationToTime(statusUpdate.acceleration).toFixed(1));
             if (Math.abs(currentSliderTime - deviceTime) > 0.05) {
                 this.element.value = deviceTime;
                 this.valueElement.textContent = deviceTime.toFixed(1);
@@ -844,7 +844,7 @@ class TMCStatusControl extends Control {
             
             this.stallCountElement.textContent = statusUpdate.stallCount;
             this.stallCountElement.style.opacity = '1.0'; // VALID state - data received
-            this.stallCountElement.style.color = statusUpdate.stallCount > 0 ? '#f59e0b' : '#1f2937';
+            this.stallCountElement.style.color = statusUpdate.stallCount > 0 ? '#e74c3c' : '#10b981';
         }
     }
 }
@@ -1945,7 +1945,7 @@ class BratenDreherBLE {
 
         // Set parent reference and bind events for all controls
         this.controls.forEach(control => {
-            control.setParent(this);
+            control.setBratenDreherBLE(this);
             control.bindEvents();
         });
     }

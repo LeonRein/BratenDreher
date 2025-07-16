@@ -6,8 +6,6 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
 #include <string>
 #include <ArduinoJson.h>
 #include "Task.h"
@@ -49,11 +47,6 @@ private:
     // Cached reference to SystemCommand singleton  
     SystemCommand& systemCommand;
     
-    // Command queue for safe processing using FreeRTOS queue
-    QueueHandle_t commandQueue;
-    static const size_t MAX_QUEUE_SIZE = 10;
-    static const size_t MAX_COMMAND_LENGTH = 256;
-    
     // Status update batching configuration
     static const size_t MAX_BLE_PACKET_SIZE = 500;            // Conservative BLE MTU size
 
@@ -82,9 +75,7 @@ public:
     void sendAllCurrentStatus(); // Send all current status information to newly connected client
     
     // Handle incoming commands
-    bool queueCommand(const std::string& command);
     void handleCommand(const std::string& command);
-    void processQueuedCommands();
     
     // Friend declarations for callback access
     friend class ServerCallbacks;

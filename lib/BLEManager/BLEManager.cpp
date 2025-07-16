@@ -48,11 +48,10 @@ public:
     void onWrite(BLECharacteristic* pCharacteristic) override {
         std::string value = pCharacteristic->getValue();
         
-        if (value.length() > 0 && value.length() <= BLEManager::MAX_COMMAND_LENGTH) {
-            // Queue the command for processing in the BLE task instead of processing here
-            // This avoids stack issues in the BLE callback context
-            // No Serial prints in time-critical callback context
-            bleManager->queueCommand(value);
+        if (value.length() > 0 && value.length() <= 256) {
+            // Process command directly - SystemCommand handles thread-safe queuing
+            // Commands are lightweight as they just queue data to SystemCommand
+            bleManager->handleCommand(value);
         }
     }
 };
@@ -64,18 +63,10 @@ BLEManager::BLEManager()
       deviceConnected(false), oldDeviceConnected(false),
       systemStatus(SystemStatus::getInstance()), systemCommand(SystemCommand::getInstance()) {
     
-    // Create FreeRTOS queue for commands
-    commandQueue = xQueueCreate(MAX_QUEUE_SIZE, MAX_COMMAND_LENGTH);
-    if (commandQueue == nullptr) {
-        Serial.println("ERROR: Failed to create command queue!");
-    }
+    // No internal command queue needed - using SystemCommand singleton directly
 }
 
 BLEManager::~BLEManager() {
-    if (commandQueue != nullptr) {
-        vQueueDelete(commandQueue);
-    }
-    
     // Clean up BLE callback objects
     if (serverCallbacks != nullptr) {
         delete serverCallbacks;
@@ -145,8 +136,8 @@ bool BLEManager::begin(const char* deviceName) {
 void BLEManager::handleCommand(const std::string& command) {
     Serial.printf("Processing command: %s (length: %d)\n", command.c_str(), command.length());
     
-    // Prevent buffer overflow attacks
-    if (command.length() > MAX_COMMAND_LENGTH || command.length() == 0) {
+    // Prevent buffer overflow attacks  
+    if (command.length() > 256 || command.length() == 0) {
         Serial.printf("ERROR: Invalid command length: %d\n", command.length());
         return;
     }
@@ -283,9 +274,6 @@ void BLEManager::run() {
 }
 
 void BLEManager::update() {
-    // Process any queued commands with timeout (non-blocking)
-    processQueuedCommands();
-    
     // Process notifications from StepperController (warnings and errors only)
     processNotifications();
     
@@ -308,48 +296,7 @@ void BLEManager::update() {
     vTaskDelay(pdMS_TO_TICKS(10));
 }
 
-bool BLEManager::queueCommand(const std::string& command) {
-    if (commandQueue == nullptr || command.length() > MAX_COMMAND_LENGTH) {
-        return false;
-    }
-    
-    // Convert string to char array for queue
-    char commandBuffer[MAX_COMMAND_LENGTH];
-    strncpy(commandBuffer, command.c_str(), MAX_COMMAND_LENGTH - 1);
-    commandBuffer[MAX_COMMAND_LENGTH - 1] = '\0';
-    
-    // Try to send to queue without blocking (called from ISR context)
-    BaseType_t result = xQueueSendFromISR(commandQueue, commandBuffer, nullptr);
-    return result == pdTRUE;
-}
-
-void BLEManager::processQueuedCommands() {
-    char commandBuffer[MAX_COMMAND_LENGTH];
-    
-    // Process commands with timeout to avoid busy waiting
-    // Limit processing to prevent overwhelming the system
-    int commandsProcessed = 0;
-    const int maxCommandsPerCycle = 5;
-    
-    while (commandsProcessed < maxCommandsPerCycle && 
-           xQueueReceive(commandQueue, commandBuffer, pdMS_TO_TICKS(1)) == pdTRUE) {
-        std::string command(commandBuffer);
-        Serial.printf("Processing queued command: %s\n", command.c_str());
-        handleCommand(command);
-        commandsProcessed++;
-        
-        // Small delay between commands to prevent system overload
-        if (commandsProcessed < maxCommandsPerCycle) {
-            vTaskDelay(pdMS_TO_TICKS(2));
-        }
-    }
-    
-    // If queue is getting full, warn about potential command loss
-    if (uxQueueMessagesWaiting(commandQueue) > (MAX_QUEUE_SIZE * 0.8)) {
-        Serial.printf("WARNING: Command queue nearly full (%d/%d)\n", 
-                     uxQueueMessagesWaiting(commandQueue), MAX_QUEUE_SIZE);
-    }
-}
+// Queue methods removed - using SystemCommand singleton directly
 
 void BLEManager::processNotifications() {
     NotificationData notification;
