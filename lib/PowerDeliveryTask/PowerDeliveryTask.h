@@ -13,11 +13,9 @@
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
-#include <Preferences.h>
 #include "Task.h"
 #include "SystemStatus.h"
 #include "SystemCommand.h"
-#include "CommandTypes.h"
 
 // Hardware pin definitions (from PD-Stepper example)
 #define PG_PIN              15  // Power good signal (don't enable stepper until this is good)
@@ -41,8 +39,7 @@
 
 // Timing configuration
 #define PD_STATUS_UPDATE_INTERVAL       500     // Update every 500ms
-#define PD_VOLTAGE_MEASURE_INTERVAL     500     // Measure voltage every 100ms
-#define PD_NEGOTIATION_TIMEOUT          5000    // 5 second timeout for negotiation
+#define PD_NEGOTIATION_TIMEOUT          2000    // 2 second timeout for negotiation
 #define PD_POWER_GOOD_DEBOUNCE          100     // Debounce power good signal
 
 // Power delivery states
@@ -59,15 +56,11 @@ private:
     // PD configuration and state
     int targetVoltage;
     int negotiatedVoltage;
-    float currentVoltage;
     bool powerGoodState;
     bool lastPowerGoodState;
     unsigned long powerGoodDebounceTime;
     PDNegotiationState negotiationState;
     unsigned long negotiationStartTime;
-    
-    // Preferences for storing settings
-    Preferences preferences;
     
     // Timing variables
     unsigned long lastStatusUpdate;
@@ -76,16 +69,33 @@ private:
     // Initialization flag
     bool isInitialized;
     
-    // Private methods
-    void initializeHardware();
-    void loadSettings();
-    void saveSettings();
-    void configureVoltage(int voltage);
-    void measureVoltage();
-    bool checkPowerGood();
+    // Private methods - organized by responsibility
+    
+    // Hardware abstraction layer (pure hardware control)
+    void pdConfigureVoltage(int voltage);
+    float pdMeasureVoltage();
+    bool pdCheckPowerGood();
+    void pdInvalidatePowerGood();
+    
+    // Apply methods (hardware control + state updates + status publishing)
+    void applyNegotiationVoltage(int voltage);
+    
+    // Publish methods (status communication only)
+    void publishNegotiationStatus();
+    void publishPowerGoodStatus();
+    void publishVoltageStatus();
+    void publishPeriodicStatusUpdates();
+    
+    // State machine and command processing
     void updateNegotiationState();
-    void publishStatusUpdates();
     void processCommands();
+    
+    // Internal command processors (with validation)
+    void setTargetVoltageInternal(int voltage);
+    void requestAllStatusInternal();
+    
+    // Initialization and settings
+    void initializeHardware();
     
 public:
     // Constructor

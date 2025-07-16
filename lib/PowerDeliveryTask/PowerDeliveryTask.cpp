@@ -7,7 +7,6 @@ PowerDeliveryTask::PowerDeliveryTask()
     : Task("PowerDeliveryTask", 4096, 2, 1), // Stack: 4KB, Priority: 2, Core: 1
       targetVoltage(PD_VOLTAGE_12V),
       negotiatedVoltage(0),
-      currentVoltage(0.0f),
       powerGoodState(false),
       lastPowerGoodState(false),
       powerGoodDebounceTime(0),
@@ -27,18 +26,21 @@ PowerDeliveryTask& PowerDeliveryTask::getInstance() {
     return *pdTaskInstance;
 }
 
+// ============================================================================
+// MAIN TASK LOOP
+// ============================================================================
+
 void PowerDeliveryTask::run() {
     Serial.println("PowerDeliveryTask: Starting...");
     
     // Initialize hardware and load settings
     initializeHardware();
-    loadSettings();
     
     isInitialized = true;
     Serial.println("PowerDeliveryTask: Initialization complete");
     
     // Start with default voltage negotiation
-    startNegotiation(targetVoltage);
+    applyNegotiationVoltage(targetVoltage);
     
     // Main task loop
     while (true) {
@@ -47,16 +49,15 @@ void PowerDeliveryTask::run() {
         // Process incoming commands
         processCommands();
         
-        // Check power good state with debouncing (publishes on change)
-        checkPowerGood();
-        
-        // Update negotiation state (publishes on change)
+        // Update negotiation state machine
         updateNegotiationState();
         
-        // Measure voltage at regular intervals (publishes on measurement)
-        if (currentTime - lastVoltageUpdate >= PD_VOLTAGE_MEASURE_INTERVAL) {
-            measureVoltage();
-            lastVoltageUpdate = currentTime;
+        // Publish periodic status updates
+        if (currentTime - lastStatusUpdate >= PD_STATUS_UPDATE_INTERVAL) {
+            publishPeriodicStatusUpdates();
+            publishPowerGoodStatus();
+            publishVoltageStatus();
+            lastStatusUpdate = currentTime;
         }
         
         // Small delay to prevent overwhelming the system
@@ -64,43 +65,12 @@ void PowerDeliveryTask::run() {
     }
 }
 
-void PowerDeliveryTask::initializeHardware() {
-    Serial.println("PowerDeliveryTask: Initializing hardware pins...");
-    
-    // Initialize PD control pins
-    pinMode(PG_PIN, INPUT);
-    pinMode(CFG1_PIN, OUTPUT);
-    pinMode(CFG2_PIN, OUTPUT);
-    pinMode(CFG3_PIN, OUTPUT);
-    
-    // Initialize analog pins
-    pinMode(VBUS_PIN, INPUT);
-    pinMode(NTC_PIN, INPUT);
-    
-    // Set default configuration (12V)
-    configureVoltage(PD_VOLTAGE_12V);
-    
-    Serial.println("PowerDeliveryTask: Hardware initialization complete");
-}
+// ============================================================================
+// HARDWARE ABSTRACTION LAYER (Pure Hardware Control)
+// ============================================================================
 
-void PowerDeliveryTask::loadSettings() {
-    preferences.begin("pd_settings", true); // read-only
-    targetVoltage = preferences.getInt("target_voltage", PD_VOLTAGE_12V);
-    preferences.end();
-    
-    Serial.printf("PowerDeliveryTask: Loaded target voltage: %dV\n", targetVoltage);
-}
-
-void PowerDeliveryTask::saveSettings() {
-    preferences.begin("pd_settings", false); // read-write
-    preferences.putInt("target_voltage", targetVoltage);
-    preferences.end();
-    
-    Serial.printf("PowerDeliveryTask: Saved target voltage: %dV\n", targetVoltage);
-}
-
-void PowerDeliveryTask::configureVoltage(int voltage) {
-    Serial.printf("PowerDeliveryTask: Configuring for %dV\n", voltage);
+void PowerDeliveryTask::pdConfigureVoltage(int voltage) {
+    Serial.printf("PowerDeliveryTask: Configuring CFG pins for %dV\n", voltage);
     
     // Configure CFG pins based on desired voltage
     // From PD_Stepper example:
@@ -143,16 +113,19 @@ void PowerDeliveryTask::configureVoltage(int voltage) {
             digitalWrite(CFG3_PIN, HIGH);
             break;
     }
-}
-
-void PowerDeliveryTask::measureVoltage() {
-    int adcValue = analogRead(VBUS_PIN);
-    currentVoltage = adcValue * (VREF / ADC_RESOLUTION) / DIV_RATIO;
     
-    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_CURRENT_VOLTAGE, currentVoltage);
+    Serial.printf("PowerDeliveryTask: CFG pins configured for %dV\n", voltage);
+    
+    // Invalidate power good status when voltage configuration changes
+    pdInvalidatePowerGood();
 }
 
-bool PowerDeliveryTask::checkPowerGood() {
+float PowerDeliveryTask::pdMeasureVoltage() {
+    int adcValue = analogRead(VBUS_PIN);
+    return (adcValue * VREF / ADC_RESOLUTION) / DIV_RATIO;
+}
+
+bool PowerDeliveryTask::pdCheckPowerGood() {
     bool currentPGState = (digitalRead(PG_PIN) == LOW); // PG is active low
     unsigned long currentTime = millis();
     
@@ -167,61 +140,113 @@ bool PowerDeliveryTask::checkPowerGood() {
             powerGoodState = currentPGState;
             Serial.printf("PowerDeliveryTask: Power Good state changed to: %s\n", 
                          powerGoodState ? "GOOD" : "BAD");
-            
-            // Publish power good status
-            SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_POWER_GOOD_STATUS, powerGoodState);
-            
-            // Update negotiation state based on power good
-            if (powerGoodState && negotiationState == PDNegotiationState::NEGOTIATING) {
-                negotiationState = PDNegotiationState::SUCCESS;
-                negotiatedVoltage = targetVoltage;
-                Serial.printf("PowerDeliveryTask: Negotiation successful at %dV\n", negotiatedVoltage);
-                
-                // Publish both negotiation status and negotiated voltage
-                SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATION_STATUS, (float)static_cast<int>(negotiationState));
-                SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATED_VOLTAGE, (float)negotiatedVoltage);
-            } else if (!powerGoodState && negotiationState == PDNegotiationState::SUCCESS) {
-                // Power lost, reset negotiation state
-                negotiationState = PDNegotiationState::FAILED;
-                negotiatedVoltage = 0;
-                Serial.printf("PowerDeliveryTask: Power delivery lost, negotiation failed\n");
-                
-                // Publish both negotiation status and negotiated voltage
-                SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATION_STATUS, (float)static_cast<int>(negotiationState));
-                SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATED_VOLTAGE, (float)negotiatedVoltage);
-                SystemStatus::getInstance().sendNotification(NotificationType::WARNING, "Power delivery lost");
-            }
         }
     }
     
     return powerGoodState;
 }
 
+void PowerDeliveryTask::pdInvalidatePowerGood() {
+    Serial.println("PowerDeliveryTask: Invalidating power good status");
+    powerGoodState = false;
+    lastPowerGoodState = false;
+    powerGoodDebounceTime = millis();
+}
+
+// ============================================================================
+// APPLY METHODS (Hardware Control + State Updates + Status Publishing)
+// ============================================================================
+
+void PowerDeliveryTask::applyNegotiationVoltage(int voltage) {
+    if (!isInitialized) {
+        Serial.println("WARNING: Cannot start negotiation - hardware not initialized");
+        return;
+    }
+    
+    if (voltage < PD_VOLTAGE_5V || voltage > PD_VOLTAGE_20V) {
+        Serial.printf("PowerDeliveryTask: Invalid voltage %dV for negotiation\n", voltage);
+        return;
+    }
+    
+    Serial.printf("PowerDeliveryTask: Starting negotiation for %dV (previous state: %d)\n", 
+                 voltage, static_cast<int>(negotiationState));
+    
+    // Reset negotiation state and start fresh
+    negotiationState = PDNegotiationState::NEGOTIATING;
+    negotiationStartTime = millis();
+    targetVoltage = voltage;
+    negotiatedVoltage = 0; // Reset negotiated voltage until success
+    
+    // Configure hardware for target voltage
+    pdConfigureVoltage(voltage);
+
+    publishNegotiationStatus();
+}
+
+// ============================================================================
+// PUBLISH METHODS (Status Communication Only)
+// ============================================================================
+
+void PowerDeliveryTask::publishNegotiationStatus() {
+    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATION_STATUS, static_cast<int>(negotiationState));
+    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATED_VOLTAGE, (float)negotiatedVoltage);
+}
+
+void PowerDeliveryTask::publishPowerGoodStatus() {
+    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_POWER_GOOD_STATUS, pdCheckPowerGood());
+}
+
+void PowerDeliveryTask::publishVoltageStatus() {
+    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_CURRENT_VOLTAGE, pdMeasureVoltage());
+}
+
+void PowerDeliveryTask::publishPeriodicStatusUpdates() {
+    // Publish all current status values in batch
+    publishPowerGoodStatus();
+    publishVoltageStatus();
+}
+
+// ============================================================================
+// STATE MACHINE LOGIC
+// ============================================================================
+
 void PowerDeliveryTask::updateNegotiationState() {
+    // Only process state changes during active negotiation
+    if (negotiationState != PDNegotiationState::NEGOTIATING) {
+        return;
+    }
+    
     unsigned long currentTime = millis();
     
-    // Check for negotiation timeout
-    if (negotiationState == PDNegotiationState::NEGOTIATING) {
-        if ((currentTime - negotiationStartTime) >= PD_NEGOTIATION_TIMEOUT) {
-            negotiationState = PDNegotiationState::TIMEOUT;
-            Serial.println("PowerDeliveryTask: Negotiation timed out");
-            
-            // Publish negotiation status change
-            SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATION_STATUS, (float)static_cast<int>(negotiationState));
-            SystemStatus::getInstance().sendNotification(NotificationType::ERROR, "PD negotiation timeout");
-        }
+    // Check for successful negotiation (PG is good)
+    bool currentPGState = pdCheckPowerGood();
+    if (currentPGState) {
+        negotiationState = PDNegotiationState::SUCCESS;
+        negotiatedVoltage = targetVoltage;
+        Serial.printf("PowerDeliveryTask: Negotiation successful at %dV\n", negotiatedVoltage);
+        
+        // Publish immediate status updates
+        publishNegotiationStatus();
+        publishVoltageStatus();
+        return;
+    }
+    
+    // Check for timeout
+    if (currentTime - negotiationStartTime >= PD_NEGOTIATION_TIMEOUT) {
+        negotiationState = PDNegotiationState::TIMEOUT;
+        negotiatedVoltage = 0;
+        Serial.printf("PowerDeliveryTask: Negotiation timeout after %dms\n", PD_NEGOTIATION_TIMEOUT);
+        
+        // Publish immediate status updates
+        publishNegotiationStatus();
+        publishVoltageStatus();
+        return;
     }
 }
 
-void PowerDeliveryTask::publishStatusUpdates() {
-    // Publish all current status values (used for initial status and request all status)
-    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATION_STATUS, (float)static_cast<int>(negotiationState));
-    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_POWER_GOOD_STATUS, powerGoodState);
-    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_CURRENT_VOLTAGE, currentVoltage);
-    
-    // Publish negotiated voltage (0 if not negotiated)
-    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATED_VOLTAGE, (float)negotiatedVoltage);
-}
+// ============================================================================
+// COMMAND PROCESSING (Internal Methods)
+// ============================================================================
 
 void PowerDeliveryTask::processCommands() {
     PowerDeliveryCommandData command;
@@ -230,41 +255,78 @@ void PowerDeliveryTask::processCommands() {
     while (SystemCommand::getInstance().getPowerDeliveryCommand(command, 0)) {
         switch (command.command) {
             case PowerDeliveryCommand::SET_TARGET_VOLTAGE:
-                targetVoltage = command.intValue;
-                startNegotiation(targetVoltage);
-                saveSettings();
-                Serial.printf("PowerDeliveryTask: Target voltage set to %dV\n", targetVoltage);
+                setTargetVoltageInternal(command.intValue);
                 break;
                 
             case PowerDeliveryCommand::REQUEST_ALL_STATUS:
-                publishStatusUpdates();
+                requestAllStatusInternal();
                 break;
                 
             default:
-                Serial.printf("PowerDeliveryTask: Unknown command: %d\n", static_cast<int>(command.command));
+                Serial.printf("PowerDeliveryTask: Unknown command %d\n", static_cast<int>(command.command));
                 break;
         }
     }
 }
 
-bool PowerDeliveryTask::startNegotiation(int voltage) {
+void PowerDeliveryTask::setTargetVoltageInternal(int voltage) {
+    // Validate voltage range
     if (voltage < PD_VOLTAGE_5V || voltage > PD_VOLTAGE_20V) {
-        Serial.printf("PowerDeliveryTask: Invalid voltage %dV for negotiation\n", voltage);
-        return false;
+        Serial.printf("PowerDeliveryTask: Invalid target voltage %dV (allowed: 5V, 9V, 12V, 15V, 20V)\n", voltage);
+        
+        // Publish current status to indicate no change
+        publishNegotiationStatus();
+        publishVoltageStatus();
+        SystemStatus::getInstance().sendNotification(NotificationType::ERROR, 
+            "Invalid target voltage requested: " + String(voltage) + "V");
+        return;
     }
     
-    Serial.printf("PowerDeliveryTask: Starting negotiation for %dV\n", voltage);
+    // Apply voltage negotiation
+    applyNegotiationVoltage(voltage);
     
-    negotiationState = PDNegotiationState::NEGOTIATING;
-    negotiationStartTime = millis();
-    targetVoltage = voltage;
+    Serial.printf("PowerDeliveryTask: Target voltage set to %dV\n", voltage);
+}
+
+void PowerDeliveryTask::requestAllStatusInternal() {
+    Serial.println("PowerDeliveryTask: Publishing all current status values...");
     
-    // Configure hardware for target voltage
-    configureVoltage(voltage);
+    // Publish all current status values
+    publishNegotiationStatus();
+    publishPowerGoodStatus();
+    publishVoltageStatus();
+}
+
+// ============================================================================
+// INITIALIZATION AND SETTINGS
+// ============================================================================
+
+void PowerDeliveryTask::initializeHardware() {
+    Serial.println("PowerDeliveryTask: Initializing hardware pins...");
     
-    // Publish status update
-    SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATION_STATUS, (float)static_cast<int>(negotiationState));
+    // Initialize PD control pins
+    pinMode(PG_PIN, INPUT);
+    pinMode(CFG1_PIN, OUTPUT);
+    pinMode(CFG2_PIN, OUTPUT);
+    pinMode(CFG3_PIN, OUTPUT);
     
+    // Initialize analog pins
+    pinMode(VBUS_PIN, INPUT);
+    pinMode(NTC_PIN, INPUT);
+    
+    // Set default configuration (12V)
+    pdConfigureVoltage(PD_VOLTAGE_12V);
+    
+    Serial.println("PowerDeliveryTask: Hardware initialization complete");
+}
+
+// ============================================================================
+// PUBLIC INTERFACE (Thread-safe accessors)
+// ============================================================================
+
+bool PowerDeliveryTask::startNegotiation(int voltage) {
+    // This method is kept for compatibility but delegates to command system
+    SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
     return true;
 }
 
@@ -275,11 +337,14 @@ bool PowerDeliveryTask::isNegotiationComplete() const {
 }
 
 bool PowerDeliveryTask::isPowerGood() const {
-    return powerGoodState;
+    // Read fresh power good state from hardware
+    return (digitalRead(PG_PIN) == LOW); // PG is active low
 }
 
 float PowerDeliveryTask::getCurrentVoltage() const {
-    return currentVoltage;
+    // Read fresh voltage from hardware (const_cast needed for hardware access)
+    int adcValue = analogRead(VBUS_PIN);
+    return (adcValue * VREF / ADC_RESOLUTION) / DIV_RATIO;
 }
 
 int PowerDeliveryTask::getNegotiatedVoltage() const {
@@ -288,4 +353,14 @@ int PowerDeliveryTask::getNegotiatedVoltage() const {
 
 PDNegotiationState PowerDeliveryTask::getNegotiationState() const {
     return negotiationState;
+}
+
+bool PowerDeliveryTask::setTargetVoltage(int voltage) {
+    SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
+    return true;
+}
+
+bool PowerDeliveryTask::requestStatus() {
+    SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::REQUEST_ALL_STATUS, 0);
+    return true;
 }

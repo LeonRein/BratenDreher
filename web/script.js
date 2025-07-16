@@ -1013,9 +1013,21 @@ class PowerDeliveryControl extends Control {
         if (statusUpdate.pdNegotiationStatus !== undefined) {
             this.setDisplayState('VALID');
             
-            console.log(`PowerDelivery: Received negotiation status: ${statusUpdate.pdNegotiationStatus}`);
+            console.log(`PowerDelivery: Received negotiation status raw: ${statusUpdate.pdNegotiationStatus}`);
+            console.log(`PowerDelivery: Type: ${typeof statusUpdate.pdNegotiationStatus}`);
             
-            const status = this.negotiationStates[statusUpdate.pdNegotiationStatus] || 
+            // Ensure we have an integer value
+            let statusValue = statusUpdate.pdNegotiationStatus;
+            if (typeof statusValue === 'number') {
+                statusValue = Math.round(statusValue); // Round to nearest integer
+            } else {
+                console.warn(`PowerDelivery: Invalid status type: ${typeof statusValue}, value: ${statusValue}`);
+                statusValue = 0; // Default to IDLE
+            }
+            
+            console.log(`PowerDelivery: Parsed negotiation status: ${statusValue}`);
+            
+            const status = this.negotiationStates[statusValue] || 
                           { text: `Unknown (${statusUpdate.pdNegotiationStatus})`, class: 'status-error' };
             
             this.statusElement.textContent = status.text;
@@ -1027,7 +1039,7 @@ class PowerDeliveryControl extends Control {
             this.resetNegotiateButton();
             
             // Show fallback mode notice if PD failed/timed out
-            if (statusUpdate.pdNegotiationStatus === 3 || statusUpdate.pdNegotiationStatus === 4) {
+            if (statusValue === 3 || statusValue === 4) {
                 this.showFallbackNotice();
             } else {
                 this.hideFallbackNotice();

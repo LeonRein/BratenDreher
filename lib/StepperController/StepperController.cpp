@@ -341,7 +341,7 @@ void StepperController::configureDriver() {
     
     // Configure StallGuard for stall detection
     // Setting threshold automatically enables StallGuard functionality
-    stepperDriver.setStallGuardThreshold(10); // Sensitivity: 0 (most sensitive) to 255 (least sensitive)
+    stepperDriver.setStallGuardThreshold(200); // Sensitivity: 0 (most sensitive) to 255 (least sensitive)
     
     // Update communication status after configuration
     bool newTmc2209Status = stepperDriver.isSetupAndCommunicating();
