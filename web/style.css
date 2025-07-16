@@ -890,18 +890,18 @@ body {
 }
 
 /* Power Delivery Negotiation Animation */
-@keyframes pulse {
+@keyframes pdPulse {
     0% { opacity: 0.7; }
     50% { opacity: 1.0; }
     100% { opacity: 0.7; }
 }
 
 .btn.negotiating {
-    animation: pulse 1.5s ease-in-out infinite;
+    animation: pdPulse 1.5s ease-in-out infinite;
 }
 
 .status-warning.negotiating {
-    animation: pulse 2s ease-in-out infinite;
+    animation: pdPulse 2s ease-in-out infinite;
 }
 
 /* Animations */

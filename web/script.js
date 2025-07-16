@@ -960,14 +960,14 @@ class PowerDeliveryControl extends Control {
         if (this.negotiateButton && this.element) {
             this.negotiateButton.addEventListener('click', () => {
                 const selectedVoltage = parseInt(this.element.value);
-                if (selectedVoltage && this.parent) {
+                if (selectedVoltage && this.bratendreherble) {
                     console.log(`PowerDelivery: Requesting voltage change to ${selectedVoltage}V`);
                     
                     // Provide immediate visual feedback
                     this.showNegotiationStarted();
                     
                     // Send power delivery command to set target voltage and start negotiation
-                    this.parent.sendCommand('pd_voltage', selectedVoltage);
+                    this.bratendreherble.sendCommand('pd_voltage', selectedVoltage);
                 }
             });
         }
@@ -1013,8 +1013,10 @@ class PowerDeliveryControl extends Control {
         if (statusUpdate.pdNegotiationStatus !== undefined) {
             this.setDisplayState('VALID');
             
+            console.log(`PowerDelivery: Received negotiation status: ${statusUpdate.pdNegotiationStatus}`);
+            
             const status = this.negotiationStates[statusUpdate.pdNegotiationStatus] || 
-                          { text: 'Unknown', class: 'status-unknown' };
+                          { text: `Unknown (${statusUpdate.pdNegotiationStatus})`, class: 'status-error' };
             
             this.statusElement.textContent = status.text;
             // Remove negotiating class and apply the appropriate status class

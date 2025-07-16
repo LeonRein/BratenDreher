@@ -176,11 +176,19 @@ bool PowerDeliveryTask::checkPowerGood() {
                 negotiationState = PDNegotiationState::SUCCESS;
                 negotiatedVoltage = targetVoltage;
                 Serial.printf("PowerDeliveryTask: Negotiation successful at %dV\n", negotiatedVoltage);
+                
+                // Publish both negotiation status and negotiated voltage
+                SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATION_STATUS, (float)static_cast<int>(negotiationState));
                 SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATED_VOLTAGE, (float)negotiatedVoltage);
             } else if (!powerGoodState && negotiationState == PDNegotiationState::SUCCESS) {
                 // Power lost, reset negotiation state
                 negotiationState = PDNegotiationState::FAILED;
                 negotiatedVoltage = 0;
+                Serial.printf("PowerDeliveryTask: Power delivery lost, negotiation failed\n");
+                
+                // Publish both negotiation status and negotiated voltage
+                SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATION_STATUS, (float)static_cast<int>(negotiationState));
+                SystemStatus::getInstance().publishStatusUpdate(StatusUpdateType::PD_NEGOTIATED_VOLTAGE, (float)negotiatedVoltage);
                 SystemStatus::getInstance().sendNotification(NotificationType::WARNING, "Power delivery lost");
             }
         }
