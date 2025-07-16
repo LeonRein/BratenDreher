@@ -22,8 +22,8 @@
 // Motor specifications
 #define STEPS_PER_REVOLUTION        200    // NEMA 17
 #define GEAR_RATIO                  10     // 1:10 reduction
-#define TOTAL_STEPS_PER_REVOLUTION  (STEPS_PER_REVOLUTION * GEAR_RATIO)
 #define MICRO_STEPS                 16     // Fixed at 16 microsteps
+#define TOTAL_MICRO_STEPS_PER_REVOLUTION  (STEPS_PER_REVOLUTION * GEAR_RATIO * MICRO_STEPS) // Total microsteps per output revolution
 
 // Speed settings (in RPM)
 #define MIN_SPEED_RPM               0.1f   // Minimum speed
@@ -64,7 +64,6 @@ enum class NotificationType {
 
 // Status update types for inter-task communication
 enum class StatusUpdateType {
-    SPEED_CHANGED,              // Current/actual speed changed (for display only)
     SPEED_SETPOINT_CHANGED,     // User setpoint changed (for UI controls)
     DIRECTION_CHANGED,
     ENABLED_CHANGED,
@@ -74,9 +73,9 @@ enum class StatusUpdateType {
     SPEED_VARIATION_STRENGTH_CHANGED,
     SPEED_VARIATION_PHASE_CHANGED,
     // Periodic updates - now separate for each value
+    SPEED_UPDATE,
     TOTAL_REVOLUTIONS_UPDATE,
     RUNTIME_UPDATE,
-    IS_RUNNING_UPDATE,
     STALL_DETECTED_UPDATE,
     STALL_COUNT_UPDATE,
     TMC2209_STATUS_UPDATE
@@ -118,7 +117,7 @@ struct StatusUpdateData {
         unsigned long ulongValue; // for runtime, timestamps
     };
     // Helper constructors
-    StatusUpdateData() : type(StatusUpdateType::SPEED_CHANGED) {
+    StatusUpdateData() : type(StatusUpdateType::SPEED_UPDATE) {
         floatValue = 0.0f;
     }
     StatusUpdateData(StatusUpdateType t, float value) : type(t) {
@@ -152,7 +151,6 @@ private:
     
     // Speed settings (in RPM)
     float setpointRPM;         // Target RPM set by user/command
-    float currentRPM;          // Actual/measured RPM (calculated from stepper)
     int runCurrent;
     
     // Acceleration tracking
@@ -170,7 +168,7 @@ private:
     bool motorEnabled;
     bool clockwise;
     unsigned long startTime;
-    unsigned long totalSteps;
+    unsigned long totalMicroSteps;
     bool isFirstStart;
     bool tmc2209Initialized;  // Track TMC2209 driver initialization status
     
@@ -230,11 +228,22 @@ private:
     void publishStatusUpdate(StatusUpdateType type, unsigned long value);
     
     // Centralized stepper hardware control methods (always publish status when hardware is changed)
-    void applyStepperSpeed(uint32_t stepsPerSecond);      // Set target speed
     void applyStepperSetpointSpeed(float rpm);            // Set target speed in RPM and publish setpoint update
-    void updateCurrentRPM();                                      // Update actual/measured RPM
     void applyStepperAcceleration(uint32_t accelerationStepsPerSec2); // Set target acceleration
-    
+    void applyRunClockwise();                        // Set direction to clockwise
+    void applyRunCounterClockwise();                   // Set direction to counter-clockwise
+    void applyStop();
+    void applyCurrent(uint8_t current);                     // Set run current in mA
+
+    void publishTMC2209Communication(); // Check TMC2209 driver communication status
+    void publishStallDetection();        // Check stall detection status and update stallDetected, stallCount, lastStallTime
+    void publishCurrentRPM();                                      // Update actual/measured RPM
+    void publishTotalRevolutions();                              // Update total revolutions based on current position   
+    void publishRuntime();
+
+    void stepperSetSpeed(float rpm);                            // Set target speed
+    void stepperSetAcceleration(uint32_t accelerationStepsPerSec2); // Set target acceleration
+
     // Speed variation control
     void updateMotorSpeed();
 
@@ -278,10 +287,7 @@ public:
     
     // Status request (thread-safe via command queue)
     uint32_t requestAllStatus();                           // Request all current status to be published
-    
-    // Speed variation information getters
-    float getMaxAllowedBaseSpeed() const;                  // Get maximum base speed that doesn't exceed MAX_SPEED_RPM with current variation
-    
+       
     // Notification retrieval (thread-safe)
     bool getNotification(NotificationData& notification); // non-blocking, returns false if no notification available
     

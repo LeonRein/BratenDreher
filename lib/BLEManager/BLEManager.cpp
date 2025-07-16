@@ -406,7 +406,7 @@ void BLEManager::processStatusUpdates() {
 
 void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate) {
     switch (statusUpdate.type) {
-        case StatusUpdateType::SPEED_CHANGED:
+        case StatusUpdateType::SPEED_UPDATE:
             doc["currentSpeed"] = statusUpdate.floatValue;  // Actual speed for display
             break;
         case StatusUpdateType::SPEED_SETPOINT_CHANGED:
@@ -438,9 +438,6 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
             break;
         case StatusUpdateType::RUNTIME_UPDATE:
             doc["runtime"] = statusUpdate.ulongValue;
-            break;
-        case StatusUpdateType::IS_RUNNING_UPDATE:
-            doc["running"] = statusUpdate.boolValue;
             break;
         case StatusUpdateType::STALL_DETECTED_UPDATE:
             doc["stallDetected"] = statusUpdate.boolValue;

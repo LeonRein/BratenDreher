@@ -682,25 +682,10 @@ class MotorStatusControl extends Control {
             this.setDisplayState('VALID');
             
             const enabled = statusUpdate.enabled;
-            // Update motor status (will be refined if running status is also provided)
             this.motorStatusElement.textContent = enabled ? 'Enabled' : 'Stopped';
             this.motorStatusElement.style.opacity = '1.0'; // VALID state - data received
             // Add adaptive coloring
-            this.motorStatusElement.style.color = enabled ? '#f59e0b' : '#1f2937'; // Orange for enabled, black for stopped
-        }
-        
-        if (statusUpdate.running !== undefined) {
-            // Set valid state since we received running data
-            this.setDisplayState('VALID');
-            
-            // Refine motor status if we have running information
-            const enabled = this.element.checked; // Get from UI state
-            if (enabled) {
-                this.motorStatusElement.textContent = statusUpdate.running ? 'Running' : 'Enabled';
-                this.motorStatusElement.style.opacity = '1.0'; // VALID state - data received
-                // Add adaptive coloring - green for running, orange for enabled but not running
-                this.motorStatusElement.style.color = statusUpdate.running ? '#10b981' : '#f59e0b';
-            }
+            this.motorStatusElement.style.color = enabled ? '#10b981' : '#1f2937'; // Green for enabled, black for stopped
         }
     }
 }
@@ -906,16 +891,21 @@ class StatisticsControl extends Control {
             // Get current values from UI (our state)
             const currentRevolutions = parseFloat(this.totalRevolutionsElement.textContent) || 0;
             const currentRuntimeText = this.runTimeElement.textContent;
-            let currentRuntime = 0;
+            let currentRuntimeSeconds = 0;
             
-            // Parse runtime from HH:MM:SS format
-            if (currentRuntimeText && currentRuntimeText !== '00:00:00') {
-                const timeParts = currentRuntimeText.split(':');
-                currentRuntime = parseInt(timeParts[0]) * 3600 + parseInt(timeParts[1]) * 60 + parseInt(timeParts[2]);
+            // Parse runtime from HH:MM:SS.mmm format
+            if (currentRuntimeText && currentRuntimeText !== '00:00:00.000') {
+                const [timePart, millisPart = '0'] = currentRuntimeText.split('.');
+                const timeParts = timePart.split(':');
+                currentRuntimeSeconds = parseInt(timeParts[0]) * 3600 + parseInt(timeParts[1]) * 60 + parseInt(timeParts[2]);
+                // Add milliseconds as fraction of second
+                if (millisPart) {
+                    currentRuntimeSeconds += parseInt(millisPart) / 1000;
+                }
             }
             
-            if (currentRuntime > 0 && currentRevolutions > 0) {
-                const avgSpeed = (currentRevolutions * 60) / currentRuntime; // RPM
+            if (currentRuntimeSeconds > 0 && currentRevolutions > 0) {
+                const avgSpeed = (currentRevolutions * 60) / currentRuntimeSeconds; // RPM
                 this.avgSpeedElement.textContent = avgSpeed.toFixed(1);
                 this.avgSpeedElement.style.opacity = '1.0'; // VALID state - data received
             } else {
@@ -925,11 +915,13 @@ class StatisticsControl extends Control {
         }
     }
 
-    formatTime(seconds) {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = seconds % 60;
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    formatTime(milliseconds) {
+        const totalSeconds = Math.floor(milliseconds / 1000);
+        const millis = milliseconds % 1000;
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const secs = totalSeconds % 60;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`;
     }
 }
 
