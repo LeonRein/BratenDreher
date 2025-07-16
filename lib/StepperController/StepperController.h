@@ -35,6 +35,44 @@
 #define STATUS_UPDATE_INTERVAL      100    // Status update every 500ms
 #define MOTOR_SPEED_UPDATE_INTERVAL 10     // Speed update every 50ms for smooth variation
 
+// Status update structure
+struct StatusUpdateData {
+    StatusUpdateType type;
+    union {
+        float floatValue;    // for speed, acceleration, revolutions, etc.
+        bool boolValue;      // for direction, enabled, etc.
+        int intValue;        // for current, counts
+        uint32_t uint32Value; // for acceleration
+        unsigned long ulongValue; // for runtime, timestamps
+    };
+    uint32_t timestamp;      // millis() when status was updated
+    
+    // Helper constructors
+    StatusUpdateData() : type(StatusUpdateType::SPEED_CHANGED), timestamp(0) {
+        floatValue = 0.0f;
+    }
+    
+    StatusUpdateData(StatusUpdateType t, float value) : type(t), timestamp(millis()) {
+        floatValue = value;
+    }
+    
+    StatusUpdateData(StatusUpdateType t, bool value) : type(t), timestamp(millis()) {
+        boolValue = value;
+    }
+    
+    StatusUpdateData(StatusUpdateType t, int value) : type(t), timestamp(millis()) {
+        intValue = value;
+    }
+    
+    StatusUpdateData(StatusUpdateType t, uint32_t value) : type(t), timestamp(millis()) {
+        uint32Value = value;
+    }
+    
+    StatusUpdateData(StatusUpdateType t, unsigned long value) : type(t), timestamp(millis()) {
+        ulongValue = value;
+    }
+};
+
 class StepperController : public Task {
 private:
     bool isInitializing; // True during construction/initialization, false otherwise
@@ -78,6 +116,10 @@ private:
     // Cached references to system singletons
     SystemStatus& systemStatus;
     SystemCommand& systemCommand;
+    
+    // Status update queue for thread-safe status communication
+    QueueHandle_t statusUpdateQueue;
+    static const size_t STATUS_UPDATE_QUEUE_SIZE = 30;
     
     // Helper methods
     bool initPreferences();

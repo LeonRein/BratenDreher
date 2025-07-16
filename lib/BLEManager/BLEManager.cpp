@@ -280,6 +280,9 @@ void BLEManager::update() {
     // Process status updates from StepperController (simple batching)
     processStatusUpdates();
     
+    // Process status updates from StepperController (simple batching)
+    processStatusUpdates();
+    
     // Handle connection state changes
     if (!deviceConnected && oldDeviceConnected) {
         server->startAdvertising(); // Restart advertising

@@ -107,6 +107,12 @@ void StepperController::publishTMC2209Communication() {
         tmc2209Initialized = true;
         systemStatus.publishStatusUpdate(StatusUpdateType::TMC2209_STATUS_UPDATE, true);
     }
+    
+    // Create status update queue for thread-safe status communication
+    statusUpdateQueue = xQueueCreate(STATUS_UPDATE_QUEUE_SIZE, sizeof(StatusUpdateData));
+    if (statusUpdateQueue == nullptr) {
+        Serial.println("ERROR: Failed to create stepper status update queue!");
+    }
 }
 
 void StepperController::publishStallDetection() {
@@ -270,6 +276,13 @@ bool StepperController::begin() {
     
     // Note: Acceleration status update will be sent in batch with other initial updates
     
+    // Publish initial acceleration status
+    StatusUpdateData accelData;
+    accelData.type = StatusUpdateType::ACCELERATION_CHANGED;
+    accelData.timestamp = millis();
+    accelData.uint32Value = defaultAcceleration;
+    xQueueSend(statusUpdateQueue, &accelData, 0);
+    
     // Set initial speed using internal method (avoid command queue during initialization)
     setSpeedInternal(setpointRPM);
     
@@ -284,6 +297,44 @@ bool StepperController::begin() {
     
     // Initialize speed variation parameters (k and k0)
     updateSpeedVariationParameters();
+    
+    // Publish initial status updates for loaded settings
+    StatusUpdateData directionData;
+    directionData.type = StatusUpdateType::DIRECTION_CHANGED;
+    directionData.timestamp = millis();
+    directionData.boolValue = clockwise;
+    xQueueSend(statusUpdateQueue, &directionData, 0);
+    
+    StatusUpdateData currentData;
+    currentData.type = StatusUpdateType::CURRENT_CHANGED;
+    currentData.timestamp = millis();
+    currentData.intValue = runCurrent;
+    xQueueSend(statusUpdateQueue, &currentData, 0);
+    
+    StatusUpdateData enabledData;
+    enabledData.type = StatusUpdateType::ENABLED_CHANGED;
+    enabledData.timestamp = millis();
+    enabledData.boolValue = false; // Initially disabled
+    xQueueSend(statusUpdateQueue, &enabledData, 0);
+    
+    // Publish initial variable speed settings
+    StatusUpdateData varEnabledData;
+    varEnabledData.type = StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED;
+    varEnabledData.timestamp = millis();
+    varEnabledData.boolValue = speedVariationEnabled;
+    xQueueSend(statusUpdateQueue, &varEnabledData, 0);
+    
+    StatusUpdateData varStrengthData;
+    varStrengthData.type = StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED;
+    varStrengthData.timestamp = millis();
+    varStrengthData.floatValue = speedVariationStrength;
+    xQueueSend(statusUpdateQueue, &varStrengthData, 0);
+    
+    StatusUpdateData varPhaseData;
+    varPhaseData.type = StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED;
+    varPhaseData.timestamp = millis();
+    varPhaseData.floatValue = speedVariationPhase;
+    xQueueSend(statusUpdateQueue, &varPhaseData, 0);
     
     // Initially disabled
     stepperDriver.disable();
@@ -533,6 +584,10 @@ void StepperController::processCommand(const StepperCommandData& cmd) {
         case StepperCommand::REQUEST_ALL_STATUS:
             requestAllStatusInternal();
             break;
+            
+        case StepperCommand::REQUEST_ALL_STATUS:
+            requestAllStatusInternal(cmd.commandId);
+            break;
     }
 }
 
@@ -775,6 +830,48 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
         systemStatus.sendNotification(NotificationType::WARNING, String(warningMsg));
     }
     // Success is indicated by the status update - no notification needed for normal success
+}
+
+bool StepperController::getStatusUpdate(StatusUpdateData& status) {
+    if (statusUpdateQueue == nullptr) return false;
+    
+    return xQueueReceive(statusUpdateQueue, &status, 0) == pdTRUE; // Non-blocking
+}
+
+void StepperController::publishStatusUpdate(StatusUpdateType type, float value) {
+    if (statusUpdateQueue == nullptr) return;
+    
+    StatusUpdateData statusData(type, value);
+    // Don't block if queue is full - just drop the update
+    xQueueSend(statusUpdateQueue, &statusData, 0);
+}
+
+void StepperController::publishStatusUpdate(StatusUpdateType type, bool value) {
+    if (statusUpdateQueue == nullptr) return;
+    
+    StatusUpdateData statusData(type, value);
+    xQueueSend(statusUpdateQueue, &statusData, 0);
+}
+
+void StepperController::publishStatusUpdate(StatusUpdateType type, int value) {
+    if (statusUpdateQueue == nullptr) return;
+    
+    StatusUpdateData statusData(type, value);
+    xQueueSend(statusUpdateQueue, &statusData, 0);
+}
+
+void StepperController::publishStatusUpdate(StatusUpdateType type, uint32_t value) {
+    if (statusUpdateQueue == nullptr) return;
+    
+    StatusUpdateData statusData(type, value);
+    xQueueSend(statusUpdateQueue, &statusData, 0);
+}
+
+void StepperController::publishStatusUpdate(StatusUpdateType type, unsigned long value) {
+    if (statusUpdateQueue == nullptr) return;
+    
+    StatusUpdateData statusData(type, value);
+    xQueueSend(statusUpdateQueue, &statusData, 0);
 }
 
 void StepperController::saveSettings() {
@@ -1092,4 +1189,18 @@ float StepperController::calculateMaxAllowedBaseSpeed() const {
     maxAllowedBaseSpeed = max(maxAllowedBaseSpeed, MIN_SPEED_RPM);
     
     return maxAllowedBaseSpeed;
+}
+
+uint32_t StepperController::requestAllStatus() {
+    if (commandQueue == nullptr) return 0;
+    
+    uint32_t commandId = nextCommandId++;
+    StepperCommandData cmd;
+    cmd.command = StepperCommand::REQUEST_ALL_STATUS;
+    cmd.commandId = commandId;
+    
+    if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+        return commandId;
+    }
+    return 0;
 }
