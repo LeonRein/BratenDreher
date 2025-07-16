@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include "StepperController.h"
 #include "BLEManager.h"
+#include "SystemStatus.h"
+#include "SystemCommand.h"
 
 // Global task objects
 StepperController stepperController;
@@ -16,11 +18,11 @@ void setup() {
     // Initialize USB CDC for ESP32-S3
     Serial.begin(115200);
     
-    // Wait for USB CDC connection (ESP32-S3 specific)
-    unsigned long startTime = millis();
-    while (!Serial && (millis() - startTime < 1000)) {
-        delay(100);
-    }
+    // // Wait for USB CDC connection (ESP32-S3 specific)
+    // unsigned long startTime = millis();
+    // while (!Serial && (millis() - startTime < 1000)) {
+    //     delay(100);
+    // }
     
     Serial.println();
     Serial.println("=== BratenDreher Stepper Control ===");
@@ -31,8 +33,28 @@ void setup() {
     pinMode(STATUS_LED_PIN, OUTPUT);
     digitalWrite(STATUS_LED_PIN, LOW);
     
-    // Connect BLE manager to stepper controller before starting tasks
-    bleManager.setStepperController(&stepperController);
+    // Initialize singleton managers before starting tasks
+    Serial.println("Initializing SystemStatus...");
+    if (!SystemStatus::getInstance().begin()) {
+        Serial.println("ERROR: Failed to initialize SystemStatus!");
+        while (1) {
+            digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
+            delay(50);
+        }
+    }
+    
+    Serial.println("Initializing SystemCommand...");
+    if (!SystemCommand::getInstance().begin()) {
+        Serial.println("ERROR: Failed to initialize SystemCommand!");
+        while (1) {
+            digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
+            delay(75);
+        }
+    }
+    
+    Serial.println("System singletons initialized successfully!");
+    
+    // BLE manager now uses SystemCommand singleton directly - no need to connect to stepper controller
     
     // Start tasks
     if (!stepperController.start()) {

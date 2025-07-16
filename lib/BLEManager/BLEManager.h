@@ -6,15 +6,16 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
 #include <string>
 #include <ArduinoJson.h>
 #include "Task.h"
+#include "SystemStatus.h"
+#include "SystemCommand.h"
 
 // Forward declaration (header will be included in .cpp file)
-class StepperController;
-struct CommandResultData;
+class SystemStatus;
+class SystemCommand;
+struct NotificationData;
 struct StatusUpdateData;
 
 class BLEManager : public Task {
@@ -40,13 +41,11 @@ private:
     bool deviceConnected;
     bool oldDeviceConnected;
     
-    // Reference to stepper controller
-    StepperController* stepperController;
+    // Cached reference to SystemStatus singleton
+    SystemStatus& systemStatus;
     
-    // Command queue for safe processing using FreeRTOS queue
-    QueueHandle_t commandQueue;
-    static const size_t MAX_QUEUE_SIZE = 10;
-    static const size_t MAX_COMMAND_LENGTH = 256;
+    // Cached reference to SystemCommand singleton  
+    SystemCommand& systemCommand;
     
     // Status update batching configuration
     static const size_t MAX_BLE_PACKET_SIZE = 500;            // Conservative BLE MTU size
@@ -61,24 +60,22 @@ public:
     
     // Initialization
     bool begin(const char* deviceName = "BratenDreher");
-    void setStepperController(StepperController* controller);
+    // setStepperController method removed - using SystemCommand singleton directly
     
     // Connection status
     bool isConnected() const { return deviceConnected; }
     
     // Status updates
     void update();
-    void processCommandResults(); // Process command results from StepperController
+    void processNotifications(); // Process notifications from StepperController (warnings and errors only)
     void processStatusUpdates(); // Process status updates from StepperController
     void addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate); // Helper to add status to JSON
     void sendStatusUpdate(JsonDocument& statusDoc); // Send a status update JSON
-    void sendCommandResult(uint32_t commandId, const String& status, const String& message = "");
+    void sendNotification(const String& level, const String& message = "");
     void sendAllCurrentStatus(); // Send all current status information to newly connected client
     
     // Handle incoming commands
-    bool queueCommand(const std::string& command);
     void handleCommand(const std::string& command);
-    void processQueuedCommands();
     
     // Friend declarations for callback access
     friend class ServerCallbacks;

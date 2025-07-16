@@ -1,5 +1,6 @@
 #include "BLEManager.h"
-#include "StepperController.h"
+#include "SystemStatus.h"
+#include "SystemCommand.h"
 #include <ArduinoJson.h>
 
 // BLE Service and Characteristic UUIDs
@@ -47,11 +48,10 @@ public:
     void onWrite(BLECharacteristic* pCharacteristic) override {
         std::string value = pCharacteristic->getValue();
         
-        if (value.length() > 0 && value.length() <= BLEManager::MAX_COMMAND_LENGTH) {
-            // Queue the command for processing in the BLE task instead of processing here
-            // This avoids stack issues in the BLE callback context
-            // No Serial prints in time-critical callback context
-            bleManager->queueCommand(value);
+        if (value.length() > 0 && value.length() <= 256) {
+            // Process command directly - SystemCommand handles thread-safe queuing
+            // Commands are lightweight as they just queue data to SystemCommand
+            bleManager->handleCommand(value);
         }
     }
 };
@@ -61,20 +61,12 @@ BLEManager::BLEManager()
       server(nullptr), service(nullptr), commandCharacteristic(nullptr),
       serverCallbacks(nullptr), commandCallbacks(nullptr),
       deviceConnected(false), oldDeviceConnected(false),
-      stepperController(nullptr) {
+      systemStatus(SystemStatus::getInstance()), systemCommand(SystemCommand::getInstance()) {
     
-    // Create FreeRTOS queue for commands
-    commandQueue = xQueueCreate(MAX_QUEUE_SIZE, MAX_COMMAND_LENGTH);
-    if (commandQueue == nullptr) {
-        Serial.println("ERROR: Failed to create command queue!");
-    }
+    // No internal command queue needed - using SystemCommand singleton directly
 }
 
 BLEManager::~BLEManager() {
-    if (commandQueue != nullptr) {
-        vQueueDelete(commandQueue);
-    }
-    
     // Clean up BLE callback objects
     if (serverCallbacks != nullptr) {
         delete serverCallbacks;
@@ -139,17 +131,13 @@ bool BLEManager::begin(const char* deviceName) {
     return true;
 }
 
-void BLEManager::setStepperController(StepperController* controller) {
-    stepperController = controller;
-}
+// setStepperController method removed - using SystemCommand singleton directly
 
 void BLEManager::handleCommand(const std::string& command) {
-    if (!stepperController) return;
-    
     Serial.printf("Processing command: %s (length: %d)\n", command.c_str(), command.length());
     
-    // Prevent buffer overflow attacks
-    if (command.length() > MAX_COMMAND_LENGTH || command.length() == 0) {
+    // Prevent buffer overflow attacks  
+    if (command.length() > 256 || command.length() == 0) {
         Serial.printf("ERROR: Invalid command length: %d\n", command.length());
         return;
     }
@@ -179,136 +167,90 @@ void BLEManager::handleCommand(const std::string& command) {
     
     if (strcmp(type, "speed") == 0) {
         float speed = doc["value"];
-        uint32_t commandId = stepperController->setSpeed(speed);
-        if (commandId > 0) {
-            Serial.printf("Speed command queued: %.2f RPM (ID: %u)\n", speed, commandId);
-        } else {
-            Serial.println("Failed to queue speed command");
-            sendCommandResult(0, "error", "Failed to queue speed command");
-        }
+        StepperCommandData cmd(StepperCommand::SET_SPEED, speed);
+        systemCommand.sendCommand(cmd);
+        Serial.printf("Speed command queued: %.2f RPM\n", speed);
     }
     else if (strcmp(type, "direction") == 0) {
         bool clockwise = doc["value"];
-        uint32_t commandId = stepperController->setDirection(clockwise);
-        if (commandId > 0) {
-            Serial.printf("Direction command queued: %s (ID: %u)\n", clockwise ? "clockwise" : "counter-clockwise", commandId);
-        } else {
-            Serial.println("Failed to queue direction command");
-            sendCommandResult(0, "error", "Failed to queue direction command");
-        }
+        StepperCommandData cmd(StepperCommand::SET_DIRECTION, clockwise);
+        systemCommand.sendCommand(cmd);
+        Serial.printf("Direction command queued: %s\n", clockwise ? "clockwise" : "counter-clockwise");
     }
     else if (strcmp(type, "enable") == 0) {
         bool enable = doc["value"];
-        uint32_t commandId = 0;
         if (enable) {
-            commandId = stepperController->enable();
+            StepperCommandData cmd(StepperCommand::ENABLE);
+            systemCommand.sendCommand(cmd);
         } else {
-            commandId = stepperController->disable();
+            StepperCommandData cmd(StepperCommand::DISABLE);
+            systemCommand.sendCommand(cmd);
         }
-        if (commandId > 0) {
-            Serial.printf("Motor %s command queued (ID: %u)\n", enable ? "enable" : "disable", commandId);
-        } else {
-            Serial.printf("Failed to queue motor %s command\n", enable ? "enable" : "disable");
-            sendCommandResult(0, "error", String("Failed to queue motor ") + (enable ? "enable" : "disable") + " command");
-        }
+        Serial.printf("Motor %s command queued\n", enable ? "enable" : "disable");
     }
     else if (strcmp(type, "current") == 0) {
         int current = doc["value"];
         if (current >= 10 && current <= 100) {
-            uint32_t commandId = stepperController->setRunCurrent(current);
-            if (commandId > 0) {
-                Serial.printf("Current command queued: %d%% (ID: %u)\n", current, commandId);
-            } else {
-                Serial.println("Failed to queue current command");
-                sendCommandResult(0, "error", "Failed to queue current command");
-            }
+            StepperCommandData cmd(StepperCommand::SET_CURRENT, current);
+            systemCommand.sendCommand(cmd);
+            Serial.printf("Current command queued: %d%%\n", current);
         }
     }
     else if (strcmp(type, "reset") == 0) {
-        uint32_t commandId = stepperController->resetCounters();
-        if (commandId > 0) {
-            Serial.printf("Reset counters command queued (ID: %u)\n", commandId);
-        } else {
-            Serial.println("Failed to queue reset counters command");
-            sendCommandResult(0, "error", "Failed to queue reset counters command");
-        }
+        StepperCommandData cmd(StepperCommand::RESET_COUNTERS);
+        systemCommand.sendCommand(cmd);
+        Serial.printf("Reset counters command queued\n");
     }
     else if (strcmp(type, "reset_stall") == 0) {
-        uint32_t commandId = stepperController->resetStallCount();
-        if (commandId > 0) {
-            Serial.printf("Reset stall count command queued (ID: %u)\n", commandId);
-        } else {
-            Serial.println("Failed to queue reset stall count command");
-            sendCommandResult(0, "error", "Failed to queue reset stall count command");
-        }
+        StepperCommandData cmd(StepperCommand::RESET_STALL_COUNT);
+        systemCommand.sendCommand(cmd);
+        Serial.printf("Reset stall count command queued\n");
     }
     else if (strcmp(type, "status_request") == 0) {
         // Request all current status from StepperController
         Serial.println("Status request received, requesting all current status...");
-        uint32_t commandId = stepperController->requestAllStatus();
-        if (commandId > 0) {
-            sendCommandResult(commandId, "success", "Status request sent");
-        } else {
-            sendCommandResult(0, "error", "Failed to send status request");
-        }
+        StepperCommandData cmd(StepperCommand::REQUEST_ALL_STATUS);
+        systemCommand.sendCommand(cmd);
     }
     else if (strcmp(type, "acceleration") == 0) {
         // Set acceleration directly in steps/s²
         uint32_t accelerationStepsPerSec2 = doc["value"];  // Acceleration in steps/s²
         
         if (accelerationStepsPerSec2 >= 100 && accelerationStepsPerSec2 <= 100000) {
-            uint32_t commandId = stepperController->setAcceleration(accelerationStepsPerSec2);
-            Serial.printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
-            
-            // Send success response
-            sendCommandResult(commandId, "success", String("Acceleration set to ") + accelerationStepsPerSec2 + " steps/s²");
+            StepperCommandData cmd(StepperCommand::SET_ACCELERATION, (int)accelerationStepsPerSec2);
+            systemCommand.sendCommand(cmd);
+            Serial.printf("Acceleration command queued: %u steps/s²\n", accelerationStepsPerSec2);
         } else {
             Serial.println("Invalid acceleration parameters");
-            sendCommandResult(0, "invalid_parameter", "Acceleration must be 100-100000 steps/s²");
+            sendNotification("error", "Acceleration must be 100-100000 steps/s²");
         }
     }
     else if (strcmp(type, "speed_variation_strength") == 0) {
         float strength = doc["value"];
         if (strength >= 0.0f && strength <= 1.0f) {
-            uint32_t commandId = stepperController->setSpeedVariation(strength);
-            if (commandId > 0) {
-                Serial.printf("Speed variation strength command queued: %.2f (ID: %u)\n", strength, commandId);
-            } else {
-                Serial.println("Failed to queue speed variation strength command");
-                sendCommandResult(0, "error", "Failed to queue speed variation strength command");
-            }
+            StepperCommandData cmd(StepperCommand::SET_SPEED_VARIATION, strength);
+            systemCommand.sendCommand(cmd);
+            Serial.printf("Speed variation strength command queued: %.2f\n", strength);
         } else {
             Serial.println("Invalid speed variation strength");
-            sendCommandResult(0, "invalid_parameter", "Speed variation strength must be 0.0-1.0");
+            sendNotification("error", "Speed variation strength must be 0.0-1.0");
         }
     }
     else if (strcmp(type, "speed_variation_phase") == 0) {
         float phase = doc["value"];
-        uint32_t commandId = stepperController->setSpeedVariationPhase(phase);
-        if (commandId > 0) {
-            Serial.printf("Speed variation phase command queued: %.2f radians (ID: %u)\n", phase, commandId);
-        } else {
-            Serial.println("Failed to queue speed variation phase command");
-            sendCommandResult(0, "error", "Failed to queue speed variation phase command");
-        }
+        StepperCommandData cmd(StepperCommand::SET_SPEED_VARIATION_PHASE, phase);
+        systemCommand.sendCommand(cmd);
+        Serial.printf("Speed variation phase command queued: %.2f radians\n", phase);
     }
     else if (strcmp(type, "enable_speed_variation") == 0) {
-        uint32_t commandId = stepperController->enableSpeedVariation();
-        if (commandId > 0) {
-            Serial.printf("Enable speed variation command queued (ID: %u)\n", commandId);
-        } else {
-            Serial.println("Failed to queue enable speed variation command");
-            sendCommandResult(0, "error", "Failed to queue enable speed variation command");
-        }
+        StepperCommandData cmd(StepperCommand::ENABLE_SPEED_VARIATION);
+        systemCommand.sendCommand(cmd);
+        Serial.printf("Enable speed variation command queued\n");
     }
     else if (strcmp(type, "disable_speed_variation") == 0) {
-        uint32_t commandId = stepperController->disableSpeedVariation();
-        if (commandId > 0) {
-            Serial.printf("Disable speed variation command queued (ID: %u)\n", commandId);
-        } else {
-            Serial.println("Failed to queue disable speed variation command");
-            sendCommandResult(0, "error", "Failed to queue disable speed variation command");
-        }
+        StepperCommandData cmd(StepperCommand::DISABLE_SPEED_VARIATION);
+        systemCommand.sendCommand(cmd);
+        Serial.printf("Disable speed variation command queued\n");
     }
     else {
         Serial.printf("Unknown command type: %s\n", type);
@@ -332,11 +274,11 @@ void BLEManager::run() {
 }
 
 void BLEManager::update() {
-    // Process any queued commands with timeout (non-blocking)
-    processQueuedCommands();
+    // Process notifications from StepperController (warnings and errors only)
+    processNotifications();
     
-    // Process command results from StepperController
-    processCommandResults();
+    // Process status updates from StepperController (simple batching)
+    processStatusUpdates();
     
     // Process status updates from StepperController (simple batching)
     processStatusUpdates();
@@ -357,95 +299,43 @@ void BLEManager::update() {
     vTaskDelay(pdMS_TO_TICKS(10));
 }
 
-bool BLEManager::queueCommand(const std::string& command) {
-    if (commandQueue == nullptr || command.length() > MAX_COMMAND_LENGTH) {
-        return false;
-    }
-    
-    // Convert string to char array for queue
-    char commandBuffer[MAX_COMMAND_LENGTH];
-    strncpy(commandBuffer, command.c_str(), MAX_COMMAND_LENGTH - 1);
-    commandBuffer[MAX_COMMAND_LENGTH - 1] = '\0';
-    
-    // Try to send to queue without blocking (called from ISR context)
-    BaseType_t result = xQueueSendFromISR(commandQueue, commandBuffer, nullptr);
-    return result == pdTRUE;
-}
+// Queue methods removed - using SystemCommand singleton directly
 
-void BLEManager::processQueuedCommands() {
-    char commandBuffer[MAX_COMMAND_LENGTH];
-    
-    // Process commands with timeout to avoid busy waiting
-    // Limit processing to prevent overwhelming the system
-    int commandsProcessed = 0;
-    const int maxCommandsPerCycle = 5;
-    
-    while (commandsProcessed < maxCommandsPerCycle && 
-           xQueueReceive(commandQueue, commandBuffer, pdMS_TO_TICKS(1)) == pdTRUE) {
-        std::string command(commandBuffer);
-        Serial.printf("Processing queued command: %s\n", command.c_str());
-        handleCommand(command);
-        commandsProcessed++;
-        
-        // Small delay between commands to prevent system overload
-        if (commandsProcessed < maxCommandsPerCycle) {
-            vTaskDelay(pdMS_TO_TICKS(2));
-        }
-    }
-    
-    // If queue is getting full, warn about potential command loss
-    if (uxQueueMessagesWaiting(commandQueue) > (MAX_QUEUE_SIZE * 0.8)) {
-        Serial.printf("WARNING: Command queue nearly full (%d/%d)\n", 
-                     uxQueueMessagesWaiting(commandQueue), MAX_QUEUE_SIZE);
-    }
-}
-
-void BLEManager::processCommandResults() {
-    if (!stepperController) return;
-    
-    CommandResultData result;
-    // Process all available command results
-    while (stepperController->getCommandResult(result)) {
-        String status;
-        switch (result.result) {
-            case CommandResult::SUCCESS:
-                status = "success";
+void BLEManager::processNotifications() {
+    NotificationData notification;
+    // Process all available notifications (warnings and errors only)
+    while (systemStatus.getNotification(notification)) {
+        String level;
+        switch (notification.type) {
+            case NotificationType::WARNING:
+                level = "warning";
                 break;
-            case CommandResult::HARDWARE_ERROR:
-                status = "hardware_error";
-                break;
-            case CommandResult::INVALID_PARAMETER:
-                status = "invalid_parameter";
-                break;
-            case CommandResult::DRIVER_NOT_RESPONDING:
-                status = "driver_not_responding";
-                break;
-            case CommandResult::COMMUNICATION_ERROR:
-                status = "communication_error";
+            case NotificationType::ERROR:
+                level = "error";
                 break;
             default:
-                status = "unknown_error";
+                level = "unknown";
                 break;
         }
         
-        Serial.printf("Command %u result: %s", result.commandId, status.c_str());
-        if (strlen(result.errorMessage) > 0) {
-            Serial.printf(" - %s", result.errorMessage);
+        Serial.printf("Notification: %s", level.c_str());
+        if (strlen(notification.message) > 0) {
+            Serial.printf(" - %s", notification.message);
         }
         Serial.println();
         
-        // Send result to client
-        sendCommandResult(result.commandId, status, String(result.errorMessage));
+        // Send notification to client
+        sendNotification(level, String(notification.message));
     }
 }
 
 void BLEManager::processStatusUpdates() {
-    if (!stepperController || !commandCharacteristic || !deviceConnected) return;
+    if (!commandCharacteristic || !deviceConnected) return;
     
     StatusUpdateData statusUpdate;
     
     // Check if there are any status updates available
-    if (stepperController->getStatusUpdate(statusUpdate)) {
+    if (systemStatus.getStatusUpdate(statusUpdate)) {
         // Create JSON document and add the first update
         JsonDocument statusDoc;
         statusDoc["type"] = "status_update";
@@ -455,7 +345,7 @@ void BLEManager::processStatusUpdates() {
         addStatusToJson(statusDoc, statusUpdate);
         
         // Process all remaining status updates in the queue
-        while (stepperController->getStatusUpdate(statusUpdate)) {
+        while (systemStatus.getStatusUpdate(statusUpdate)) {
             addStatusToJson(statusDoc, statusUpdate);
             
             // Check if we're approaching size limit
@@ -474,8 +364,11 @@ void BLEManager::processStatusUpdates() {
 
 void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate) {
     switch (statusUpdate.type) {
-        case StatusUpdateType::SPEED_CHANGED:
-            doc["speed"] = statusUpdate.floatValue;
+        case StatusUpdateType::SPEED_UPDATE:
+            doc["currentSpeed"] = statusUpdate.floatValue;  // Actual speed for display
+            break;
+        case StatusUpdateType::SPEED_SETPOINT_CHANGED:
+            doc["speed"] = statusUpdate.floatValue;         // Setpoint for UI controls
             break;
         case StatusUpdateType::DIRECTION_CHANGED:
             doc["direction"] = statusUpdate.boolValue ? "cw" : "ccw";
@@ -504,9 +397,6 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
         case StatusUpdateType::RUNTIME_UPDATE:
             doc["runtime"] = statusUpdate.ulongValue;
             break;
-        case StatusUpdateType::IS_RUNNING_UPDATE:
-            doc["running"] = statusUpdate.boolValue;
-            break;
         case StatusUpdateType::STALL_DETECTED_UPDATE:
             doc["stallDetected"] = statusUpdate.boolValue;
             break;
@@ -515,9 +405,6 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
             break;
         case StatusUpdateType::TMC2209_STATUS_UPDATE:
             doc["tmc2209Status"] = statusUpdate.boolValue;
-            break;
-        case StatusUpdateType::CURRENT_VARIABLE_SPEED_UPDATE:
-            doc["currentVariableSpeed"] = statusUpdate.floatValue;
             break;
     }
 }
@@ -544,14 +431,13 @@ void BLEManager::sendStatusUpdate(JsonDocument& statusDoc) {
     }
 }
 
-void BLEManager::sendCommandResult(uint32_t commandId, const String& status, const String& message) {
+void BLEManager::sendNotification(const String& level, const String& message) {
     if (!commandCharacteristic || !deviceConnected) return;
     
     // Use fixed-size JSON document to prevent heap corruption (compatible with ArduinoJson v6)
     JsonDocument doc;
-    doc["type"] = "command_result";
-    doc["command_id"] = commandId;
-    doc["status"] = status;
+    doc["type"] = "notification";
+    doc["level"] = level;
     if (message.length() > 0 && message.length() < 128) { // Prevent buffer overflow
         doc["message"] = message;
     }
@@ -559,13 +445,13 @@ void BLEManager::sendCommandResult(uint32_t commandId, const String& status, con
     String response;
     size_t result = serializeJson(doc, response);
     if (result == 0) {
-        Serial.println("ERROR: Failed to serialize command result JSON");
+        Serial.println("ERROR: Failed to serialize notification JSON");
         return;
     }
     
     // Ensure response is not too long for BLE characteristic
     if (response.length() > 512) {
-        Serial.printf("WARNING: Command result too long (%d chars), truncating\n", response.length());
+        Serial.printf("WARNING: Notification too long (%d chars), truncating\n", response.length());
         response = response.substring(0, 512);
     }
     
@@ -577,25 +463,19 @@ void BLEManager::sendCommandResult(uint32_t commandId, const String& status, con
         // Small delay to prevent overwhelming BLE stack
         vTaskDelay(pdMS_TO_TICKS(5));
     } catch (...) {
-        Serial.println("ERROR: Failed to send command result notification");
+        Serial.println("ERROR: Failed to send notification");
     }
 }
 
 void BLEManager::sendAllCurrentStatus() {
-    if (!stepperController || !deviceConnected) {
+    if (!deviceConnected) {
         return;
     }
     
     Serial.println("Requesting all current status from StepperController...");
     
-    // Use the thread-safe command queue to request all status information
-    uint32_t commandId = stepperController->requestAllStatus();
-    
-    if (commandId > 0) {
-        Serial.printf("Status request sent with command ID: %u\n", commandId);
-    } else {
-        Serial.println("Failed to send status request to StepperController");
-    }
+    // Use the thread-safe SystemCommand to request all status information
+    StepperCommandData cmd(StepperCommand::REQUEST_ALL_STATUS);
+    systemCommand.sendCommand(cmd);
+    Serial.println("Status request sent");
 }
-
-// ...existing code...

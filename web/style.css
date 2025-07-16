@@ -50,6 +50,19 @@ body {
     border: 1px solid rgba(255,255,255,0.2);
 }
 
+/* Section-specific subtle accents */
+.control-card {
+    border-left: 3px solid #3b82f6;
+}
+
+.status-card {
+    border-left: 3px solid #10b981;
+}
+
+.stats-card {
+    border-left: 3px solid #8b5cf6;
+}
+
 .card h2 {
     font-size: 1.4rem;
     margin-bottom: 20px;
@@ -246,13 +259,18 @@ body {
 }
 
 /* Speed Slider */
+.speed-slider-container {
+    position: relative;
+    width: 100%;
+    margin-bottom: 40px; /* Increased to make room for triangle */
+}
+
 .speed-slider {
     width: 100%;
     height: 8px;
     border-radius: 4px;
     background: #e5e7eb;
     outline: none;
-    margin-bottom: 16px;
     cursor: pointer;
     -webkit-appearance: none;
     appearance: none;
@@ -282,6 +300,31 @@ body {
     cursor: pointer;
     border: none;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Current Speed Triangle Indicator */
+.current-speed-triangle {
+    position: absolute;
+    top: 28px; /* Position well below the slider track and thumb */
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.1s ease;
+    z-index: 10;
+}
+
+.triangle-indicator {
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 12px solid #10b981;
+    position: relative;
+    left: -8px; /* Center the triangle */
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+.current-speed-triangle.visible {
+    opacity: 1;
 }
 
 /* Speed Presets */
@@ -351,6 +394,32 @@ body {
     gap: 4px;
 }
 
+.status-value-with-action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-inline {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    min-height: auto;
+    line-height: 1.2;
+}
+
+.status-item-with-button {
+    align-items: center;
+    justify-content: center;
+}
+
+.status-item-with-button .btn {
+    width: 100%;
+    max-width: 200px;
+    font-size: 0.9rem;
+    padding: 8px 16px;
+}
+
 .status-label {
     font-size: 0.85rem;
     color: #6b7280;
@@ -361,6 +430,71 @@ body {
     font-size: 1rem;
     font-weight: 600;
     color: #1f2937;
+    transition: color 0.3s ease;
+}
+
+/* Enhanced visual feedback for status values with dynamic colors */
+.status-value[style*="color"] {
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Stall Detection Section */
+.stall-card {
+    border-left: 3px solid #f59e0b;
+}
+
+.stall-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.stall-info {
+    padding: 12px;
+    background: rgba(245, 158, 11, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.stall-info p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #374151;
+    line-height: 1.5;
+}
+
+.stall-status-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.stall-status-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.stall-actions {
+    display: flex;
+    justify-content: center;
+    padding: 8px 0;
+}
+
+.stall-actions .btn {
+    min-width: 160px;
+}
+
+.stall-help {
+    text-align: center;
+    color: #6b7280;
+    font-style: italic;
+    font-size: 0.85rem;
 }
 
 /* Info Card */
@@ -440,12 +574,13 @@ body {
 
 .variable-speed-info {
     margin-top: 12px;
-    padding: 8px 12px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    border-radius: 6px;
-    color: #1e40af;
-    font-size: 0.8rem;
+    padding: 12px;
+    background: rgba(59, 130, 246, 0.05);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: 8px;
+    color: #374151;
+    font-size: 0.85rem;
+    line-height: 1.5;
 }
 
 /* Mobile responsiveness for variable speed controls */
