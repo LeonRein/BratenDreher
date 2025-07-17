@@ -125,6 +125,52 @@ void StepperController::publishTMC2209Communication() {
     }
 }
 
+void StepperController::publishTMC2209Temperature() {
+    if (!tmc2209Initialized) {
+        Serial.println("WARNING: Cannot read temperature - TMC2209 not initialized");
+        return;
+    }
+
+    // Read TMC2209 status which includes temperature information
+    TMC2209::Status status = stepperDriver.getStatus();
+    
+    // Determine temperature status based on warning flags
+    // Temperature ranges: normal < 120°C < warning < 143°C < critical < 150°C < shutdown < 157°C
+    int temperatureStatus = 0; // 0=normal, 1=120°C+, 2=143°C+, 3=150°C+, 4=157°C+
+    
+    if (status.over_temperature_157c) {
+        temperatureStatus = 4; // Critical - 157°C+
+    } else if (status.over_temperature_150c) {
+        temperatureStatus = 3; // High - 150°C+
+    } else if (status.over_temperature_143c) {
+        temperatureStatus = 2; // Elevated - 143°C+
+    } else if (status.over_temperature_120c) {
+        temperatureStatus = 1; // Warm - 120°C+
+    }
+    
+    // Publish temperature status update
+    systemStatus.publishStatusUpdate(StatusUpdateType::TMC2209_TEMPERATURE_UPDATE, temperatureStatus);
+    
+    // Send notifications for temperature warnings
+    if (status.over_temperature_shutdown) {
+        systemStatus.sendNotification(NotificationType::ERROR, "TMC2209 over-temperature shutdown! Driver disabled for safety.");
+    } else if (status.over_temperature_warning || temperatureStatus >= 2) {
+        if (temperatureStatus == 4) {
+            systemStatus.sendNotification(NotificationType::ERROR, "TMC2209 critical temperature (>157°C)! Reduce current or improve cooling.");
+        } else if (temperatureStatus == 3) {
+            systemStatus.sendNotification(NotificationType::WARNING, "TMC2209 high temperature (>150°C). Consider reducing current.");
+        } else if (temperatureStatus == 2) {
+            systemStatus.sendNotification(NotificationType::WARNING, "TMC2209 elevated temperature (>143°C). Monitor thermal conditions.");
+        }
+    }
+    
+    // Log temperature status for debugging
+    if (temperatureStatus > 0) {
+        const char* tempLabels[] = {"Normal", "Warm (>120°C)", "Elevated (>143°C)", "High (>150°C)", "Critical (>157°C)"};
+        Serial.printf("TMC2209 Temperature: %s\n", tempLabels[temperatureStatus]);
+    }
+}
+
 void StepperController::publishStallDetection() {
     publishTMC2209Communication();
 
@@ -436,40 +482,45 @@ void StepperController::run() {
     // Initialize timing variables with cached millis() value
     StepperCommandData cmd;
     uint32_t currentTime = millis();
-    unsigned long nextSpeedUpdate = currentTime + MOTOR_SPEED_UPDATE_INTERVAL;
-    unsigned long nextPeriodicUpdate = currentTime + STATUS_UPDATE_INTERVAL;
-    
-    // Main event loop
+    unsigned long nextMotorSpeedUpdate = currentTime + MOTOR_SPEED_UPDATE_INTERVAL; // 10ms
+    unsigned long nextFastStatusUpdate = currentTime + FAST_UPDATE_INTERVAL; // 100ms
+    unsigned long nextStallUpdate = currentTime + 1000; // 1s
+    unsigned long nextTMCUpdate = currentTime + 2000; // 2s
+
     while (true) {
-        // Calculate smart timeout for queue operations (use the earliest upcoming event)
-        const unsigned long nextEvent = min(nextPeriodicUpdate, nextSpeedUpdate);
-        const TickType_t timeout = calculateQueueTimeout(nextEvent);
-        
-        // Block on queue until command arrives or any update is due
+        // Find the next event to wait for
+        unsigned long nextEvent = min(nextMotorSpeedUpdate, min(nextFastStatusUpdate, min(nextStallUpdate, nextTMCUpdate)));
+        TickType_t timeout = calculateQueueTimeout(nextEvent);
+
         if (systemCommand.getCommand(cmd, timeout)) {
             processCommand(cmd);
         }
-        
-        // Cache millis() value to avoid multiple system calls
+
         currentTime = millis();
-        
-        // Perform periodic status updates if due
-        if (isUpdateDue(nextPeriodicUpdate)) {
-            // Check power delivery status and disable motor if power is lost
-            if (motorEnabled && !checkPowerDeliveryReady()) {
-                Serial.println("StepperController: Power delivery lost, disabling motor");
-                systemStatus.sendNotification(NotificationType::ERROR, "Power delivery lost, disabling motor");
-                applyStop();
-            }
-            
-            publishPeriodicStatusUpdates();
-            nextPeriodicUpdate = currentTime + STATUS_UPDATE_INTERVAL;
-        }
-        
-        // Update motor speed if due (more frequent for smooth variation)
-        if (isUpdateDue(nextSpeedUpdate)) {
+
+        // Motor speed updates (every 10ms for smooth variation)
+        if (isUpdateDue(nextMotorSpeedUpdate)) {
             updateMotorSpeed();
-            nextSpeedUpdate = currentTime + MOTOR_SPEED_UPDATE_INTERVAL;
+            nextMotorSpeedUpdate = currentTime + MOTOR_SPEED_UPDATE_INTERVAL;
+        }
+
+        // Fast status updates (every 100ms)
+        if (isUpdateDue(nextFastStatusUpdate)) {
+            publishFastStatusUpdates();
+            nextFastStatusUpdate = currentTime + FAST_UPDATE_INTERVAL;
+        }
+
+        // Stall status updates (every 1s)
+        if (isUpdateDue(nextStallUpdate)) {
+            publishStallStatusUpdates();
+            
+            nextStallUpdate = currentTime + STALL_UPDATE_INTERVAL;
+        }
+
+        // TMC2209 status/temperature updates (every 2s)
+        if (isUpdateDue(nextTMCUpdate)) {
+            publishTMCStatusUpdates();
+            nextTMCUpdate = currentTime + TMC_UPDATE_INTERVAL;
         }
     }
 }
@@ -537,15 +588,28 @@ void StepperController::publishRuntime() {
 }
 
 void StepperController::publishPeriodicStatusUpdates() {
-    if (!stepper) {
-        Serial.println("WARNING: Cannot publish status updates - stepper not initialized");
-        return;
-    }
-    
+    // Deprecated: now split into separate functions for each timing group
+    // See publishFastStatusUpdates, publishStallStatusUpdates, publishTMCStatusUpdates
+    // This function can be removed if not used elsewhere
+    return;
+
+// New functions for split status updates
+}
+
+void StepperController::publishFastStatusUpdates() {
+    if (!stepper) return;
     publishCurrentRPM();
     publishTotalRevolutions();
     publishRuntime();
+}
+
+void StepperController::publishStallStatusUpdates() {
     publishStallDetection();
+}
+
+void StepperController::publishTMCStatusUpdates() {
+    publishTMC2209Communication();
+    publishTMC2209Temperature();
 }
 
 void StepperController::processCommand(const StepperCommandData& cmd) {
@@ -1006,6 +1070,7 @@ void StepperController::requestAllStatusInternal() {
     publishTotalRevolutions();
     publishRuntime();
     publishTMC2209Communication();
+    publishTMC2209Temperature(); // Add temperature status to full status request
     publishStallDetection();
 }
 

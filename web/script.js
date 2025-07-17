@@ -415,10 +415,10 @@ class Control {
 
 // Specialized control for speed with preset button management
 class SpeedControl extends Control {
-    constructor(element, valueElement, presetButtons, triangleElement, setpointSpeedElement, currentSpeedElement, options = {}) {
+    constructor(element, valueElement, presetButtons, fillElement, setpointSpeedElement, currentSpeedElement, options = {}) {
         super(element, valueElement, options);
         this.presetButtons = presetButtons;
-        this.triangleElement = triangleElement;
+        this.fillElement = fillElement;
         this.setpointSpeedElement = setpointSpeedElement;
         this.currentSpeedElement = currentSpeedElement;
         
@@ -429,9 +429,9 @@ class SpeedControl extends Control {
             });
         }
         
-        // Add triangle element as additional element (no state management applied)
-        if (this.triangleElement) {
-            this.addAdditionalElement(this.triangleElement, { 
+        // Add fill element as additional element (no state management applied)
+        if (this.fillElement) {
+            this.addAdditionalElement(this.fillElement, { 
                 applyOpacity: false, 
                 applyDisabled: false, 
                 applyColors: false, 
@@ -451,9 +451,9 @@ class SpeedControl extends Control {
         this.setDisplayState(this.displayState);
     }
 
-    // Update triangle position based on current speed
-    updateTrianglePosition(currentSpeed) {
-        if (!this.triangleElement || !this.element) {
+    // Update fill position based on current speed
+    updateFillPosition(currentSpeed) {
+        if (!this.fillElement || !this.element) {
             return;
         }
         
@@ -468,26 +468,18 @@ class SpeedControl extends Control {
         // Calculate position as percentage
         const percentage = (clampedSpeed - min) / (max - min);
         
-        // Get slider width and calculate accurate track position
-        const sliderRect = slider.getBoundingClientRect();
-        const sliderStyle = getComputedStyle(slider);
+        // Update the fill width to match thumb position
+        // The fill should reach exactly to where the center of the thumb is
+        this.fillElement.style.width = `${percentage * 100}%`;
         
-        // Account for the actual track area (excluding browser-specific padding)
-        const trackPadding = 12; // Typical browser slider track padding
-        const trackWidth = sliderRect.width - (trackPadding * 2);
-        const position = percentage * trackWidth + trackPadding;
-        
-        // Position the triangle (note: CSS already handles centering with left: -8px)
-        this.triangleElement.style.left = `${position}px`;
-        
-        // Show the triangle with a fade-in effect
-        this.triangleElement.classList.add('visible');
+        // Show the fill with a fade-in effect
+        this.fillElement.style.opacity = '1';
     }
 
-    // Hide triangle (called during disconnection or emergency stop)
-    hideTriangle() {
-        if (this.triangleElement) {
-            this.triangleElement.classList.remove('visible');
+    // Hide fill (called during disconnection or emergency stop)
+    hideFill() {
+        if (this.fillElement) {
+            this.fillElement.style.opacity = '0';
         }
     }
 
@@ -550,8 +542,8 @@ class SpeedControl extends Control {
                 }
             }
             
-            // Update the triangle indicator position
-            this.updateTrianglePosition(statusUpdate.currentSpeed);
+            // Update the fill indicator position
+            this.updateFillPosition(statusUpdate.currentSpeed);
         }
     }
 }
@@ -824,8 +816,18 @@ class TMCStatusControl extends Control {
             this.setDisplayState('VALID');
             
             this.statusElement.textContent = statusUpdate.tmc2209Status ? 'OK' : 'Error';
-            this.statusElement.style.opacity = '1.0'; // VALID state - data received
-            this.statusElement.style.color = statusUpdate.tmc2209Status ? '#10b981' : '#e74c3c';
+            this.statusElement.className = statusUpdate.tmc2209Status ? 'status-value status-success' : 'status-value status-error';
+        }
+        
+        if (statusUpdate.tmc2209Temperature !== undefined) {
+            // Temperature status handling
+            const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
+            const tempIdx = Math.max(0, Math.min(4, statusUpdate.tmc2209Temperature));
+            this.stallStatusElement.textContent = tempLabels[tempIdx];
+            this.stallStatusElement.className = 'status-value ' + (
+                tempIdx === 0 ? 'status-success' :
+                tempIdx < 3 ? 'status-warning' : 'status-error'
+            );
         }
         
         if (statusUpdate.stallDetected !== undefined) {
@@ -963,8 +965,6 @@ class PowerDeliveryControl extends Control {
             this.negotiateButton.addEventListener('click', () => {
                 const selectedVoltage = parseInt(this.element.value);
                 if (selectedVoltage && this.bratendreherble) {
-                    console.log(`PowerDelivery: Requesting voltage change to ${selectedVoltage}V`);
-                    
                     // Provide immediate visual feedback
                     this.showNegotiationStarted(false); // false = single voltage negotiation
                     
@@ -977,8 +977,6 @@ class PowerDeliveryControl extends Control {
         if (this.autoNegotiateButton) {
             this.autoNegotiateButton.addEventListener('click', () => {
                 if (this.bratendreherble) {
-                    console.log('PowerDelivery: Requesting auto-negotiation for highest voltage');
-                    
                     // Provide immediate visual feedback
                     this.showNegotiationStarted(true); // true = auto-negotiation
                     
@@ -1047,19 +1045,13 @@ class PowerDeliveryControl extends Control {
         if (statusUpdate.pdNegotiationStatus !== undefined) {
             this.setDisplayState('VALID');
             
-            console.log(`PowerDelivery: Received negotiation status raw: ${statusUpdate.pdNegotiationStatus}`);
-            console.log(`PowerDelivery: Type: ${typeof statusUpdate.pdNegotiationStatus}`);
-            
             // Ensure we have an integer value
             let statusValue = statusUpdate.pdNegotiationStatus;
             if (typeof statusValue === 'number') {
                 statusValue = Math.round(statusValue); // Round to nearest integer
             } else {
-                console.warn(`PowerDelivery: Invalid status type: ${typeof statusValue}, value: ${statusValue}`);
                 statusValue = 0; // Default to IDLE
             }
-            
-            console.log(`PowerDelivery: Parsed negotiation status: ${statusValue}`);
             
             const status = this.negotiationStates[statusValue] || 
                           { text: `Unknown (${statusUpdate.pdNegotiationStatus})`, class: 'status-error' };
@@ -1243,7 +1235,7 @@ class BratenDreherBLE {
         this.speedSlider = document.getElementById('speedSlider');
         this.speedValue = document.getElementById('speedValue');
         this.currentSpeedIndicator = document.getElementById('currentSpeedIndicator');
-        this.currentSpeedTriangle = document.getElementById('currentSpeedTriangle');
+        this.speedSliderFill = document.getElementById('speedSliderFill');
         this.clockwiseBtn = document.getElementById('clockwiseBtn');
         this.counterclockwiseBtn = document.getElementById('counterclockwiseBtn');
         this.emergencyStopBtn = document.getElementById('emergencyStopBtn');
@@ -1270,6 +1262,7 @@ class BratenDreherBLE {
         this.currentDirection = document.getElementById('currentDirection');
         this.currentCurrent = document.getElementById('currentCurrent');
         this.tmc2209Status = document.getElementById('tmc2209Status');
+        this.tmc2209Temperature = document.getElementById('tmc2209Temperature');
         this.stallStatus = document.getElementById('stallStatus');
         this.stallCount = document.getElementById('stallCount');
         this.lastUpdate = document.getElementById('lastUpdate');
@@ -1732,8 +1725,8 @@ class BratenDreherBLE {
         
         // Hide speed triangle during emergency stop
         const speedControl = this.controls.get('speed');
-        if (speedControl && speedControl.hideTriangle) {
-            speedControl.hideTriangle();
+        if (speedControl && speedControl.hideFill) {
+            speedControl.hideFill();
         }
         
         await this.setMotorEnabled(false);
@@ -1753,8 +1746,6 @@ class BratenDreherBLE {
         try {
             const value = new TextDecoder().decode(event.target.value);
             const message = JSON.parse(value);
-            
-            console.log('Message received:', message);
             
             if (message.type === 'status_update') {
                 // Granular status update (new system)
@@ -1882,8 +1873,8 @@ class BratenDreherBLE {
         // Hide triangle indicator when disconnected
         if (!this.connected) {
             const speedControl = this.controls.get('speed');
-            if (speedControl && speedControl.hideTriangle) {
-                speedControl.hideTriangle();
+            if (speedControl && speedControl.hideFill) {
+                speedControl.hideFill();
             }
         }
     }
@@ -2006,6 +1997,7 @@ class BratenDreherBLE {
             this.currentDirection,
             this.currentCurrent,
             this.tmc2209Status,
+            this.tmc2209Temperature,
             this.stallStatus,
             this.stallCount,
             this.lastUpdate,
@@ -2030,7 +2022,7 @@ class BratenDreherBLE {
             this.speedSlider,
             this.speedValue,
             this.presetBtns,
-            this.currentSpeedTriangle,
+            this.speedSliderFill,
             this.setpointSpeed,
             this.currentSpeed,
             {

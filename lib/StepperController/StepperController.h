@@ -35,7 +35,9 @@ class PowerDeliveryTask;
 #define MAX_SPEED_RPM               30.0f  // Maximum speed (0.5 RPS after gear reduction)
 
 // Timing configuration
-#define STATUS_UPDATE_INTERVAL      100    // Status update every 500ms
+#define FAST_UPDATE_INTERVAL        100    // Status update every 500ms
+#define STALL_UPDATE_INTERVAL       1000    // Status update every 500ms
+#define TMC_UPDATE_INTERVAL         2000    // Status update every 500ms
 #define MOTOR_SPEED_UPDATE_INTERVAL 10     // Speed update every 50ms for smooth variation
 
 class StepperController : public Task {
@@ -126,10 +128,16 @@ private:
     void applyCurrent(uint8_t current);                     // Set run current in mA
 
     void publishTMC2209Communication(); // Check TMC2209 driver communication status
+    void publishTMC2209Temperature();   // Check TMC2209 temperature status
     void publishStallDetection();        // Check stall detection status and update stallDetected, stallCount, lastStallTime
-    void publishCurrentRPM();                                      // Update actual/measured RPM
-    void publishTotalRevolutions();                              // Update total revolutions based on current position   
+    void publishCurrentRPM();            // Update actual/measured RPM
+    void publishTotalRevolutions();      // Update total revolutions based on current position   
     void publishRuntime();
+
+    // Split status update helpers
+    void publishFastStatusUpdates();     // Speed, runtime, revolutions (100ms)
+    void publishStallStatusUpdates();    // Stall status/count (1s)
+    void publishTMCStatusUpdates();      // TMC2209 status/temperature (2s)
 
     void stepperSetSpeed(float rpm);                            // Set target speed
     void stepperSetAcceleration(uint32_t accelerationStepsPerSec2); // Set target acceleration

@@ -424,6 +424,9 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
         case StatusUpdateType::TMC2209_STATUS_UPDATE:
             doc["tmc2209Status"] = statusUpdate.boolValue;
             break;
+        case StatusUpdateType::TMC2209_TEMPERATURE_UPDATE:
+            doc["tmc2209Temperature"] = statusUpdate.intValue;
+            break;
         case StatusUpdateType::PD_NEGOTIATION_STATUS:
             doc["pdNegotiationStatus"] = statusUpdate.intValue;
             break;
