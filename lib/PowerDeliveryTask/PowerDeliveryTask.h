@@ -10,7 +10,6 @@
  * It integrates with SystemCommand and SystemStatus for thread-safe communication.
  */
 
-#include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "Task.h"

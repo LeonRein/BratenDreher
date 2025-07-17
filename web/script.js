@@ -1656,6 +1656,8 @@ class BratenDreherBLE {
             this.connected = true;
             this.updateConnectionStatus('Connected');
             this.updateUI();
+
+            await this.sendCommand('status_request', null);
             
             console.log('Successfully reconnected to BratenDreher');
             

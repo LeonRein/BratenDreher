@@ -1,7 +1,6 @@
 #ifndef STEPPER_CONTROLLER_H
 #define STEPPER_CONTROLLER_H
 
-#include <Arduino.h>
 #include "FastAccelStepper.h"
 #include <TMC2209.h>
 #include <Preferences.h>
@@ -174,29 +173,6 @@ protected:
 public:
     // Initialization
     bool begin();
-
-    // Motor control (thread-safe via command queue)
-    bool setSpeed(float rpm);
-    bool setDirection(bool clockwise);
-    bool enable();
-    bool disable();
-    bool emergencyStop();
-    bool setRunCurrent(int current);
-    bool setAcceleration(uint32_t accelerationStepsPerSec2);
-    bool resetCounters();
-    bool resetStallCount();
-
-    // Speed variation control (thread-safe via command queue)
-    uint32_t setSpeedVariation(float strength);   // Set variation strength (0.0 to 1.0)
-    uint32_t setSpeedVariationPhase(float phase); // Set phase offset (0.0 to 2*PI)
-    uint32_t enableSpeedVariation();              // Enable variable speed (current position becomes slowest)
-    uint32_t disableSpeedVariation();             // Disable variable speed
-
-    // StallGuard control (thread-safe via command queue)
-    bool setStallGuardThreshold(uint8_t threshold); // Set StallGuard threshold (0-63)
-
-    // Status request (thread-safe via command queue)
-    uint32_t requestAllStatus(); // Request all current status to be published
 
     static StepperController &getInstance()
     {

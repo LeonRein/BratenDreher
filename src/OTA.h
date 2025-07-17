@@ -1,5 +1,6 @@
 #include <ArduinoOTA.h>
 #include "../../secrets.h"
+#include "StepperController.h"
 
 void setupOTA()
 {
@@ -23,9 +24,11 @@ void setupOTA()
         type = "filesystem";
       }
 
-      stepperController.stop();
+      SystemCommand::getInstance().sendCommand(StepperCommand::DISABLE);
       bleManager.stop();
       powerDeliveryTask.stop();
+      delay(100); // Allow time for stepper to stop
+      StepperController::getInstance().stop();
 
       // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
       Serial.println("Start updating " + type); })
