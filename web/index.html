@@ -250,7 +250,7 @@
                     <h3>StallGuard Threshold & Load Monitor</h3>
                     <div class="control-item">
                         <label for="stallguardThresholdSlider">
-                            Sensitivity: <span id="stallguardThresholdValue">32</span> | Current Load: <span id="stallguardResultValue">255</span>
+                            Sensitivity: <span id="stallguardThresholdValue">50.2%</span> | Current Load: <span id="stallguardResultValue">50.0%</span>
                         </label>
                         <div class="stallguard-slider-container">
                             <div class="stallguard-slider-wrapper">
@@ -259,16 +259,16 @@
                                        id="stallguardThresholdSlider" 
                                        class="stallguard-slider"
                                        min="0" 
-                                       max="63" 
+                                       max="255" 
                                        step="1" 
-                                       value="32">
+                                       value="128">
                             </div>
                         </div>
                         <div class="stallguard-labels">
-                            <span class="stallguard-label-left">More Sensitive</span>
-                            <span class="stallguard-label-right">Less Sensitive</span>
+                            <span class="stallguard-label-left">0% (Less Sensitive)</span>
+                            <span class="stallguard-label-right">100% (More Sensitive)</span>
                         </div>
-                        <small class="setting-hint">Green fill shows current motor load (0-510 range). Adjust slider to set stall sensitivity. Stall occurs when load drops below threshold×2.</small>
+                        <small class="setting-hint">Green fill shows current motor load percentage (0-100%). Adjust slider to set stall sensitivity.</small>
                     </div>
                 </div>
                 

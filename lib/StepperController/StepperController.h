@@ -72,7 +72,7 @@ private:
     uint16_t stallCount;
 
     // StallGuard settings
-    uint8_t stallGuardThreshold; // StallGuard threshold (0-63)
+    uint8_t stallGuardThreshold; // StallGuard threshold (0-255, 0=least sensitive, 255=most sensitive)
 
     // Acceleration tracking
     uint32_t setpointAcceleration; // Target acceleration in steps/s²

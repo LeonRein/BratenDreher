@@ -1163,6 +1163,13 @@ class StallGuardControl extends Control {
         // Call parent to handle standard input processing
         super.handleInput(event);
         
+        // Update the threshold display to show percentage
+        if (this.valueElement) {
+            const thresholdRaw = parseInt(this.element.value);
+            const thresholdPercentage = (thresholdRaw / 255) * 100;
+            this.valueElement.textContent = `${thresholdPercentage.toFixed(1)}%`;
+        }
+        
         // If we have a current SG_RESULT, update the visual representation
         // with the new threshold value
         if (this.currentSgResult !== null) {
@@ -1179,17 +1186,17 @@ class StallGuardControl extends Control {
         this.currentSgResult = sgResult;
         
         // SG_RESULT: 0-510 (10-bit value), where LOWER values indicate HIGHER load
-        // SGTHRS: 0-63, stall detection occurs when SG_RESULT < (SGTHRS * 2)
+        // SGTHRS: 0-255, stall detection occurs when SG_RESULT < (SGTHRS * 2)
         // 
         // StallGuard interpretation:
         // - SG_RESULT = 0: Maximum load (stall condition)
         // - SG_RESULT = 510: Minimum load (free running)
-        // - SGTHRS = 0: More sensitive (detects stalls easier)
-        // - SGTHRS = 63: Less sensitive (harder to detect stalls)
+        // - SGTHRS = 0: Less sensitive (harder to detect stalls)
+        // - SGTHRS = 255: More sensitive (detects stalls easier)
         //
-        // For visual representation, we want to show load level, so we need to invert SG_RESULT:
-        // - High load (low SG_RESULT) should show high fill percentage
-        // - Low load (high SG_RESULT) should show low fill percentage
+        // For visual representation, we want to show load level as percentage:
+        // - High load (low SG_RESULT) should show high percentage
+        // - Low load (high SG_RESULT) should show low percentage
         
         // Convert SG_RESULT to load percentage (invert the scale)
         // Load % = (510 - SG_RESULT) / 510 * 100
@@ -1199,9 +1206,12 @@ class StallGuardControl extends Control {
         this.sliderFillElement.style.width = `${loadPercentage}%`;
         this.sliderFillElement.style.opacity = '1';
         
-        // Get current threshold value for comparison
-        const currentThreshold = parseInt(this.element.value);
-        const stallThreshold = currentThreshold * 2; // Actual threshold value used for stall detection
+        // Get current threshold value from slider and convert to actual backend value
+        // Slider value is inverted: slider value 255 = backend 0, slider value 0 = backend 255
+        const sliderValue = parseInt(this.element.value);
+        const actualThresholdValue = 255 - sliderValue; // Convert to actual backend threshold
+        const thresholdSensitivity = (sliderValue / 255) * 100; // Convert slider value to percentage
+        const stallThreshold = actualThresholdValue * 2; // Actual threshold value used for stall detection
         
         // Color the fill based on proximity to stall threshold
         if (sgResult < stallThreshold) {
@@ -1215,8 +1225,8 @@ class StallGuardControl extends Control {
             this.sliderFillElement.style.backgroundColor = '#10b981'; // Green
         }
         
-        // Update the result value display (show raw SG_RESULT)
-        this.resultValueElement.textContent = sgResult.toString();
+        // Update the result value display (show load as percentage)
+        this.resultValueElement.textContent = `${loadPercentage.toFixed(1)}%`;
         this.resultValueElement.style.opacity = '1.0';
     }
 
@@ -1232,22 +1242,32 @@ class StallGuardControl extends Control {
         
         // Handle StallGuard result updates
         if (statusUpdate.stallguardResult !== undefined) {
-            console.log('StallGuard control received stallguardResult:', statusUpdate.stallguardResult);
             this.setDisplayState(CONTROL_STATES.VALID);
             this.updateStallGuardResult(statusUpdate.stallguardResult);
         }
         
         // Handle threshold updates from backend
         if (statusUpdate.stallguardThreshold !== undefined) {
-            console.log('StallGuard control received stallguardThreshold:', statusUpdate.stallguardThreshold);
             this.setDisplayState(CONTROL_STATES.VALID);
             
-            // Update slider and display to match backend value
+            // Backend sends threshold as 0-255, but we need to invert it for the slider
+            // Backend 0 = most sensitive, should show as 100% (slider value 255)
+            // Backend 255 = least sensitive, should show as 0% (slider value 0)
+            const invertedSliderValue = 255 - statusUpdate.stallguardThreshold;
+            const thresholdPercentage = (invertedSliderValue / 255) * 100;
+            
+            // Update slider to inverted value
             if (this.element) {
-                this.element.value = statusUpdate.stallguardThreshold;
+                this.element.value = invertedSliderValue;
             }
+            // Update display to show percentage
             if (this.valueElement) {
-                this.valueElement.textContent = statusUpdate.stallguardThreshold.toString();
+                this.valueElement.textContent = `${thresholdPercentage.toFixed(1)}%`;
+            }
+            
+            // Update the visual representation if we have a current result
+            if (this.currentSgResult !== null) {
+                this.updateStallGuardResult(this.currentSgResult);
             }
         }
     }
@@ -1884,9 +1904,7 @@ class BratenDreherBLE {
         }
     }
     
-    handleStatusUpdate(statusUpdate) {
-        console.log('Status update:', statusUpdate);
-        
+    handleStatusUpdate(statusUpdate) {        
         // Update timestamp and make it fully visible since we're receiving data
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
         this.lastUpdate.style.opacity = '1.0'; // VALID state - data received
@@ -2303,8 +2321,17 @@ class BratenDreherBLE {
             {
                 commandType: 'stallguard_threshold',
                 statusKey: null, // Handled specially in the control
-                displayTransform: (value) => value.toString(),
-                valueTransform: (value) => parseInt(value),
+                displayTransform: (value) => {
+                    // Convert slider value (0-255) to percentage display (inverted)
+                    // Slider right (255) = 100%, Slider left (0) = 0%
+                    const percentage = (value / 255) * 100;
+                    return `${percentage.toFixed(1)}%`;
+                },
+                valueTransform: (value) => {
+                    // Invert the slider value: slider right (255) sends 0, slider left (0) sends 255
+                    const invertedValue = 255 - parseInt(value);
+                    return Math.min(Math.max(invertedValue, 0), 255);
+                },
                 debounceTime: 300 // Shorter debounce for threshold changes
             }
         ));

@@ -256,13 +256,13 @@ void BLEManager::handleCommand(const std::string& command) {
     }
     else if (strcmp(type, "stallguard_threshold") == 0) {
         int threshold = doc["value"];
-        if (threshold >= 0 && threshold <= 63) {
+        if (threshold >= 0 && threshold <= 255) {
             StepperCommandData cmd(StepperCommand::SET_STALLGUARD_THRESHOLD, threshold);
             systemCommand.sendCommand(cmd);
             dbg_printf("StallGuard threshold command queued: %d\n", threshold);
         } else {
             dbg_println("Invalid StallGuard threshold");
-            sendNotification("error", "StallGuard threshold must be 0-63");
+            sendNotification("error", "StallGuard threshold must be 0-255");
         }
     }
     else if (strcmp(type, "pd_voltage") == 0) {

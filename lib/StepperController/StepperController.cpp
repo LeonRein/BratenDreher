@@ -184,24 +184,43 @@ void StepperController::publishTMC2209Temperature()
     // Publish temperature status update
     systemStatus.publishStatusUpdate(StatusUpdateType::TMC2209_TEMPERATURE_UPDATE, temperatureStatus);
 
-    // Send notifications for temperature warnings
-    if (status.over_temperature_shutdown)
+    // Track last temperature status to avoid duplicate notifications
+    static int lastTemperatureStatus = -1;
+    static bool lastOverTemperatureShutdown = false;
+    
+    // Handle over-temperature shutdown notifications (separate from temperature warnings)
+    if (status.over_temperature_shutdown && !lastOverTemperatureShutdown)
     {
+        // New shutdown condition detected
+        lastOverTemperatureShutdown = true;
         systemStatus.sendNotification(NotificationType::ERROR, "TMC2209 over-temperature shutdown! Driver disabled for safety.");
     }
-    else if (status.over_temperature_warning || temperatureStatus >= 2)
+    else if (!status.over_temperature_shutdown && lastOverTemperatureShutdown)
     {
-        if (temperatureStatus == 4)
+        // Shutdown condition cleared
+        lastOverTemperatureShutdown = false;
+    }
+    
+    // Handle temperature warning notifications (only when status changes)
+    if (temperatureStatus != lastTemperatureStatus)
+    {
+        lastTemperatureStatus = temperatureStatus;
+        
+        // Send notifications for temperature warnings only when status changes
+        if (status.over_temperature_warning || temperatureStatus >= 2)
         {
-            systemStatus.sendNotification(NotificationType::ERROR, "TMC2209 critical temperature (>157°C)! Reduce current or improve cooling.");
-        }
-        else if (temperatureStatus == 3)
-        {
-            systemStatus.sendNotification(NotificationType::WARNING, "TMC2209 high temperature (>150°C). Consider reducing current.");
-        }
-        else if (temperatureStatus == 2)
-        {
-            systemStatus.sendNotification(NotificationType::WARNING, "TMC2209 elevated temperature (>143°C). Monitor thermal conditions.");
+            if (temperatureStatus == 4)
+            {
+                systemStatus.sendNotification(NotificationType::ERROR, "TMC2209 critical temperature (>157°C)! Reduce current or improve cooling.");
+            }
+            else if (temperatureStatus == 3)
+            {
+                systemStatus.sendNotification(NotificationType::WARNING, "TMC2209 high temperature (>150°C). Consider reducing current.");
+            }
+            else if (temperatureStatus == 2)
+            {
+                systemStatus.sendNotification(NotificationType::WARNING, "TMC2209 elevated temperature (>143°C). Monitor thermal conditions.");
+            }
         }
     }
 
@@ -313,13 +332,13 @@ StepperController::StepperController()
       runCurrent(30), motorEnabled(false), clockwise(true),
       startTime(0), totalMicroSteps(0), isFirstStart(true), tmc2209Initialized(false), powerDeliveryReady(false),
       stallDetected(false), stallCount(0),
-      stallGuardThreshold(10), // Initialize StallGuard with default threshold
+      stallGuardThreshold(128), // Initialize StallGuard with default threshold (middle of 0-255 range)
       setpointAcceleration(0), // Will be set during initialization
       speedVariationEnabled(false), speedVariationStrength(0.0f), speedVariationPhase(0.0f), speedVariationStartPosition(0),
       speedVariationK(0.0f), speedVariationK0(1.0f), // Initialize with default values
       systemStatus(SystemStatus::getInstance()), systemCommand(SystemCommand::getInstance())
 {
-    // No need to create command queue - using SystemCommand singleton
+    setpointAcceleration = rpmToStepsPerSecond(MAX_SPEED_RPM) / 5;
 }
 
 StepperController::~StepperController()
@@ -356,9 +375,6 @@ bool StepperController::begin()
     // Check TMC2209 initialization status after configuration
     tmc2209Initialized = stepperDriver.isSetupAndCommunicating();
 
-    // Publish initial TMC2209 status using the communication manager
-    systemStatus.publishStatusUpdate(StatusUpdateType::TMC2209_STATUS_UPDATE, tmc2209Initialized);
-
     if (tmc2209Initialized)
     {
         dbg_println("TMC2209 driver initialized and communicating successfully");
@@ -389,31 +405,9 @@ bool StepperController::begin()
     stepper->setDelayToEnable(50);
     stepper->setDelayToDisable(1000);
 
-    // Set acceleration (steps/s²) - optimized for variable speed operation
-    // For variable speed to work smoothly, we need fast acceleration
-    // Target: reach MAX_SPEED_RPM in 2 seconds for responsive speed changes
-    // Calculate: 30 RPM * 10 gear ratio * 200 steps * 16 microsteps / 60 seconds = 16000 steps/s
-    // Acceleration for 2 seconds: 16000 / 2 = 8000 steps/s²
-    uint32_t defaultAcceleration = rpmToStepsPerSecond(MAX_SPEED_RPM) / 2; // 2 seconds to reach max speed
-    applyStepperAcceleration(defaultAcceleration);
 
-    // Note: Acceleration status update will be sent in batch with other initial updates
-
-    // Set initial speed using internal method (avoid command queue during initialization)
-    setSpeedInternal(setpointRPM);
-
-    // Publish initial status updates for loaded settings using the communication manager
-    systemStatus.publishStatusUpdate(StatusUpdateType::DIRECTION_CHANGED, clockwise);
-    systemStatus.publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, runCurrent);
-    systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false); // Initially disabled
-    systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, speedVariationEnabled);
-    systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, speedVariationStrength);
-    systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED, speedVariationPhase);
-    systemStatus.publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, defaultAcceleration);
-    systemStatus.publishStatusUpdate(StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED, static_cast<int>(stallGuardThreshold));
-
-    // Initialize speed variation parameters (k and k0)
-    updateSpeedVariationParameters();
+    stepperSetAcceleration(setpointAcceleration);
+    stepperSetSpeed(setpointRPM);
 
     // Initially disabled
     stepperDriver.disable();
@@ -435,9 +429,10 @@ bool StepperController::initPreferences()
             // Fresh namespace - write default values
             dbg_println("Fresh preferences namespace, writing defaults");
             preferences.putFloat("speed", setpointRPM);
-            preferences.putBool("clockwise", clockwise);
             preferences.putInt("microsteps", MICRO_STEPS);
             preferences.putInt("current", runCurrent);
+            preferences.putInt("stallGuardThreshold", stallGuardThreshold);
+            preferences.putUInt("acceleration", setpointAcceleration);
         }
         preferences.end();
         dbg_println("Preferences namespace initialized");
@@ -461,6 +456,9 @@ void StepperController::configureDriver()
 
     // Configure StallGuard
     stepperDriver.setStallGuardThreshold(stallGuardThreshold);
+
+    // Configure CoolStep
+    stepperDriver.enableCoolStep();
 
     // Update communication status after configuration
     bool newTmc2209Status = stepperDriver.isSetupAndCommunicating();
@@ -1098,9 +1096,9 @@ void StepperController::saveSettings()
     {
         preferences.putFloat("speed", setpointRPM);
         preferences.putBool("clockwise", clockwise);
-        preferences.putInt("microsteps", MICRO_STEPS);
         preferences.putInt("current", runCurrent);
         preferences.putUInt("acceleration", setpointAcceleration);
+        preferences.putUInt("stallGuardThreshold", stallGuardThreshold);
         preferences.end();
         dbg_println("Settings saved to flash");
     }
@@ -1116,8 +1114,6 @@ void StepperController::loadSettings()
     {
         setpointRPM = preferences.getFloat("speed", setpointRPM);
         clockwise = preferences.getBool("clockwise", clockwise);
-        // microSteps is now a define, just read the value for compatibility but don't use it
-        preferences.getInt("microsteps", MICRO_STEPS);
         runCurrent = preferences.getInt("current", runCurrent);
         setpointAcceleration = preferences.getUInt("acceleration", setpointAcceleration);
         preferences.end();
@@ -1482,8 +1478,6 @@ void StepperController::setStallGuardThresholdInternal(uint8_t threshold)
     stepperDriver.setStallGuardThreshold(threshold);
 
     info_printf("StallGuard threshold set to %d (0=least sensitive, 255=most sensitive)\n", threshold);
-    systemStatus.sendNotification(NotificationType::WARNING,
-                                  String("StallGuard threshold set to ") + String(threshold) + String(" (0=least sensitive, 255=most sensitive)"));
 
     // Publish status update for StallGuard threshold change
     systemStatus.publishStatusUpdate(StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED, threshold);
