@@ -4,6 +4,7 @@
 #include "SystemStatus.h"
 #include "SystemCommand.h"
 #include "PowerDeliveryTask.h"
+#include "OTA.h"
 
 // Global task objects
 StepperController stepperController;
@@ -88,6 +89,8 @@ void setup() {
     
     // Turn on status LED to indicate ready state
     digitalWrite(STATUS_LED_PIN, HIGH);
+
+    setupOTA();
 }
 
 void loop() {
