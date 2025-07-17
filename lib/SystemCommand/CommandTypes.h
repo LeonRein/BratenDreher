@@ -16,6 +16,7 @@ enum class StepperCommand {
     SET_SPEED_VARIATION_PHASE,
     ENABLE_SPEED_VARIATION,
     DISABLE_SPEED_VARIATION,
+    SET_STALLGUARD_THRESHOLD,   // Set StallGuard threshold (0-63)
     REQUEST_ALL_STATUS  // Request all current status values
 };
 

@@ -244,6 +244,34 @@
                 <div class="stall-info">
                     <p>TMC2209 StallGuard monitors motor load and detects when the motor cannot turn due to excessive resistance.</p>
                 </div>
+                
+                <!-- StallGuard Threshold Control -->
+                <div class="control-group stallguard-settings">
+                    <h3>StallGuard Threshold & Load Monitor</h3>
+                    <div class="control-item">
+                        <label for="stallguardThresholdSlider">
+                            Sensitivity: <span id="stallguardThresholdValue">32</span> | Current Load: <span id="stallguardResultValue">255</span>
+                        </label>
+                        <div class="stallguard-slider-container">
+                            <div class="stallguard-slider-wrapper">
+                                <div class="stallguard-slider-fill" id="stallguardSliderFill"></div>
+                                <input type="range" 
+                                       id="stallguardThresholdSlider" 
+                                       class="stallguard-slider"
+                                       min="0" 
+                                       max="63" 
+                                       step="1" 
+                                       value="32">
+                            </div>
+                        </div>
+                        <div class="stallguard-labels">
+                            <span class="stallguard-label-left">More Sensitive (0)</span>
+                            <span class="stallguard-label-right">Less Sensitive (63)</span>
+                        </div>
+                        <small class="setting-hint">Green fill shows current motor load (0-510 range). Adjust slider to set stall sensitivity. Stall occurs when load drops below threshold×2.</small>
+                    </div>
+                </div>
+                
                 <div class="stall-status-grid">
                     <div class="stall-status-item">
                         <span class="status-label">Stall Status:</span>
@@ -260,7 +288,7 @@
                     </button>
                 </div>
                 <div class="stall-help">
-                    <small><em>💡 If stalls occur frequently, try reducing speed or checking for mechanical obstructions.</em></small>
+                    <small><em>💡 If stalls occur frequently, try reducing speed, increasing threshold, or checking for mechanical obstructions.</em></small>
                 </div>
             </div>
         </div>

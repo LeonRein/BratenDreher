@@ -186,10 +186,9 @@ void StepperController::publishStallDetection() {
         if (diagPinHigh && !stallDetected) {
             // New stall detected
             stallDetected = true;
-            lastStallTime = millis();
             stallCount++;
             systemStatus.sendNotification(NotificationType::WARNING, "Stall detected! Check motor load or settings.");
-            Serial.printf("STALL DETECTED! Count: %d, Time: %lu\n", stallCount, lastStallTime);
+            Serial.printf("STALL DETECTED! Count: %d, Time: %lu\n", stallCount, millis());
             Serial.println("Consider: reducing speed, increasing current, or checking load");
         } else if (!diagPinHigh && stallDetected) {
             // Stall cleared
@@ -247,10 +246,12 @@ void StepperController::stepperSetAcceleration(uint32_t accelerationStepsPerSec2
 
 StepperController::StepperController() 
     : Task("Stepper_Task", 4096, 1, 1), // Task name, 4KB stack, priority 1, core 1
+      isInitializing(true), // Start in initialization mode
       stepper(nullptr), serialStream(Serial2), setpointRPM(1.0f),
       runCurrent(30), motorEnabled(false), clockwise(true),
       startTime(0), totalMicroSteps(0), isFirstStart(true), tmc2209Initialized(false), powerDeliveryReady(false),
-      stallDetected(false), lastStallTime(0), stallCount(0),
+      stallDetected(false), stallCount(0),
+      stallGuardThreshold(10),  // Initialize StallGuard with default threshold
       setpointAcceleration(0),  // Will be set during initialization
       speedVariationEnabled(false), speedVariationStrength(0.0f), speedVariationPhase(0.0f), speedVariationStartPosition(0),
       speedVariationK(0.0f), speedVariationK0(1.0f),  // Initialize with default values
@@ -342,12 +343,16 @@ bool StepperController::begin() {
     systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, speedVariationStrength);
     systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED, speedVariationPhase);
     systemStatus.publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, defaultAcceleration);
+    systemStatus.publishStatusUpdate(StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED, static_cast<int>(stallGuardThreshold));
     
     // Initialize speed variation parameters (k and k0)
     updateSpeedVariationParameters();
     
     // Initially disabled
     stepperDriver.disable();
+    
+    // Initialization complete
+    isInitializing = false;
     
     return true;
 }
@@ -381,6 +386,9 @@ void StepperController::configureDriver() {
     stepperDriver.enableStealthChop(); //stealth chop needs to be enabled for stall detect
     stepperDriver.setCoolStepDurationThreshold(5000); //TCOOLTHRS (DIAG only enabled when TSTEP smaller than this)
     
+    // Configure StallGuard
+    stepperDriver.setStallGuardThreshold(stallGuardThreshold);
+    
     // Update communication status after configuration
     bool newTmc2209Status = stepperDriver.isSetupAndCommunicating();
 
@@ -394,7 +402,8 @@ void StepperController::configureDriver() {
     
     // Check if driver is communicating properly
     if (tmc2209Initialized) {
-        Serial.printf("TMC2209 configured: %d microsteps, %d%% current, StallGuard threshold: 10\n", MICRO_STEPS, runCurrent);
+        Serial.printf("TMC2209 configured: %d microsteps, %d%% current, StallGuard threshold: %d\n", 
+                     MICRO_STEPS, runCurrent, stallGuardThreshold);
         Serial.println("Note: StallGuard may require disabling StealthChop for optimal detection");
     } else {
         Serial.println("WARNING: TMC2209 driver not responding during configuration");
@@ -601,6 +610,7 @@ void StepperController::publishFastStatusUpdates() {
     publishCurrentRPM();
     publishTotalRevolutions();
     publishRuntime();
+    publishStallGuardResult();
 }
 
 void StepperController::publishStallStatusUpdates() {
@@ -668,6 +678,10 @@ void StepperController::processCommand(const StepperCommandData& cmd) {
             disableSpeedVariationInternal();
             break;
             
+        case StepperCommand::SET_STALLGUARD_THRESHOLD:
+            setStallGuardThresholdInternal(cmd.intValue);
+            break;
+            
         case StepperCommand::REQUEST_ALL_STATUS:
             requestAllStatusInternal();
             break;
@@ -686,7 +700,6 @@ void StepperController::resetCountersInternal() {
 void StepperController::resetStallCountInternal() {
     stallCount = 0;
     stallDetected = false;
-    lastStallTime = 0;
     
     Serial.println("Stall count reset");
     systemStatus.publishStatusUpdate(StatusUpdateType::STALL_COUNT_UPDATE, stallCount);
@@ -1067,11 +1080,28 @@ void StepperController::requestAllStatusInternal() {
     systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED, speedVariationStrength);
     systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED, speedVariationPhase);
     
+    // StallGuard status
+    systemStatus.publishStatusUpdate(StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED, static_cast<int>(stallGuardThreshold));
+    publishStallGuardResult(); // Publish current StallGuard result
+    
     publishTotalRevolutions();
     publishRuntime();
     publishTMC2209Communication();
     publishTMC2209Temperature(); // Add temperature status to full status request
     publishStallDetection();
+    publishStallGuardResult();
+}
+
+void StepperController::publishStallGuardResult() {
+    if (!tmc2209Initialized) {
+        return; // Skip silently if TMC2209 not initialized
+    }
+    
+    // Read StallGuard result from TMC2209 (0-510 per datasheet)
+    uint16_t sgResult = stepperDriver.getStallGuardResult();
+    
+    // Publish StallGuard result update directly (no need to cache)
+    systemStatus.publishStatusUpdate(StatusUpdateType::STALLGUARD_RESULT_UPDATE, static_cast<int>(sgResult));
 }
 
 // Speed variation helper methods
@@ -1231,4 +1261,32 @@ float StepperController::calculateMaxAllowedBaseSpeed() const {
     maxAllowedBaseSpeed = max(maxAllowedBaseSpeed, MIN_SPEED_RPM);
     
     return maxAllowedBaseSpeed;
+}
+
+void StepperController::setStallGuardThresholdInternal(uint8_t threshold) {
+    // Validate threshold (0-63 per TMC2209 datasheet)
+    if (threshold > 63) {
+        systemStatus.publishStatusUpdate(StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED, stallGuardThreshold);
+        systemStatus.sendNotification(NotificationType::ERROR, "StallGuard threshold out of range (0-63)");
+        return;
+    }
+    
+    if (!tmc2209Initialized) {
+        systemStatus.publishStatusUpdate(StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED, stallGuardThreshold);
+        systemStatus.sendNotification(NotificationType::ERROR, "TMC2209 not initialized - cannot set StallGuard threshold");
+        return;
+    }
+    
+    stallGuardThreshold = threshold;
+    stepperDriver.setStallGuardThreshold(threshold);
+    
+    Serial.printf("StallGuard threshold set to %d (0=most sensitive, 63=least sensitive)\n", threshold);
+    
+    // Publish status update for StallGuard threshold change
+    systemStatus.publishStatusUpdate(StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED, threshold);
+}
+
+bool StepperController::setStallGuardThreshold(uint8_t threshold) {
+    StepperCommandData cmd(StepperCommand::SET_STALLGUARD_THRESHOLD, static_cast<int>(threshold));
+    return systemCommand.sendCommand(cmd);
 }

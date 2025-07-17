@@ -36,6 +36,9 @@ enum class StatusUpdateType {
     STALL_COUNT_UPDATE,
     TMC2209_STATUS_UPDATE,
     TMC2209_TEMPERATURE_UPDATE, // TMC2209 temperature status
+    // StallGuard updates
+    STALLGUARD_THRESHOLD_CHANGED, // StallGuard threshold changed (0-63)
+    STALLGUARD_RESULT_UPDATE,     // StallGuard result (0-510)
     // Power Delivery status updates
     PD_NEGOTIATION_STATUS,      // Power delivery negotiation status
     PD_NEGOTIATED_VOLTAGE,      // Negotiated voltage from PD chip

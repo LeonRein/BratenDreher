@@ -254,6 +254,17 @@ void BLEManager::handleCommand(const std::string& command) {
         systemCommand.sendCommand(cmd);
         Serial.printf("Disable speed variation command queued\n");
     }
+    else if (strcmp(type, "stallguard_threshold") == 0) {
+        int threshold = doc["value"];
+        if (threshold >= 0 && threshold <= 63) {
+            StepperCommandData cmd(StepperCommand::SET_STALLGUARD_THRESHOLD, threshold);
+            systemCommand.sendCommand(cmd);
+            Serial.printf("StallGuard threshold command queued: %d\n", threshold);
+        } else {
+            Serial.println("Invalid StallGuard threshold");
+            sendNotification("error", "StallGuard threshold must be 0-63");
+        }
+    }
     else if (strcmp(type, "pd_voltage") == 0) {
         // Set power delivery target voltage and start negotiation
         int voltage = doc["value"];
@@ -426,6 +437,12 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
             break;
         case StatusUpdateType::TMC2209_TEMPERATURE_UPDATE:
             doc["tmc2209Temperature"] = statusUpdate.intValue;
+            break;
+        case StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED:
+            doc["stallguardThreshold"] = statusUpdate.intValue;
+            break;
+        case StatusUpdateType::STALLGUARD_RESULT_UPDATE:
+            doc["stallguardResult"] = statusUpdate.intValue;
             break;
         case StatusUpdateType::PD_NEGOTIATION_STATUS:
             doc["pdNegotiationStatus"] = statusUpdate.intValue;

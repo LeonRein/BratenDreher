@@ -67,8 +67,10 @@ private:
     
     // Stall detection
     bool stallDetected;
-    unsigned long lastStallTime;
     uint16_t stallCount;
+    
+    // StallGuard settings
+    uint8_t stallGuardThreshold;     // StallGuard threshold (0-63)
     
     // Acceleration tracking
     uint32_t setpointAcceleration;   // Target acceleration in steps/s²
@@ -108,6 +110,7 @@ private:
     void setSpeedVariationPhaseInternal(float phase);
     void enableSpeedVariationInternal();
     void disableSpeedVariationInternal();
+    void setStallGuardThresholdInternal(uint8_t threshold);
     void requestAllStatusInternal();
     
     // Speed variation helper methods
@@ -130,6 +133,7 @@ private:
     void publishTMC2209Communication(); // Check TMC2209 driver communication status
     void publishTMC2209Temperature();   // Check TMC2209 temperature status
     void publishStallDetection();        // Check stall detection status and update stallDetected, stallCount, lastStallTime
+    void publishStallGuardResult();      // Update StallGuard result (0-510)
     void publishCurrentRPM();            // Update actual/measured RPM
     void publishTotalRevolutions();      // Update total revolutions based on current position   
     void publishRuntime();
@@ -182,6 +186,9 @@ public:
     uint32_t setSpeedVariationPhase(float phase);         // Set phase offset (0.0 to 2*PI)
     uint32_t enableSpeedVariation();                      // Enable variable speed (current position becomes slowest)
     uint32_t disableSpeedVariation();                     // Disable variable speed
+    
+    // StallGuard control (thread-safe via command queue)
+    bool setStallGuardThreshold(uint8_t threshold);       // Set StallGuard threshold (0-63)
     
     // Status request (thread-safe via command queue)
     uint32_t requestAllStatus();                           // Request all current status to be published

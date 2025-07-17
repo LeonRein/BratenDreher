@@ -1138,6 +1138,92 @@ class PowerDeliveryControl extends Control {
     }
 }
 
+// Specialized control for StallGuard threshold and result display
+class StallGuardControl extends Control {
+    constructor(thresholdSlider, thresholdValueElement, resultValueElement, sliderFillElement, options = {}) {
+        super(thresholdSlider, thresholdValueElement, options);
+        this.resultValueElement = resultValueElement;
+        this.sliderFillElement = sliderFillElement;
+        
+        // Add all elements as additional elements
+        this.addAdditionalElement(this.resultValueElement, { applyDisabled: false });
+        this.addAdditionalElement(this.sliderFillElement, { 
+            applyOpacity: false, 
+            applyDisabled: false, 
+            applyColors: false, 
+            applyClasses: false 
+        });
+        
+        // Initialize with disabled state
+        this.setDisplayState(CONTROL_STATES.DISABLED);
+    }
+
+    updateStallGuardResult(sgResult) {
+        if (!this.sliderFillElement || !this.resultValueElement || !this.element) {
+            return;
+        }
+        
+        // SG_RESULT: 0-510 (10-bit value), where LOWER values indicate HIGHER load
+        // SGTHRS: 0-63, stall detection occurs when SG_RESULT < (SGTHRS * 2)
+        // 
+        // StallGuard interpretation:
+        // - SG_RESULT = 0: Maximum load (stall condition)
+        // - SG_RESULT = 510: Minimum load (free running)
+        //
+        // For visual representation, we want to show load level, so we need to invert:
+        // - High load (low SG_RESULT) should show high fill percentage
+        // - Low load (high SG_RESULT) should show low fill percentage
+        
+        // Convert SG_RESULT to load percentage (invert the scale)
+        // Load % = (510 - SG_RESULT) / 510 * 100
+        const loadPercentage = ((510 - sgResult) / 510) * 100;
+        
+        // Map load percentage to the threshold scale (0-63) for visual comparison
+        const comparisonValue = (loadPercentage / 100) * 63;
+        
+        // Use the comparison value for the fill (shows load level)
+        const fillPercentage = (comparisonValue / 63) * 100;
+        
+        // Update the fill width to show current load level
+        this.sliderFillElement.style.width = `${fillPercentage}%`;
+        this.sliderFillElement.style.opacity = '1';
+        
+        // Update the result value display (show raw SG_RESULT)
+        this.resultValueElement.textContent = sgResult.toString();
+        this.resultValueElement.style.opacity = '1.0';
+    }
+
+    hideFill() {
+        if (this.sliderFillElement) {
+            this.sliderFillElement.style.opacity = '0';
+        }
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        // Call parent to handle standard status key mapping and timeout clearing
+        super.handleStatusUpdate(statusUpdate);
+        
+        // Handle StallGuard result updates
+        if (statusUpdate.stallguardResult !== undefined) {
+            this.setDisplayState(CONTROL_STATES.VALID);
+            this.updateStallGuardResult(statusUpdate.stallguardResult);
+        }
+        
+        // Handle threshold updates from backend
+        if (statusUpdate.stallguardThreshold !== undefined) {
+            this.setDisplayState(CONTROL_STATES.VALID);
+            
+            // Update slider and display to match backend value
+            if (this.element) {
+                this.element.value = statusUpdate.stallguardThreshold;
+            }
+            if (this.valueElement) {
+                this.valueElement.textContent = statusUpdate.stallguardThreshold.toString();
+            }
+        }
+    }
+}
+
 class BratenDreherBLE {
     constructor() {
         // Motor specifications for acceleration conversion
@@ -1266,6 +1352,12 @@ class BratenDreherBLE {
         this.stallStatus = document.getElementById('stallStatus');
         this.stallCount = document.getElementById('stallCount');
         this.lastUpdate = document.getElementById('lastUpdate');
+        
+        // StallGuard elements
+        this.stallguardThresholdSlider = document.getElementById('stallguardThresholdSlider');
+        this.stallguardThresholdValue = document.getElementById('stallguardThresholdValue');
+        this.stallguardResultValue = document.getElementById('stallguardResultValue');
+        this.stallguardSliderFill = document.getElementById('stallguardSliderFill');
         
         // Variable speed status elements
         this.variableSpeedStatus = document.getElementById('variableSpeedStatus');
@@ -1846,6 +1938,7 @@ class BratenDreherBLE {
         ];
         
         const opacity = this.connected ? '0.7' : '0.4'; // Outdated state for non-controls
+
         const disabled = !this.connected;
         
         otherControls.forEach(control => {
@@ -1875,6 +1968,12 @@ class BratenDreherBLE {
             const speedControl = this.controls.get('speed');
             if (speedControl && speedControl.hideFill) {
                 speedControl.hideFill();
+            }
+            
+            // Hide StallGuard fill when disconnected
+            const stallguardControl = this.controls.get('stallguard');
+            if (stallguardControl && stallguardControl.hideFill) {
+                stallguardControl.hideFill();
             }
         }
     }
@@ -2000,6 +2099,8 @@ class BratenDreherBLE {
             this.tmc2209Temperature,
             this.stallStatus,
             this.stallCount,
+            this.stallguardThresholdValue,
+            this.stallguardResultValue,
             this.lastUpdate,
             this.variableSpeedStatus,
             this.totalRevolutions,
@@ -2162,6 +2263,21 @@ class BratenDreherBLE {
             this.stallCount
         ));
 
+        // StallGuard control with threshold and result display
+        this.controls.set('stallguard', new StallGuardControl(
+            this.stallguardThresholdSlider,
+            this.stallguardThresholdValue,
+            this.stallguardResultValue,
+            this.stallguardSliderFill,
+            {
+                commandType: 'stallguard_threshold',
+                statusKey: null, // Handled specially in the control
+                displayTransform: (value) => value.toString(),
+                valueTransform: (value) => parseInt(value),
+                debounceTime: 300 // Shorter debounce for threshold changes
+            }
+        ));
+
         // Power delivery control
         this.controls.set('powerDelivery', new PowerDeliveryControl(
             this.voltageSelect,
@@ -2178,6 +2294,21 @@ class BratenDreherBLE {
             this.totalRevolutions,
             this.runTime,
             this.avgSpeed
+        ));
+
+        // StallGuard control for threshold and result display
+        this.controls.set('stallGuard', new StallGuardControl(
+            this.stallguardThresholdSlider,
+            this.stallguardThresholdValue,
+            this.stallguardResultValue,
+            this.stallguardBarFill,
+            this.stallguardThresholdLine,
+            {
+                commandType: 'stallguard',
+                statusKey: null, // Handled specially in the control
+                displayTransform: (value) => value.toString(),
+                valueTransform: (value) => parseInt(value)
+            }
         ));
 
         // Set parent reference and bind events for all controls
