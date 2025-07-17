@@ -1144,6 +1144,7 @@ class StallGuardControl extends Control {
         super(thresholdSlider, thresholdValueElement, options);
         this.resultValueElement = resultValueElement;
         this.sliderFillElement = sliderFillElement;
+        this.currentSgResult = null; // Store current SG_RESULT for threshold change updates
         
         // Add all elements as additional elements
         this.addAdditionalElement(this.resultValueElement, { applyDisabled: false });
@@ -1158,10 +1159,24 @@ class StallGuardControl extends Control {
         this.setDisplayState(CONTROL_STATES.DISABLED);
     }
 
+    handleInput(event) {
+        // Call parent to handle standard input processing
+        super.handleInput(event);
+        
+        // If we have a current SG_RESULT, update the visual representation
+        // with the new threshold value
+        if (this.currentSgResult !== null) {
+            this.updateStallGuardResult(this.currentSgResult);
+        }
+    }
+
     updateStallGuardResult(sgResult) {
         if (!this.sliderFillElement || !this.resultValueElement || !this.element) {
             return;
         }
+        
+        // Store current SG_RESULT for threshold change updates
+        this.currentSgResult = sgResult;
         
         // SG_RESULT: 0-510 (10-bit value), where LOWER values indicate HIGHER load
         // SGTHRS: 0-63, stall detection occurs when SG_RESULT < (SGTHRS * 2)
@@ -1169,8 +1184,10 @@ class StallGuardControl extends Control {
         // StallGuard interpretation:
         // - SG_RESULT = 0: Maximum load (stall condition)
         // - SG_RESULT = 510: Minimum load (free running)
+        // - SGTHRS = 0: More sensitive (detects stalls easier)
+        // - SGTHRS = 63: Less sensitive (harder to detect stalls)
         //
-        // For visual representation, we want to show load level, so we need to invert:
+        // For visual representation, we want to show load level, so we need to invert SG_RESULT:
         // - High load (low SG_RESULT) should show high fill percentage
         // - Low load (high SG_RESULT) should show low fill percentage
         
@@ -1178,15 +1195,25 @@ class StallGuardControl extends Control {
         // Load % = (510 - SG_RESULT) / 510 * 100
         const loadPercentage = ((510 - sgResult) / 510) * 100;
         
-        // Map load percentage to the threshold scale (0-63) for visual comparison
-        const comparisonValue = (loadPercentage / 100) * 63;
-        
-        // Use the comparison value for the fill (shows load level)
-        const fillPercentage = (comparisonValue / 63) * 100;
-        
         // Update the fill width to show current load level
-        this.sliderFillElement.style.width = `${fillPercentage}%`;
+        this.sliderFillElement.style.width = `${loadPercentage}%`;
         this.sliderFillElement.style.opacity = '1';
+        
+        // Get current threshold value for comparison
+        const currentThreshold = parseInt(this.element.value);
+        const stallThreshold = currentThreshold * 2; // Actual threshold value used for stall detection
+        
+        // Color the fill based on proximity to stall threshold
+        if (sgResult < stallThreshold) {
+            // SG_RESULT is below threshold - stall condition detected
+            this.sliderFillElement.style.backgroundColor = '#ef4444'; // Red
+        } else if (sgResult < (stallThreshold * 1.2)) {
+            // SG_RESULT is close to threshold - warning
+            this.sliderFillElement.style.backgroundColor = '#f59e0b'; // Orange
+        } else {
+            // SG_RESULT is well above threshold - normal operation
+            this.sliderFillElement.style.backgroundColor = '#10b981'; // Green
+        }
         
         // Update the result value display (show raw SG_RESULT)
         this.resultValueElement.textContent = sgResult.toString();
@@ -1205,12 +1232,14 @@ class StallGuardControl extends Control {
         
         // Handle StallGuard result updates
         if (statusUpdate.stallguardResult !== undefined) {
+            console.log('StallGuard control received stallguardResult:', statusUpdate.stallguardResult);
             this.setDisplayState(CONTROL_STATES.VALID);
             this.updateStallGuardResult(statusUpdate.stallguardResult);
         }
         
         // Handle threshold updates from backend
         if (statusUpdate.stallguardThreshold !== undefined) {
+            console.log('StallGuard control received stallguardThreshold:', statusUpdate.stallguardThreshold);
             this.setDisplayState(CONTROL_STATES.VALID);
             
             // Update slider and display to match backend value
@@ -2294,21 +2323,6 @@ class BratenDreherBLE {
             this.totalRevolutions,
             this.runTime,
             this.avgSpeed
-        ));
-
-        // StallGuard control for threshold and result display
-        this.controls.set('stallGuard', new StallGuardControl(
-            this.stallguardThresholdSlider,
-            this.stallguardThresholdValue,
-            this.stallguardResultValue,
-            this.stallguardBarFill,
-            this.stallguardThresholdLine,
-            {
-                commandType: 'stallguard',
-                statusKey: null, // Handled specially in the control
-                displayTransform: (value) => value.toString(),
-                valueTransform: (value) => parseInt(value)
-            }
         ));
 
         // Set parent reference and bind events for all controls
