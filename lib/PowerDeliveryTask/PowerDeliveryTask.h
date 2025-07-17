@@ -16,6 +16,7 @@
 #include "Task.h"
 #include "SystemStatus.h"
 #include "SystemCommand.h"
+#include "dbg_print.h"
 
 // Hardware pin definitions (from PD-Stepper example)
 #define PG_PIN              15  // Power good signal (don't enable stepper until this is good)
@@ -74,8 +75,13 @@ private:
     
     // Initialization flag
     bool isInitialized;
-    
-    // Private methods - organized by responsibility
+
+    // Singleton implementation
+    PowerDeliveryTask();
+    ~PowerDeliveryTask() {}
+    PowerDeliveryTask(const PowerDeliveryTask&) = delete;
+    PowerDeliveryTask& operator=(const PowerDeliveryTask&) = delete;
+
     
     // Hardware abstraction layer (pure hardware control)
     void pdConfigureVoltage(int voltage);
@@ -105,14 +111,10 @@ private:
     
     // Initialization and settings
     void initializeHardware();
-    
-public:
-    // Constructor
-    PowerDeliveryTask();
-    
-    // Task interface
+
+protected:
     void run() override;
-    
+public:
     // Public interface
     bool startNegotiation(int voltage);
     bool isNegotiationComplete() const;
@@ -125,9 +127,11 @@ public:
     bool setTargetVoltage(int voltage);
     bool autoNegotiateHighestVoltage();
     bool requestStatus();
-    
-    // Static method to get singleton instance
-    static PowerDeliveryTask& getInstance();
+
+    static PowerDeliveryTask& getInstance() {
+        static PowerDeliveryTask instance;
+        return instance;
+    }
 };
 
 #endif // POWER_DELIVERY_TASK_H

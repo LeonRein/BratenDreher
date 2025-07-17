@@ -14,6 +14,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "CommandTypes.h"
+#include "dbg_print.h"
 
 // Queue size configuration
 #define COMMAND_QUEUE_SIZE          20     // Command queue size

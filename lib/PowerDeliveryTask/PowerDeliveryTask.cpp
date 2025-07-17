@@ -1,8 +1,5 @@
 #include "PowerDeliveryTask.h"
 
-// Singleton instance
-static PowerDeliveryTask* pdTaskInstance = nullptr;
-
 // Static voltage array for auto-negotiation (highest to lowest)
 const int PowerDeliveryTask::autoNegotiationVoltages[5] = {PD_VOLTAGE_20V, PD_VOLTAGE_15V, PD_VOLTAGE_12V, PD_VOLTAGE_9V, PD_VOLTAGE_5V};
 
@@ -21,15 +18,6 @@ PowerDeliveryTask::PowerDeliveryTask()
       lastStatusUpdate(0),
       lastVoltageUpdate(0),
       isInitialized(false) {
-    
-    pdTaskInstance = this;
-}
-
-PowerDeliveryTask& PowerDeliveryTask::getInstance() {
-    if (pdTaskInstance == nullptr) {
-        pdTaskInstance = new PowerDeliveryTask();
-    }
-    return *pdTaskInstance;
 }
 
 // ============================================================================
@@ -37,13 +25,13 @@ PowerDeliveryTask& PowerDeliveryTask::getInstance() {
 // ============================================================================
 
 void PowerDeliveryTask::run() {
-    Serial.println("PowerDeliveryTask: Starting...");
+    dbg_println("PowerDeliveryTask: Starting...");
     
     // Initialize hardware and load settings
     initializeHardware();
     
     isInitialized = true;
-    Serial.println("PowerDeliveryTask: Initialization complete");
+    dbg_println("PowerDeliveryTask: Initialization complete");
     
     // Start with automatic highest voltage negotiation
     autoNegotiateHighestVoltageInternal();
@@ -76,7 +64,7 @@ void PowerDeliveryTask::run() {
 // ============================================================================
 
 void PowerDeliveryTask::pdConfigureVoltage(int voltage) {
-    Serial.printf("PowerDeliveryTask: Configuring CFG pins for %dV\n", voltage);
+    dbg_printf("PowerDeliveryTask: Configuring CFG pins for %dV\n", voltage);
     
     // Configure CFG pins based on desired voltage
     // From PD_Stepper example:
@@ -112,7 +100,7 @@ void PowerDeliveryTask::pdConfigureVoltage(int voltage) {
             digitalWrite(CFG3_PIN, LOW);
             break;
         default:
-            Serial.printf("PowerDeliveryTask: Invalid voltage %dV, using 12V\n", voltage);
+            dbg_printf("PowerDeliveryTask: Invalid voltage %dV, using 12V\n", voltage);
             voltage = PD_VOLTAGE_12V;
             digitalWrite(CFG1_PIN, LOW);
             digitalWrite(CFG2_PIN, LOW);
@@ -120,7 +108,7 @@ void PowerDeliveryTask::pdConfigureVoltage(int voltage) {
             break;
     }
     
-    Serial.printf("PowerDeliveryTask: CFG pins configured for %dV\n", voltage);
+    dbg_printf("PowerDeliveryTask: CFG pins configured for %dV\n", voltage);
     
     // Invalidate power good status when voltage configuration changes
     pdInvalidatePowerGood();
@@ -144,7 +132,7 @@ bool PowerDeliveryTask::pdCheckPowerGood() {
     if ((currentTime - powerGoodDebounceTime) >= PD_POWER_GOOD_DEBOUNCE) {
         if (powerGoodState != currentPGState) {
             powerGoodState = currentPGState;
-            Serial.printf("PowerDeliveryTask: Power Good state changed to: %s\n", 
+            dbg_printf("PowerDeliveryTask: Power Good state changed to: %s\n", 
                          powerGoodState ? "GOOD" : "BAD");
         }
     }
@@ -153,7 +141,7 @@ bool PowerDeliveryTask::pdCheckPowerGood() {
 }
 
 void PowerDeliveryTask::pdInvalidatePowerGood() {
-    Serial.println("PowerDeliveryTask: Invalidating power good status");
+    dbg_println("PowerDeliveryTask: Invalidating power good status");
     powerGoodState = false;
     lastPowerGoodState = false;
     powerGoodDebounceTime = millis();
@@ -165,16 +153,16 @@ void PowerDeliveryTask::pdInvalidatePowerGood() {
 
 void PowerDeliveryTask::applyNegotiationVoltage(int voltage) {
     if (!isInitialized) {
-        Serial.println("WARNING: Cannot start negotiation - hardware not initialized");
+        dbg_println("WARNING: Cannot start negotiation - hardware not initialized");
         return;
     }
     
     if (voltage < PD_VOLTAGE_5V || voltage > PD_VOLTAGE_20V) {
-        Serial.printf("PowerDeliveryTask: Invalid voltage %dV for negotiation\n", voltage);
+        dbg_printf("PowerDeliveryTask: Invalid voltage %dV for negotiation\n", voltage);
         return;
     }
     
-    Serial.printf("PowerDeliveryTask: Starting negotiation for %dV (previous state: %d)\n", 
+    dbg_printf("PowerDeliveryTask: Starting negotiation for %dV (previous state: %d)\n", 
                  voltage, static_cast<int>(negotiationState));
     
     // Reset negotiation state and start fresh
@@ -241,7 +229,7 @@ void PowerDeliveryTask::handleSingleVoltageNegotiation(unsigned long currentTime
     if (currentPGState) {
         negotiationState = PDNegotiationState::SUCCESS;
         negotiatedVoltage = targetVoltage;
-        Serial.printf("PowerDeliveryTask: Single voltage negotiation successful at %dV\n", negotiatedVoltage);
+        dbg_printf("PowerDeliveryTask: Single voltage negotiation successful at %dV\n", negotiatedVoltage);
         
         // Publish immediate status updates
         publishNegotiationStatus();
@@ -253,7 +241,7 @@ void PowerDeliveryTask::handleSingleVoltageNegotiation(unsigned long currentTime
     if (currentTime - negotiationStartTime >= PD_NEGOTIATION_TIMEOUT) {
         negotiationState = PDNegotiationState::FAILED;
         negotiatedVoltage = 0;
-        Serial.printf("PowerDeliveryTask: Single voltage negotiation failed (timeout) after %dms\n", PD_NEGOTIATION_TIMEOUT);
+        dbg_printf("PowerDeliveryTask: Single voltage negotiation failed (timeout) after %dms\n", PD_NEGOTIATION_TIMEOUT);
         
         // Publish immediate status updates
         publishNegotiationStatus();
@@ -273,7 +261,7 @@ void PowerDeliveryTask::handleAutoNegotiation(unsigned long currentTime) {
         targetVoltage = autoNegotiationHighestVoltage; // Update target to match
         isAutoNegotiating = false;
         
-        Serial.printf("PowerDeliveryTask: Auto-negotiation successful! Highest voltage: %dV\n", autoNegotiationHighestVoltage);
+        dbg_printf("PowerDeliveryTask: Auto-negotiation successful! Highest voltage: %dV\n", autoNegotiationHighestVoltage);
         
         // Publish immediate status updates
         publishNegotiationStatus();
@@ -291,7 +279,7 @@ void PowerDeliveryTask::handleAutoNegotiation(unsigned long currentTime) {
             negotiationState = PDNegotiationState::FAILED;
             negotiatedVoltage = 0;
             isAutoNegotiating = false;
-            Serial.println("PowerDeliveryTask: Auto-negotiation failed - no voltages work");
+            dbg_println("PowerDeliveryTask: Auto-negotiation failed - no voltages work");
             
             // Publish immediate status updates
             publishNegotiationStatus();
@@ -301,7 +289,7 @@ void PowerDeliveryTask::handleAutoNegotiation(unsigned long currentTime) {
         
         // Try next voltage
         int nextVoltage = autoNegotiationVoltages[autoNegotiationVoltageIndex];
-        Serial.printf("PowerDeliveryTask: Auto-negotiation - trying next voltage: %dV (attempt %d/5)\n", 
+        dbg_printf("PowerDeliveryTask: Auto-negotiation - trying next voltage: %dV (attempt %d/5)\n", 
                      nextVoltage, autoNegotiationVoltageIndex + 1);
         
         // Configure hardware for next voltage
@@ -336,7 +324,7 @@ void PowerDeliveryTask::processCommands() {
                 break;
                 
             default:
-                Serial.printf("PowerDeliveryTask: Unknown command %d\n", static_cast<int>(command.command));
+                dbg_printf("PowerDeliveryTask: Unknown command %d\n", static_cast<int>(command.command));
                 break;
         }
     }
@@ -345,7 +333,7 @@ void PowerDeliveryTask::processCommands() {
 void PowerDeliveryTask::setTargetVoltageInternal(int voltage) {
     // Validate voltage range
     if (voltage < PD_VOLTAGE_5V || voltage > PD_VOLTAGE_20V) {
-        Serial.printf("PowerDeliveryTask: Invalid target voltage %dV (allowed: 5V, 9V, 12V, 15V, 20V)\n", voltage);
+        dbg_printf("PowerDeliveryTask: Invalid target voltage %dV (allowed: 5V, 9V, 12V, 15V, 20V)\n", voltage);
         
         // Publish current status to indicate no change
         publishNegotiationStatus();
@@ -358,16 +346,16 @@ void PowerDeliveryTask::setTargetVoltageInternal(int voltage) {
     // Apply voltage negotiation
     applyNegotiationVoltage(voltage);
     
-    Serial.printf("PowerDeliveryTask: Target voltage set to %dV\n", voltage);
+    dbg_printf("PowerDeliveryTask: Target voltage set to %dV\n", voltage);
 }
 
 void PowerDeliveryTask::autoNegotiateHighestVoltageInternal() {
     if (!isInitialized) {
-        Serial.println("WARNING: Cannot start auto-negotiation - hardware not initialized");
+        dbg_println("WARNING: Cannot start auto-negotiation - hardware not initialized");
         return;
     }
     
-    Serial.println("PowerDeliveryTask: Starting auto-negotiation for highest available voltage");
+    dbg_println("PowerDeliveryTask: Starting auto-negotiation for highest available voltage");
     
     // Reset auto-negotiation state
     isAutoNegotiating = true;
@@ -381,7 +369,7 @@ void PowerDeliveryTask::autoNegotiateHighestVoltageInternal() {
     int startVoltage = autoNegotiationVoltages[0]; // 20V
     targetVoltage = startVoltage; // Set target for status reporting
     
-    Serial.printf("PowerDeliveryTask: Auto-negotiation starting with %dV (attempt 1/5)\n", startVoltage);
+    dbg_printf("PowerDeliveryTask: Auto-negotiation starting with %dV (attempt 1/5)\n", startVoltage);
     
     // Configure hardware for first voltage
     pdConfigureVoltage(startVoltage);
@@ -391,7 +379,7 @@ void PowerDeliveryTask::autoNegotiateHighestVoltageInternal() {
 }
 
 void PowerDeliveryTask::requestAllStatusInternal() {
-    Serial.println("PowerDeliveryTask: Publishing all current status values...");
+    dbg_println("PowerDeliveryTask: Publishing all current status values...");
     
     // Publish all current status values
     publishNegotiationStatus();
@@ -404,7 +392,7 @@ void PowerDeliveryTask::requestAllStatusInternal() {
 // ============================================================================
 
 void PowerDeliveryTask::initializeHardware() {
-    Serial.println("PowerDeliveryTask: Initializing hardware pins...");
+    dbg_println("PowerDeliveryTask: Initializing hardware pins...");
     
     // Initialize PD control pins
     pinMode(PG_PIN, INPUT);
@@ -419,7 +407,7 @@ void PowerDeliveryTask::initializeHardware() {
     // Set default configuration (12V)
     pdConfigureVoltage(PD_VOLTAGE_12V);
     
-    Serial.println("PowerDeliveryTask: Hardware initialization complete");
+    dbg_println("PowerDeliveryTask: Hardware initialization complete");
 }
 
 // ============================================================================

@@ -4,12 +4,14 @@
 #include "SystemStatus.h"
 #include "SystemCommand.h"
 #include "PowerDeliveryTask.h"
-#include "OTA.h"
+#include "dbg_print.h"
 
 // Global task objects
-StepperController stepperController;
-BLEManager bleManager;
+StepperController& stepperController = StepperController::getInstance();
+BLEManager& bleManager = BLEManager::getInstance();
 PowerDeliveryTask& powerDeliveryTask = PowerDeliveryTask::getInstance();
+
+#include "OTA.h"
 
 // Status LED
 const int STATUS_LED_PIN = LED_BUILTIN;
@@ -27,41 +29,41 @@ void setup() {
     //     delay(100);
     // }
     
-    Serial.println();
-    Serial.println("=== BratenDreher Stepper Control ===");
-    Serial.println("ESP32-S3 USB CDC Serial initialized");
-    Serial.println("Initializing system with Task-based architecture...");
+    dbg_println();
+    dbg_println("=== BratenDreher Stepper Control ===");
+    dbg_println("ESP32-S3 USB CDC Serial initialized");
+    dbg_println("Initializing system with Task-based architecture...");
     
     // Initialize status LED
     pinMode(STATUS_LED_PIN, OUTPUT);
     digitalWrite(STATUS_LED_PIN, LOW);
     
     // Initialize singleton managers before starting tasks
-    Serial.println("Initializing SystemStatus...");
+    dbg_println("Initializing SystemStatus...");
     if (!SystemStatus::getInstance().begin()) {
-        Serial.println("ERROR: Failed to initialize SystemStatus!");
+        dbg_println("ERROR: Failed to initialize SystemStatus!");
         while (1) {
             digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
             delay(50);
         }
     }
     
-    Serial.println("Initializing SystemCommand...");
+    dbg_println("Initializing SystemCommand...");
     if (!SystemCommand::getInstance().begin()) {
-        Serial.println("ERROR: Failed to initialize SystemCommand!");
+        dbg_println("ERROR: Failed to initialize SystemCommand!");
         while (1) {
             digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
             delay(75);
         }
     }
     
-    Serial.println("System singletons initialized successfully!");
+    dbg_println("System singletons initialized successfully!");
     
     // BLE manager now uses SystemCommand singleton directly - no need to connect to stepper controller
     
     // Start tasks - PowerDeliveryTask must start first
     if (!powerDeliveryTask.start()) {
-        Serial.println("Failed to start Power Delivery Task!");
+        dbg_println("Failed to start Power Delivery Task!");
         while (1) {
             digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
             delay(50);
@@ -69,7 +71,7 @@ void setup() {
     }
     
     if (!stepperController.start()) {
-        Serial.println("Failed to start Stepper Task!");
+        dbg_println("Failed to start Stepper Task!");
         while (1) {
             digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
             delay(100);
@@ -77,15 +79,15 @@ void setup() {
     }
     
     if (!bleManager.start()) {
-        Serial.println("Failed to start BLE Task!");
+        dbg_println("Failed to start BLE Task!");
         while (1) {
             digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
             delay(200);
         }
     }
     
-    Serial.println("All tasks started successfully!");
-    Serial.println("System initialization complete.");
+    dbg_println("All tasks started successfully!");
+    dbg_println("System initialization complete.");
     
     // Turn on status LED to indicate ready state
     digitalWrite(STATUS_LED_PIN, HIGH);
@@ -94,21 +96,7 @@ void setup() {
 }
 
 void loop() {
-    // Main loop now only handles LED status indication
-    unsigned long currentTime = millis();
-    
-    if (bleManager.isConnected()) {
-        // Solid LED when connected
-        digitalWrite(STATUS_LED_PIN, HIGH);
-    } else {
-        // Slow blink when waiting for connection
-        if (currentTime - lastLedToggle >= 1000) {
-            ledState = !ledState;
-            digitalWrite(STATUS_LED_PIN, ledState);
-            lastLedToggle = currentTime;
-        }
-    }
-    
-    // Watchdog feed and task monitoring
     vTaskDelay(pdMS_TO_TICKS(100)); // 100ms delay, plenty for LED control
+
+    loopOTA(); // Handle OTA updates if available
 }

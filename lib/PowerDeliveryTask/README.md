@@ -97,8 +97,8 @@ void loop() {
     PowerDeliveryTask& pd = PowerDeliveryTask::getInstance();
     
     if (pd.isPowerGood()) {
-        Serial.println("Power delivery is ready!");
-        Serial.printf("Voltage: %.1fV\n", pd.getCurrentVoltage());
+        dbg_println("Power delivery is ready!");
+        dbg_printf("Voltage: %.1fV\n", pd.getCurrentVoltage());
     }
 }
 ```
@@ -111,7 +111,7 @@ PowerDeliveryTask::getInstance().setTargetVoltage(20); // 20V
 
 // Check negotiation status
 if (pd.isNegotiationComplete()) {
-    Serial.printf("Negotiated: %dV\n", pd.getNegotiatedVoltage());
+    dbg_printf("Negotiated: %dV\n", pd.getNegotiatedVoltage());
 }
 ```
 

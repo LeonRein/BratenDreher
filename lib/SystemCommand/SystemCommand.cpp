@@ -1,5 +1,6 @@
 #include "SystemCommand.h"
 
+
 // Singleton implementation
 SystemCommand& SystemCommand::getInstance() {
     static SystemCommand instance;
@@ -24,14 +25,14 @@ bool SystemCommand::begin() {
     // Create command queue
     commandQueue = xQueueCreate(COMMAND_QUEUE_SIZE, sizeof(StepperCommandData));
     if (commandQueue == nullptr) {
-        Serial.println("ERROR: Failed to create command queue");
+        dbg_println("ERROR: Failed to create command queue");
         return false;
     }
     
     // Create power delivery command queue
     pdCommandQueue = xQueueCreate(PD_COMMAND_QUEUE_SIZE, sizeof(PowerDeliveryCommandData));
     if (pdCommandQueue == nullptr) {
-        Serial.println("ERROR: Failed to create power delivery command queue");
+        dbg_println("ERROR: Failed to create power delivery command queue");
         vQueueDelete(commandQueue);
         commandQueue = nullptr;
         return false;
@@ -43,19 +44,19 @@ bool SystemCommand::begin() {
 // Command management methods
 bool SystemCommand::sendCommand(const StepperCommandData& command, TickType_t timeout) {
     if (commandQueue == nullptr) {
-        Serial.println("ERROR: SystemCommand queue not initialized!");
+        dbg_println("ERROR: SystemCommand queue not initialized!");
         return false;
     }
     
-    Serial.printf("SystemCommand: Sending command type %d\n", (int)command.command);
+    dbg_printf("SystemCommand: Sending command type %d\n", (int)command.command);
     
     BaseType_t result = xQueueSend(commandQueue, &command, timeout);
     
     if (result == pdTRUE) {
-        Serial.printf("SystemCommand: Command queued successfully. Queue depth: %d\n", 
+        dbg_printf("SystemCommand: Command queued successfully. Queue depth: %d\n", 
                      uxQueueMessagesWaiting(commandQueue));
     } else {
-        Serial.println("ERROR: SystemCommand failed to queue command!");
+        dbg_println("ERROR: SystemCommand failed to queue command!");
     }
     
     return result == pdTRUE;
@@ -96,14 +97,14 @@ bool SystemCommand::emergencyStop() {
 
 bool SystemCommand::getCommand(StepperCommandData& command, TickType_t timeout) {
     if (commandQueue == nullptr) {
-        Serial.println("ERROR: SystemCommand queue not initialized for getCommand!");
+        dbg_println("ERROR: SystemCommand queue not initialized for getCommand!");
         return false;
     }
     
     BaseType_t result = xQueueReceive(commandQueue, &command, timeout);
     
     if (result == pdTRUE) {
-        Serial.printf("SystemCommand: Retrieved command type %d. Remaining queue depth: %d\n", 
+        dbg_printf("SystemCommand: Retrieved command type %d. Remaining queue depth: %d\n", 
                      (int)command.command, uxQueueMessagesWaiting(commandQueue));
     }
     
@@ -131,19 +132,19 @@ void SystemCommand::clearCommands() {
 // Power delivery command management methods
 bool SystemCommand::sendPowerDeliveryCommand(const PowerDeliveryCommandData& command, TickType_t timeout) {
     if (pdCommandQueue == nullptr) {
-        Serial.println("ERROR: SystemCommand PD queue not initialized!");
+        dbg_println("ERROR: SystemCommand PD queue not initialized!");
         return false;
     }
     
-    Serial.printf("SystemCommand: Sending PD command type %d\n", (int)command.command);
+    dbg_printf("SystemCommand: Sending PD command type %d\n", (int)command.command);
     
     BaseType_t result = xQueueSend(pdCommandQueue, &command, timeout);
     
     if (result == pdTRUE) {
-        Serial.printf("SystemCommand: PD Command queued successfully. Queue depth: %d\n", 
+        dbg_printf("SystemCommand: PD Command queued successfully. Queue depth: %d\n", 
                      uxQueueMessagesWaiting(pdCommandQueue));
     } else {
-        Serial.println("ERROR: SystemCommand failed to queue PD command!");
+        dbg_println("ERROR: SystemCommand failed to queue PD command!");
     }
     
     return result == pdTRUE;
@@ -171,14 +172,14 @@ bool SystemCommand::sendPowerDeliveryCommand(PowerDeliveryCommand cmd, int value
 
 bool SystemCommand::getPowerDeliveryCommand(PowerDeliveryCommandData& command, TickType_t timeout) {
     if (pdCommandQueue == nullptr) {
-        Serial.println("ERROR: SystemCommand PD queue not initialized!");
+        dbg_println("ERROR: SystemCommand PD queue not initialized!");
         return false;
     }
     
     BaseType_t result = xQueueReceive(pdCommandQueue, &command, timeout);
     
     if (result == pdTRUE) {
-        Serial.printf("SystemCommand: Retrieved PD command type %d. Remaining queue depth: %d\n", 
+        dbg_printf("SystemCommand: Retrieved PD command type %d. Remaining queue depth: %d\n", 
                      (int)command.command, uxQueueMessagesWaiting(pdCommandQueue));
     }
     

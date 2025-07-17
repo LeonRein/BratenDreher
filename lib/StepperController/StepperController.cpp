@@ -1,10 +1,9 @@
 // Always include the header first to ensure class/type declarations
 #include "StepperController.h"
-#include "PowerDeliveryTask.h"
 
 void StepperController::applyStepperSetpointSpeed(float rpm) {
     if (!stepper) {
-        Serial.println("WARNING: Cannot apply setpoint speed - stepper not initialized");
+        dbg_println("WARNING: Cannot apply setpoint speed - stepper not initialized");
         return;
     }
 
@@ -17,7 +16,7 @@ void StepperController::applyStepperSetpointSpeed(float rpm) {
 
 void StepperController::applyStepperAcceleration(uint32_t accelerationStepsPerSec2) {
     if (!stepper) {
-        Serial.println("WARNING: Cannot apply acceleration - stepper not initialized");
+        dbg_println("WARNING: Cannot apply acceleration - stepper not initialized");
         return;
     }
     stepperSetAcceleration(accelerationStepsPerSec2);
@@ -29,16 +28,16 @@ void StepperController::applyStepperAcceleration(uint32_t accelerationStepsPerSe
 
 void StepperController::applyRunClockwise() {
     if (!stepper) {
-        Serial.println("WARNING: Cannot set direction - stepper not initialized");
+        dbg_println("WARNING: Cannot set direction - stepper not initialized");
         return;
     }
     
     // Check power delivery and warn if not optimal, but still allow operation
     PowerDeliveryTask& pdTask = PowerDeliveryTask::getInstance();
     if (pdTask.isNegotiationComplete() && pdTask.getNegotiationState() == PDNegotiationState::SUCCESS && !pdTask.isPowerGood()) {
-        Serial.println("WARNING: Power delivery indicates power not good, but enabling motor anyway");
+        dbg_println("WARNING: Power delivery indicates power not good, but enabling motor anyway");
     } else if (!pdTask.isNegotiationComplete()) {
-        Serial.println("INFO: Motor enabled without power delivery negotiation (no PD adapter or still negotiating)");
+        dbg_println("INFO: Motor enabled without power delivery negotiation (no PD adapter or still negotiating)");
     }
 
     if(!motorEnabled) {
@@ -56,16 +55,16 @@ void StepperController::applyRunClockwise() {
 
 void StepperController::applyRunCounterClockwise() {
     if (!stepper) {
-        Serial.println("WARNING: Cannot set direction - stepper not initialized");
+        dbg_println("WARNING: Cannot set direction - stepper not initialized");
         return;
     }
     
     // Check power delivery and warn if not optimal, but still allow operation
     PowerDeliveryTask& pdTask = PowerDeliveryTask::getInstance();
     if (pdTask.isNegotiationComplete() && pdTask.getNegotiationState() == PDNegotiationState::SUCCESS && !pdTask.isPowerGood()) {
-        Serial.println("WARNING: Power delivery indicates power not good, but enabling motor anyway");
+        dbg_println("WARNING: Power delivery indicates power not good, but enabling motor anyway");
     } else if (!pdTask.isNegotiationComplete()) {
-        Serial.println("INFO: Motor enabled without power delivery negotiation (no PD adapter or still negotiating)");
+        dbg_println("INFO: Motor enabled without power delivery negotiation (no PD adapter or still negotiating)");
     }
 
     if(!motorEnabled) {
@@ -83,7 +82,7 @@ void StepperController::applyRunCounterClockwise() {
 
 void StepperController::applyStop() {
     if (!stepper) {
-        Serial.println("WARNING: Cannot stop stepper - not initialized");
+        dbg_println("WARNING: Cannot stop stepper - not initialized");
         return;
     }
 
@@ -96,13 +95,13 @@ void StepperController::applyStop() {
 
 void StepperController::applyCurrent(uint8_t current) {
     if (!stepper) {
-        Serial.println("WARNING: Cannot set current - stepper not initialized");
+        dbg_println("WARNING: Cannot set current - stepper not initialized");
         return;
     }
 
     publishTMC2209Communication();
     if (!tmc2209Initialized) {
-        Serial.println("ERROR: TMC2209 driver not initialized - cannot set current");
+        dbg_println("ERROR: TMC2209 driver not initialized - cannot set current");
         return;
     }
 
@@ -127,7 +126,7 @@ void StepperController::publishTMC2209Communication() {
 
 void StepperController::publishTMC2209Temperature() {
     if (!tmc2209Initialized) {
-        Serial.println("WARNING: Cannot read temperature - TMC2209 not initialized");
+        dbg_println("WARNING: Cannot read temperature - TMC2209 not initialized");
         return;
     }
 
@@ -167,7 +166,7 @@ void StepperController::publishTMC2209Temperature() {
     // Log temperature status for debugging
     if (temperatureStatus > 0) {
         const char* tempLabels[] = {"Normal", "Warm (>120°C)", "Elevated (>143°C)", "High (>150°C)", "Critical (>157°C)"};
-        Serial.printf("TMC2209 Temperature: %s\n", tempLabels[temperatureStatus]);
+        dbg_printf("TMC2209 Temperature: %s\n", tempLabels[temperatureStatus]);
     }
 }
 
@@ -175,7 +174,7 @@ void StepperController::publishStallDetection() {
     publishTMC2209Communication();
 
     if (!tmc2209Initialized) {
-        Serial.println("WARNING: Cannot check stall detection - TMC2209 not initialized");
+        dbg_println("WARNING: Cannot check stall detection - TMC2209 not initialized");
         return;
     }
 
@@ -188,17 +187,17 @@ void StepperController::publishStallDetection() {
             stallDetected = true;
             stallCount++;
             systemStatus.sendNotification(NotificationType::WARNING, "Stall detected! Check motor load or settings.");
-            Serial.printf("STALL DETECTED! Count: %d, Time: %lu\n", stallCount, millis());
-            Serial.println("Consider: reducing speed, increasing current, or checking load");
+            dbg_printf("STALL DETECTED! Count: %d, Time: %lu\n", stallCount, millis());
+            dbg_println("Consider: reducing speed, increasing current, or checking load");
         } else if (!diagPinHigh && stallDetected) {
             // Stall cleared
             stallDetected = false;
-            Serial.println("Stall condition cleared");
+            dbg_println("Stall condition cleared");
         }
     } else if (stallDetected) {
         // Clear stall status when motor is stopped
         stallDetected = false;
-        Serial.println("Stall status cleared (motor stopped)");
+        dbg_println("Stall status cleared (motor stopped)");
     }
 
     // Publish stall status update
@@ -224,7 +223,7 @@ void StepperController::publishCurrentRPM() {
 // Centralized stepper hardware control methods
 void StepperController::stepperSetSpeed(float rpm) {
     if (!stepper) {
-        Serial.println("WARNING: Cannot apply speed - stepper not initialized");
+        dbg_println("WARNING: Cannot apply speed - stepper not initialized");
         return;
     }
     const uint32_t stepsPerSecond = rpmToStepsPerSecond(rpm);
@@ -236,7 +235,7 @@ void StepperController::stepperSetSpeed(float rpm) {
 
 void StepperController::stepperSetAcceleration(uint32_t accelerationStepsPerSec2) {
     if (!stepper) {
-        Serial.println("WARNING: Cannot apply acceleration - stepper not initialized");
+        dbg_println("WARNING: Cannot apply acceleration - stepper not initialized");
         return;
     }
 
@@ -265,7 +264,7 @@ StepperController::~StepperController() {
 }
 
 bool StepperController::begin() {
-    Serial.println("Initializing FastAccelStepper with TMC2209...");
+    dbg_println("Initializing FastAccelStepper with TMC2209...");
     
     // Initialize preferences storage
     initPreferences();
@@ -297,9 +296,9 @@ bool StepperController::begin() {
     systemStatus.publishStatusUpdate(StatusUpdateType::TMC2209_STATUS_UPDATE, tmc2209Initialized);
     
     if (tmc2209Initialized) {
-        Serial.println("TMC2209 driver initialized and communicating successfully");
+        dbg_println("TMC2209 driver initialized and communicating successfully");
     } else {
-        Serial.println("WARNING: TMC2209 driver initialization failed or not responding");
+        dbg_println("WARNING: TMC2209 driver initialization failed or not responding");
     }
     
     // Initialize FastAccelStepper engine
@@ -309,7 +308,7 @@ bool StepperController::begin() {
     stepper = engine.stepperConnectToPin(STEP_PIN);
     
     if (!stepper) {
-        Serial.println("Failed to initialize FastAccelStepper");
+        dbg_println("Failed to initialize FastAccelStepper");
         return false;
     }
     
@@ -363,17 +362,17 @@ bool StepperController::initPreferences() {
         // Check if this is a fresh namespace by looking for a key
         if (!preferences.isKey("speed")) {
             // Fresh namespace - write default values
-            Serial.println("Fresh preferences namespace, writing defaults");
+            dbg_println("Fresh preferences namespace, writing defaults");
             preferences.putFloat("speed", setpointRPM);
             preferences.putBool("clockwise", clockwise);
             preferences.putInt("microsteps", MICRO_STEPS);
             preferences.putInt("current", runCurrent);
         }
         preferences.end();
-        Serial.println("Preferences namespace initialized");
+        dbg_println("Preferences namespace initialized");
         return true;
     } else {
-        Serial.println("Failed to initialize preferences namespace");
+        dbg_println("Failed to initialize preferences namespace");
         return false;
     }
 }
@@ -402,11 +401,11 @@ void StepperController::configureDriver() {
     
     // Check if driver is communicating properly
     if (tmc2209Initialized) {
-        Serial.printf("TMC2209 configured: %d microsteps, %d%% current, StallGuard threshold: %d\n", 
+        dbg_printf("TMC2209 configured: %d microsteps, %d%% current, StallGuard threshold: %d\n", 
                      MICRO_STEPS, runCurrent, stallGuardThreshold);
-        Serial.println("Note: StallGuard may require disabling StealthChop for optimal detection");
+        dbg_println("Note: StallGuard may require disabling StealthChop for optimal detection");
     } else {
-        Serial.println("WARNING: TMC2209 driver not responding during configuration");
+        dbg_println("WARNING: TMC2209 driver not responding during configuration");
     }
 }
 
@@ -417,7 +416,7 @@ bool StepperController::checkPowerDeliveryReady() {
     if (pdTask.isNegotiationComplete() && pdTask.isPowerGood()) {
         if (!powerDeliveryReady) {
             powerDeliveryReady = true;
-            Serial.printf("StepperController: Power delivery ready - %dV negotiated, %0.1fV measured\n", 
+            dbg_printf("StepperController: Power delivery ready - %dV negotiated, %0.1fV measured\n", 
                          pdTask.getNegotiatedVoltage(), pdTask.getCurrentVoltage());
         }
         return true;
@@ -431,7 +430,7 @@ bool StepperController::checkPowerDeliveryReady() {
         if (state == PDNegotiationState::FAILED) {
             if (!powerDeliveryReady) {
                 powerDeliveryReady = true;
-                Serial.println("StepperController: No PD adapter detected, allowing operation without PD safety");
+                dbg_println("StepperController: No PD adapter detected, allowing operation without PD safety");
             }
             return true;
         }
@@ -440,7 +439,7 @@ bool StepperController::checkPowerDeliveryReady() {
     // If we get here, either negotiation is still in progress or power was lost
     if (powerDeliveryReady) {
         powerDeliveryReady = false;
-        Serial.println("StepperController: Power delivery lost or negotiation in progress");
+        dbg_println("StepperController: Power delivery lost or negotiation in progress");
     }
     return false;
 }
@@ -457,10 +456,10 @@ uint32_t StepperController::rpmToStepsPerSecond(float rpm) const {
 }
 
 void StepperController::run() {
-    Serial.println("Stepper Task started");
+    dbg_println("Stepper Task started");
     
     // Wait for power delivery negotiation with timeout
-    Serial.println("Waiting for power delivery negotiation...");
+    dbg_println("Waiting for power delivery negotiation...");
     unsigned long pdWaitStart = millis();
     const unsigned long PD_WAIT_TIMEOUT = 10000; // 10 second timeout
     bool pdTimedOut = false;
@@ -468,25 +467,25 @@ void StepperController::run() {
     while (!checkPowerDeliveryReady() && !pdTimedOut) {
         if (millis() - pdWaitStart >= PD_WAIT_TIMEOUT) {
             pdTimedOut = true;
-            Serial.println("StepperController: Power delivery negotiation timed out");
-            Serial.println("StepperController: Proceeding with stepper initialization (no PD adapter or negotiation failed)");
-            Serial.println("StepperController: Motor control will be available but without PD safety features");
+            dbg_println("StepperController: Power delivery negotiation timed out");
+            dbg_println("StepperController: Proceeding with stepper initialization (no PD adapter or negotiation failed)");
+            dbg_println("StepperController: Motor control will be available but without PD safety features");
         } else {
             vTaskDelay(pdMS_TO_TICKS(500)); // Check every 500ms
         }
     }
     
     if (!pdTimedOut) {
-        Serial.println("StepperController: Power delivery negotiation successful, proceeding with full safety features");
+        dbg_println("StepperController: Power delivery negotiation successful, proceeding with full safety features");
     }
     
     // Initialize stepper controller
     if (!begin()) {
-        Serial.println("Failed to initialize stepper controller!");
+        dbg_println("Failed to initialize stepper controller!");
         return;
     }
     
-    Serial.println("Stepper Controller initialized successfully!");
+    dbg_println("Stepper Controller initialized successfully!");
     
     // Initialize timing variables with cached millis() value
     StepperCommandData cmd;
@@ -564,7 +563,7 @@ bool StepperController::isUpdateDue(unsigned long nextUpdate) {
 
 void StepperController::publishTotalRevolutions() {
     if (!stepper) {
-        Serial.println("WARNING: Cannot check total revolutions - stepper not initialized");
+        dbg_println("WARNING: Cannot check total revolutions - stepper not initialized");
         return;
     }
 
@@ -582,7 +581,7 @@ void StepperController::publishTotalRevolutions() {
 
 void StepperController::publishRuntime() {
     if (!stepper) {
-        Serial.println("WARNING: Cannot check runtime - stepper not initialized");
+        dbg_println("WARNING: Cannot check runtime - stepper not initialized");
         return;
     }
 
@@ -624,7 +623,7 @@ void StepperController::publishTMCStatusUpdates() {
 }
 
 void StepperController::processCommand(const StepperCommandData& cmd) {
-    Serial.printf("StepperController: Processing command type %d\n", (int)cmd.command);
+    dbg_printf("StepperController: Processing command type %d\n", (int)cmd.command);
     
     switch (cmd.command) {
         case StepperCommand::SET_SPEED:
@@ -694,7 +693,7 @@ void StepperController::resetCountersInternal() {
     startTime = millis();
     isFirstStart = false;
     
-    Serial.println("Counters reset");
+    dbg_println("Counters reset");
     // Success is indicated by the status update - no notification needed
 }
 
@@ -702,7 +701,7 @@ void StepperController::resetStallCountInternal() {
     stallCount = 0;
     stallDetected = false;
     
-    Serial.println("Stall count reset");
+    dbg_println("Stall count reset");
     systemStatus.publishStatusUpdate(StatusUpdateType::STALL_COUNT_UPDATE, stallCount);
     // Success is indicated by the status update - no notification needed
 }
@@ -731,7 +730,7 @@ void StepperController::setSpeedInternal(float rpm) {
     if (speedVariationEnabled && speedVariationStrength > 0.0f) {
         const float maxAllowedBaseSpeed = calculateMaxAllowedBaseSpeed();
         if (rpm > maxAllowedBaseSpeed) {
-            Serial.printf("Requested speed %.2f RPM exceeds max allowed %.2f RPM with current variation. Auto-adjusting to max allowed speed.\n", 
+            dbg_printf("Requested speed %.2f RPM exceeds max allowed %.2f RPM with current variation. Auto-adjusting to max allowed speed.\n", 
                           rpm, maxAllowedBaseSpeed);
             rpm = maxAllowedBaseSpeed; // Auto-adjust to maximum allowed speed
             speedWasAdjusted = true;
@@ -754,7 +753,7 @@ void StepperController::setSpeedInternal(float rpm) {
     }
     
     const uint32_t stepsPerSecond = rpmToStepsPerSecond(rpm);  // For logging only
-    Serial.printf("Speed setpoint set to %.2f RPM (%u steps/sec)\n", rpm, stepsPerSecond);
+    dbg_printf("Speed setpoint set to %.2f RPM (%u steps/sec)\n", rpm, stepsPerSecond);
     
     // Report warning if speed was adjusted (use efficient string building)
     if (speedWasAdjusted && !isInitializing) {
@@ -819,7 +818,7 @@ void StepperController::enableInternal() {
         isFirstStart = false;
     }
     
-    Serial.println("Motor enabled and started");
+    dbg_println("Motor enabled and started");
 }
 
 void StepperController::disableInternal() {
@@ -838,7 +837,7 @@ void StepperController::emergencyStopInternal() {
     stepperDriver.disable();
     motorEnabled = false;
     
-    Serial.println("EMERGENCY STOP executed");
+    dbg_println("EMERGENCY STOP executed");
     
     systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
 }
@@ -857,7 +856,7 @@ void StepperController::setRunCurrentInternal(int current) {
         saveSettings();
     }
     
-    Serial.printf("Run current set to %d%%\n", current);
+    dbg_printf("Run current set to %d%%\n", current);
 }
 
 void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec2) {
@@ -884,7 +883,7 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
     if (speedVariationEnabled && speedVariationStrength > 0.0f) {
         const uint32_t minRequiredAcceleration = calculateRequiredAccelerationForVariableSpeed();
         if (minRequiredAcceleration > 0 && accelerationStepsPerSec2 < minRequiredAcceleration) {
-            Serial.printf("Requested acceleration %u steps/s² is below minimum required %u steps/s² for current variable speed settings. Auto-adjusting to minimum required acceleration.\n", 
+            dbg_printf("Requested acceleration %u steps/s² is below minimum required %u steps/s² for current variable speed settings. Auto-adjusting to minimum required acceleration.\n", 
                           accelerationStepsPerSec2, minRequiredAcceleration);
             accelerationStepsPerSec2 = minRequiredAcceleration; // Auto-adjust to minimum required acceleration
             accelWasAdjusted = true;
@@ -892,7 +891,7 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
     }
 
     applyStepperAcceleration(accelerationStepsPerSec2);
-    Serial.printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
+    dbg_printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
 
     // Save settings only if not during initialization
     if (!isInitializing) {
@@ -937,9 +936,9 @@ void StepperController::saveSettings() {
         preferences.putInt("current", runCurrent);
         preferences.putUInt("acceleration", setpointAcceleration);
         preferences.end();
-        Serial.println("Settings saved to flash");
+        dbg_println("Settings saved to flash");
     } else {
-        Serial.println("Failed to open preferences for saving");
+        dbg_println("Failed to open preferences for saving");
     }
 }
 
@@ -952,10 +951,10 @@ void StepperController::loadSettings() {
         runCurrent = preferences.getInt("current", runCurrent);
         setpointAcceleration = preferences.getUInt("acceleration", setpointAcceleration);
         preferences.end();
-        Serial.printf("Settings loaded from flash: %.2f RPM, %s, %d microsteps, %d%% current, %u accel\n",
+        dbg_printf("Settings loaded from flash: %.2f RPM, %s, %d microsteps, %d%% current, %u accel\n",
                       setpointRPM, clockwise ? "CW" : "CCW", MICRO_STEPS, runCurrent, setpointAcceleration);
     } else {
-        Serial.println("Failed to open preferences for loading, using defaults");
+        dbg_println("Failed to open preferences for loading, using defaults");
         // Default values are already set in constructor
     }
 }
@@ -990,9 +989,9 @@ void StepperController::setSpeedVariationInternal(float strength) {
     // This ensures consistent behavior and prepares for potential variation enabling
     updateAccelerationForVariableSpeed();
     
-    Serial.printf("Speed variation strength set to %.2f (%.0f%%) - k=%.3f, k0=%.3f\n", 
+    dbg_printf("Speed variation strength set to %.2f (%.0f%%) - k=%.3f, k0=%.3f\n", 
                   strength, strength * 100.0f, speedVariationK, speedVariationK0);
-    Serial.printf("Max allowed base speed: %.2f RPM (setpoint: %.2f RPM)\n", 
+    dbg_printf("Max allowed base speed: %.2f RPM (setpoint: %.2f RPM)\n", 
                   calculateMaxAllowedBaseSpeed(), setpointRPM);
     
     // Publish status update for speed variation strength change
@@ -1004,7 +1003,7 @@ void StepperController::setSpeedVariationPhaseInternal(float phase) {
     // Optimize phase normalization using fmod
     speedVariationPhase = fmodf(phase + (phase < 0.0f ? 6.28318530718f : 0.0f), 6.28318530718f);
     
-    Serial.printf("Speed variation phase set to %.2f radians (%.0f degrees)\n", 
+    dbg_printf("Speed variation phase set to %.2f radians (%.0f degrees)\n", 
                   speedVariationPhase, speedVariationPhase * 180.0f / PI);
     
     // Publish status update for speed variation phase change
@@ -1032,11 +1031,11 @@ void StepperController::enableSpeedVariationInternal() {
     // Dynamically calculate and apply required acceleration for variable speed
     updateAccelerationForVariableSpeed();
     
-    Serial.printf("Speed variation enabled at position %d (strength: %.0f%%, phase: 0°)\n", 
+    dbg_printf("Speed variation enabled at position %d (strength: %.0f%%, phase: 0°)\n", 
                   static_cast<int>(speedVariationStartPosition), speedVariationStrength * 100.0f);
-    Serial.printf("Max allowed base speed: %.2f RPM (setpoint: %.2f RPM)\n", 
+    dbg_printf("Max allowed base speed: %.2f RPM (setpoint: %.2f RPM)\n", 
                   calculateMaxAllowedBaseSpeed(), setpointRPM);
-    Serial.println("Current position will be the fastest point in the cycle (new algorithm)");
+    dbg_println("Current position will be the fastest point in the cycle (new algorithm)");
     
     // Publish status update for speed variation enabled change
     systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, true);
@@ -1058,8 +1057,8 @@ void StepperController::disableSpeedVariationInternal() {
     // The stepper library will handle the case when motor is disabled
     applyStepperSetpointSpeed(setpointRPM);
     
-    Serial.println("Speed variation disabled, returned to constant speed");
-    Serial.println("Note: Acceleration remains at current setting for normal operation");
+    dbg_println("Speed variation disabled, returned to constant speed");
+    dbg_println("Note: Acceleration remains at current setting for normal operation");
     
     // Publish status update for speed variation enabled change
     systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED, false);
@@ -1067,7 +1066,7 @@ void StepperController::disableSpeedVariationInternal() {
 }
 
 void StepperController::requestAllStatusInternal() {
-    Serial.println("Publishing all current status values...");
+    dbg_println("Publishing all current status values...");
     
     // Publish all current status values through the status update queue
     systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_SETPOINT_CHANGED, setpointRPM);
@@ -1174,14 +1173,14 @@ uint32_t StepperController::calculateRequiredAccelerationForVariableSpeed() cons
     // The maximum speed change occurs over half a rotation with 50% safety margin
     const uint32_t requiredAcceleration = static_cast<uint32_t>((maxSpeedChangeSteps / halfRotationTime) * 1.5f);
     
-    Serial.printf("Variable speed acceleration calculation (optimized):\n");
-    Serial.printf("  External strength: %.2f (%.0f%%), Internal k: %.3f, k0: %.3f\n", 
+    dbg_printf("Variable speed acceleration calculation (optimized):\n");
+    dbg_printf("  External strength: %.2f (%.0f%%), Internal k: %.3f, k0: %.3f\n", 
                   speedVariationStrength, speedVariationStrength * 100.0f, speedVariationK, speedVariationK0);
-    Serial.printf("  Base RPM: %.2f, Speed range: %.2f - %.2f RPM (Δ%.2f RPM)\n", 
+    dbg_printf("  Base RPM: %.2f, Speed range: %.2f - %.2f RPM (Δ%.2f RPM)\n", 
                   setpointRPM, minSpeed, maxSpeed, maxSpeedChange);
-    Serial.printf("  Half rotation time: %.3f seconds\n", halfRotationTime);
-    Serial.printf("  Max speed change: %u steps/s over %.3fs\n", maxSpeedChangeSteps, halfRotationTime);
-    Serial.printf("  Required acceleration: %u steps/s² (with 50%% safety margin)\n", requiredAcceleration);
+    dbg_printf("  Half rotation time: %.3f seconds\n", halfRotationTime);
+    dbg_printf("  Max speed change: %u steps/s over %.3fs\n", maxSpeedChangeSteps, halfRotationTime);
+    dbg_printf("  Required acceleration: %u steps/s² (with 50%% safety margin)\n", requiredAcceleration);
     
     return requiredAcceleration;
 }
@@ -1201,7 +1200,7 @@ void StepperController::updateAccelerationForVariableSpeed() {
     // Only update acceleration if the current setting is too small for variable speed operation
     if (requiredAcceleration > setpointAcceleration) {
         applyStepperAcceleration(requiredAcceleration);
-        Serial.printf("Acceleration increased to %u steps/s² for variable speed operation\n", requiredAcceleration);
+        dbg_printf("Acceleration increased to %u steps/s² for variable speed operation\n", requiredAcceleration);
     }
 }
 
@@ -1229,7 +1228,7 @@ void StepperController::updateSpeedForVariableSpeed() {
         float oldSpeed = setpointRPM;
         setpointRPM = maxAllowedBaseSpeed;
         applyStepperSetpointSpeed(maxAllowedBaseSpeed);
-        Serial.printf("Base speed reduced from %.2f to %.2f RPM to prevent exceeding max speed with modulation\n", oldSpeed, setpointRPM);
+        dbg_printf("Base speed reduced from %.2f to %.2f RPM to prevent exceeding max speed with modulation\n", oldSpeed, setpointRPM);
     }
 }
 
@@ -1281,7 +1280,7 @@ void StepperController::setStallGuardThresholdInternal(uint8_t threshold) {
     stallGuardThreshold = threshold;
     stepperDriver.setStallGuardThreshold(threshold);
     
-    Serial.printf("StallGuard threshold set to %d (0=most sensitive, 63=least sensitive)\n", threshold);
+    dbg_printf("StallGuard threshold set to %d (0=most sensitive, 63=least sensitive)\n", threshold);
     
     // Publish status update for StallGuard threshold change
     systemStatus.publishStatusUpdate(StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED, threshold);

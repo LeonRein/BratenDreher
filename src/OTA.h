@@ -9,7 +9,7 @@ void setupOTA()
   WiFi.onEvent([](WiFiEvent_t event)
                {
         if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
-          Serial.print("IP address: ");
+          dbg_print("IP address: ");
           Serial.println(WiFi.localIP());
         } });
 
@@ -23,15 +23,19 @@ void setupOTA()
         type = "filesystem";
       }
 
+      stepperController.stop();
+      bleManager.stop();
+      powerDeliveryTask.stop();
+
       // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
       Serial.println("Start updating " + type); })
       .onEnd([]()
              { Serial.println("\nEnd"); })
       .onProgress([](unsigned int progress, unsigned int total)
-                  { Serial.printf("Progress: %u%%\r", (progress / (total / 100))); })
+                  { dbg_printf("Progress: %u%%\r", (progress / (total / 100))); })
       .onError([](ota_error_t error)
                {
-      Serial.printf("Error[%u]: ", error);
+      dbg_printf("Error[%u]: ", error);
       if (error == OTA_AUTH_ERROR) {
         Serial.println("Auth Failed");
       } else if (error == OTA_BEGIN_ERROR) {
@@ -44,6 +48,7 @@ void setupOTA()
         Serial.println("End Failed");
       } });
 
+  ArduinoOTA.setHostname("BratenDreher");
   ArduinoOTA.begin();
 }
 
