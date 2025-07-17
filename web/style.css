@@ -514,8 +514,12 @@ body {
 
 .status-item {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(16, 185, 129, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(16, 185, 129, 0.15);
 }
 
 .status-value-with-action {
@@ -545,14 +549,13 @@ body {
 }
 
 .status-label {
-    font-size: 0.85rem;
-    color: #6b7280;
     font-weight: 500;
+    color: #374151;
 }
 
 .status-value {
-    font-size: 1rem;
     font-weight: 600;
+    font-size: 0.95rem;
     color: #1f2937;
     transition: color 0.3s ease;
 }
@@ -686,12 +689,23 @@ body {
 
 .stall-status-item {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 12px;
-    background: #f9fafb;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(251, 146, 60, 0.05);
     border-radius: 8px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid rgba(251, 146, 60, 0.15);
+}
+
+.stall-status-item .status-label {
+    font-weight: 500;
+    color: #374151;
+}
+
+.stall-status-item .status-value {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #1f2937;
 }
 
 .stall-actions {
@@ -887,23 +901,26 @@ body {
 
 /* Statistics Card */
 .stats-card {
-    background: linear-gradient(135deg, #059669 0%, #047857 100%);
-    color: white;
+    border-left: 3px solid #8b5cf6;
 }
 
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
+    gap: 16px;
     margin-bottom: 20px;
 }
 
 .stat-item {
-    text-align: center;
-    padding: 16px;
-    background: rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 12px;
+    background: rgba(139, 92, 246, 0.05);
     border-radius: 8px;
-    backdrop-filter: blur(10px);
+    border: 1px solid rgba(139, 92, 246, 0.15);
 }
 
 .stat-value {
@@ -911,26 +928,21 @@ body {
     font-size: 1.5rem;
     font-weight: 700;
     margin-bottom: 4px;
-    color: white;
+    color: #1f2937;
 }
 
 .stat-label {
     display: block;
     font-size: 0.8rem;
-    opacity: 0.9;
+    font-weight: 500;
+    color: #374151;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    text-align: center;
 }
 
 .stats-reset {
     width: 100%;
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: white;
-}
-
-.stats-reset:hover {
-    background: rgba(255, 255, 255, 0.3);
 }
 
 .stats-buttons {

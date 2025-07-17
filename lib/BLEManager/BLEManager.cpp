@@ -368,7 +368,6 @@ void BLEManager::processStatusUpdates() {
         // Create JSON document and add the first update
         JsonDocument statusDoc;
         statusDoc["type"] = "status_update";
-        statusDoc["timestamp"] = millis();
         
         // Add the first status update
         addStatusToJson(statusDoc, statusUpdate);

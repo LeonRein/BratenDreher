@@ -497,6 +497,8 @@ void StepperController::run() {
     unsigned long nextTMCUpdate = currentTime + 2000; // 2s
 
     while (true) {
+
+
         // Find the next event to wait for
         unsigned long nextEvent = min(nextMotorSpeedUpdate, min(nextFastStatusUpdate, min(nextStallUpdate, nextTMCUpdate)));
         TickType_t timeout = calculateQueueTimeout(nextEvent);
@@ -504,8 +506,6 @@ void StepperController::run() {
         if (systemCommand.getCommand(cmd, timeout)) {
             processCommand(cmd);
         }
-
-        currentTime = millis();
 
         // Motor speed updates (every 10ms for smooth variation)
         if (isUpdateDue(nextMotorSpeedUpdate)) {
@@ -531,6 +531,7 @@ void StepperController::run() {
             publishTMCStatusUpdates();
             nextTMCUpdate = currentTime + TMC_UPDATE_INTERVAL;
         }
+
     }
 }
 
