@@ -360,6 +360,18 @@
         <p class="version">Version 1.0</p>
     </footer>
 
-    <script src="script.js"></script>
+    <!-- Load new architecture files -->
+    <script src="controls.js"></script>
+    <script src="command-manager.js"></script>
+    <script src="control-bindings.js"></script>
+    <script src="app.js"></script>
+    
+    <!-- Initialize the application -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Initializing BratenDreher Web Interface with New Architecture');
+            new BratenDreherApp();
+        });
+    </script>
 </body>
 </html>

@@ -108,6 +108,7 @@ void StepperController::applyStop()
     motorEnabled = false;
     publishTMC2209Communication();
 
+    systemStatus.sendNotification(NotificationType::WARNING, "Stepper stopped");
     systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
 }
 
@@ -129,6 +130,7 @@ void StepperController::applyCurrent(uint8_t current)
     runCurrent = current;
     stepperDriver.setRunCurrent(current);
 
+    systemStatus.sendNotification(NotificationType::WARNING, "Run current set to " + String(current) + "%");
     systemStatus.publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, current);
 }
 
@@ -449,8 +451,8 @@ void StepperController::configureDriver()
 {
     stepperDriver.setRunCurrent(runCurrent);
     stepperDriver.setMicrostepsPerStep(MICRO_STEPS);
-    stepperDriver.enableAutomaticCurrentScaling(); // current control mode
-    //  stepperDriver.enableCoolStep();
+    stepperDriver.enableAutomaticCurrentScaling();
+    stepperDriver.enableAutomaticGradientAdaptation();
     stepperDriver.enableStealthChop();                // stealth chop needs to be enabled for stall detect
     stepperDriver.setCoolStepDurationThreshold(5000); // TCOOLTHRS (DIAG only enabled when TSTEP smaller than this)
 
@@ -458,7 +460,7 @@ void StepperController::configureDriver()
     stepperDriver.setStallGuardThreshold(stallGuardThreshold);
 
     // Configure CoolStep
-    stepperDriver.enableCoolStep();
+    // stepperDriver.enableCoolStep();
 
     // Update communication status after configuration
     bool newTmc2209Status = stepperDriver.isSetupAndCommunicating();
