@@ -50,36 +50,35 @@ private:
     // Status update batching configuration
     static const size_t MAX_BLE_PACKET_SIZE = 500;            // Conservative BLE MTU size
 
-protected:
-    // Task implementation
-    void run() override;
-    
-public:
     BLEManager();
     ~BLEManager();
+    BLEManager(const BLEManager&) = delete;
+    BLEManager& operator=(const BLEManager&) = delete;
+
+    // Task implementation
     
-    // Initialization
-    bool begin(const char* deviceName = "BratenDreher");
-    // setStepperController method removed - using SystemCommand singleton directly
-    
-    // Connection status
-    bool isConnected() const { return deviceConnected; }
-    
-    // Status updates
-    void update();
     void processNotifications(); // Process notifications from StepperController (warnings and errors only)
     void processStatusUpdates(); // Process status updates from StepperController
+    void update();
+    bool isConnected() const { return deviceConnected; }
     void addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate); // Helper to add status to JSON
     void sendStatusUpdate(JsonDocument& statusDoc); // Send a status update JSON
     void sendNotification(const String& level, const String& message = "");
     void sendAllCurrentStatus(); // Send all current status information to newly connected client
-    
-    // Handle incoming commands
     void handleCommand(const std::string& command);
-    
-    // Friend declarations for callback access
+
     friend class ServerCallbacks;
     friend class CommandCharacteristicCallbacks;
+
+protected:    
+    void run() override;
+public:
+    bool begin(const char* deviceName = "BratenDreher");
+
+    static BLEManager& getInstance() {
+        static BLEManager instance;
+        return instance;
+    }
 };
 
 #endif // BLE_MANAGER_H

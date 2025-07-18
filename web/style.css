@@ -262,18 +262,50 @@ body {
 .speed-slider-container {
     position: relative;
     width: 100%;
-    margin-bottom: 40px; /* Increased to make room for triangle */
+    margin-bottom: 20px; /* Reduced margin since no triangle needed */
+    padding: 12px 0; /* Add padding to accommodate thumb */
 }
 
-.speed-slider {
+.speed-slider-wrapper {
+    position: relative;
     width: 100%;
     height: 8px;
     border-radius: 4px;
     background: #e5e7eb;
+    margin: 8px 0; /* Center the track vertically in the container */
+}
+
+.speed-slider-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+    border-radius: 4px;
+    width: 0%;
+    opacity: 0;
+    transition: width 0.1s ease, opacity 0.3s ease;
+    z-index: 1;
+}
+
+.speed-slider {
+    position: absolute;
+    top: -8px; /* Position to center the thumb on the track */
+    left: 0;
+    width: 100%;
+    height: 24px; /* Full height to accommodate thumb */
+    background: transparent;
     outline: none;
     cursor: pointer;
     -webkit-appearance: none;
     appearance: none;
+    z-index: 2;
+}
+
+.speed-slider::-webkit-slider-track {
+    background: transparent;
+    border: none;
+    height: 8px;
 }
 
 .speed-slider::-webkit-slider-thumb {
@@ -286,6 +318,7 @@ body {
     cursor: pointer;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     transition: transform 0.2s ease;
+    margin-top: 0; /* Remove margin since we positioned the slider */
 }
 
 .speed-slider::-webkit-slider-thumb:hover {
@@ -302,29 +335,10 @@ body {
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-/* Current Speed Triangle Indicator */
-.current-speed-triangle {
-    position: absolute;
-    top: 28px; /* Position well below the slider track and thumb */
-    pointer-events: none;
-    opacity: 0;
-    transition: all 0.1s ease;
-    z-index: 10;
-}
-
-.triangle-indicator {
-    width: 0;
-    height: 0;
-    border-left: 8px solid transparent;
-    border-right: 8px solid transparent;
-    border-bottom: 12px solid #10b981;
-    position: relative;
-    left: -8px; /* Center the triangle */
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-}
-
-.current-speed-triangle.visible {
-    opacity: 1;
+.speed-slider::-moz-range-track {
+    background: transparent;
+    border: none;
+    height: 8px;
 }
 
 /* Speed Presets */
@@ -381,6 +395,116 @@ body {
     color: #4f46e5;
 }
 
+/* StallGuard Controls */
+.stallguard-settings {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: rgba(239, 68, 68, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+/* StallGuard Slider (similar to speed slider) */
+.stallguard-slider-container {
+    position: relative;
+    width: 100%;
+    margin-bottom: 20px;
+    padding: 12px 0; /* Add padding to accommodate thumb */
+}
+
+.stallguard-slider-wrapper {
+    position: relative;
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: #e5e7eb;
+    margin: 8px 0; /* Center the track vertically in the container */
+}
+
+.stallguard-slider-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+    border-radius: 4px;
+    width: 0%;
+    opacity: 0;
+    transition: width 0.1s ease, opacity 0.3s ease;
+    z-index: 1;
+}
+
+.stallguard-slider {
+    position: absolute;
+    top: -8px; /* Position to center the thumb on the track */
+    left: 0;
+    width: 100%;
+    height: 24px; /* Full height to accommodate thumb */
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    z-index: 2;
+}
+
+.stallguard-slider::-webkit-slider-track {
+    background: transparent;
+    border: none;
+    height: 8px;
+}
+
+.stallguard-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #ef4444; /* Red color for stall threshold */
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transition: transform 0.2s ease;
+    margin-top: 0;
+}
+
+.stallguard-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.stallguard-slider::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #ef4444; /* Red color for stall threshold */
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.stallguard-slider::-moz-range-track {
+    background: transparent;
+    border: none;
+    height: 8px;
+}
+
+.stallguard-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: #6b7280;
+    margin-top: 8px;
+}
+
+.stallguard-label-left,
+.stallguard-label-right {
+    font-weight: 500;
+}
+
+/* Stall Card */
+.stall-card {
+    border-left: 3px solid #ef4444;
+}
+
 /* Status Card */
 .status-grid {
     display: grid;
@@ -390,8 +514,38 @@ body {
 
 .status-item {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(16, 185, 129, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.status-value-with-action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-inline {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    min-height: auto;
+    line-height: 1.2;
+}
+
+.status-item-with-button {
+    align-items: center;
+    justify-content: center;
+}
+
+.status-item-with-button .btn {
+    width: 100%;
+    max-width: 200px;
+    font-size: 0.9rem;
+    padding: 8px 16px;
 }
 
 .status-value-with-action {
@@ -421,14 +575,13 @@ body {
 }
 
 .status-label {
-    font-size: 0.85rem;
-    color: #6b7280;
     font-weight: 500;
+    color: #374151;
 }
 
 .status-value {
-    font-size: 1rem;
     font-weight: 600;
+    font-size: 0.95rem;
     color: #1f2937;
     transition: color 0.3s ease;
 }
@@ -437,6 +590,96 @@ body {
 .status-value[style*="color"] {
     font-weight: 700;
     text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Power Delivery Section */
+.power-card {
+    border-left: 3px solid #10b981;
+}
+
+.power-status-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.power-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(16, 185, 129, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.power-label {
+    font-weight: 500;
+    color: #374151;
+}
+
+.power-value {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.status-unknown {
+    color: #6b7280;
+}
+
+.status-success {
+    color: #10b981;
+}
+
+.status-error {
+    color: #ef4444;
+}
+
+.status-warning {
+    color: #f59e0b;
+}
+
+.power-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: rgba(16, 185, 129, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.voltage-select {
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: white;
+    font-size: 0.9rem;
+    min-width: 80px;
+}
+
+.voltage-select:focus {
+    outline: none;
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.power-fallback-notice {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 8px;
+    color: #d97706;
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: none;
+}
+
+.power-fallback-notice:before {
+    content: '⚠️ ';
+    margin-right: 8px;
 }
 
 /* Stall Detection Section */
@@ -472,12 +715,23 @@ body {
 
 .stall-status-item {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 12px;
-    background: #f9fafb;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(251, 146, 60, 0.05);
     border-radius: 8px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid rgba(251, 146, 60, 0.15);
+}
+
+.stall-status-item .status-label {
+    font-weight: 500;
+    color: #374151;
+}
+
+.stall-status-item .status-value {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #1f2937;
 }
 
 .stall-actions {
@@ -673,23 +927,26 @@ body {
 
 /* Statistics Card */
 .stats-card {
-    background: linear-gradient(135deg, #059669 0%, #047857 100%);
-    color: white;
+    border-left: 3px solid #8b5cf6;
 }
 
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
+    gap: 16px;
     margin-bottom: 20px;
 }
 
 .stat-item {
-    text-align: center;
-    padding: 16px;
-    background: rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 12px;
+    background: rgba(139, 92, 246, 0.05);
     border-radius: 8px;
-    backdrop-filter: blur(10px);
+    border: 1px solid rgba(139, 92, 246, 0.15);
 }
 
 .stat-value {
@@ -697,26 +954,21 @@ body {
     font-size: 1.5rem;
     font-weight: 700;
     margin-bottom: 4px;
-    color: white;
+    color: #1f2937;
 }
 
 .stat-label {
     display: block;
     font-size: 0.8rem;
-    opacity: 0.9;
+    font-weight: 500;
+    color: #374151;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    text-align: center;
 }
 
 .stats-reset {
     width: 100%;
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: white;
-}
-
-.stats-reset:hover {
-    background: rgba(255, 255, 255, 0.3);
 }
 
 .stats-buttons {
@@ -797,6 +1049,40 @@ body {
     .direction-buttons {
         flex-direction: column;
     }
+}
+
+/* Power Delivery Negotiation Animation */
+@keyframes pdPulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 1.0; }
+    100% { opacity: 0.7; }
+}
+
+.btn.negotiating {
+    animation: pdPulse 1.5s ease-in-out infinite !important;
+    pointer-events: none; /* Prevent additional clicks during negotiation */
+}
+
+.status-warning.negotiating {
+    animation: pdPulse 2s ease-in-out infinite !important;
+}
+
+/* Auto-negotiate button styling */
+.power-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.power-controls > button {
+    width: 100%;
+}
+
+/* Enhanced button layout for power controls */
+.power-controls .btn {
+    margin: 5px 0;
+    min-height: 40px;
 }
 
 /* Animations */

@@ -1,3 +1,13 @@
+// This is the original script.js file - kept as backup
+// The new architecture uses multiple files:
+// - controls.js: UI-type based control classes
+// - command-manager.js: BLE communication management
+// - control-bindings.js: Binding layer between UI and commands
+// - app.js: Main application class
+
+// Original content moved to script-original.js for reference
+// New implementation provides better separation of concerns and maintainability
+
 // Control state constants
 const CONTROL_STATES = {
     DISABLED: 'DISABLED',
@@ -415,10 +425,10 @@ class Control {
 
 // Specialized control for speed with preset button management
 class SpeedControl extends Control {
-    constructor(element, valueElement, presetButtons, triangleElement, setpointSpeedElement, currentSpeedElement, options = {}) {
+    constructor(element, valueElement, presetButtons, fillElement, setpointSpeedElement, currentSpeedElement, options = {}) {
         super(element, valueElement, options);
         this.presetButtons = presetButtons;
-        this.triangleElement = triangleElement;
+        this.fillElement = fillElement;
         this.setpointSpeedElement = setpointSpeedElement;
         this.currentSpeedElement = currentSpeedElement;
         
@@ -429,9 +439,9 @@ class SpeedControl extends Control {
             });
         }
         
-        // Add triangle element as additional element (no state management applied)
-        if (this.triangleElement) {
-            this.addAdditionalElement(this.triangleElement, { 
+        // Add fill element as additional element (no state management applied)
+        if (this.fillElement) {
+            this.addAdditionalElement(this.fillElement, { 
                 applyOpacity: false, 
                 applyDisabled: false, 
                 applyColors: false, 
@@ -451,9 +461,9 @@ class SpeedControl extends Control {
         this.setDisplayState(this.displayState);
     }
 
-    // Update triangle position based on current speed
-    updateTrianglePosition(currentSpeed) {
-        if (!this.triangleElement || !this.element) {
+    // Update fill position based on current speed
+    updateFillPosition(currentSpeed) {
+        if (!this.fillElement || !this.element) {
             return;
         }
         
@@ -468,26 +478,18 @@ class SpeedControl extends Control {
         // Calculate position as percentage
         const percentage = (clampedSpeed - min) / (max - min);
         
-        // Get slider width and calculate accurate track position
-        const sliderRect = slider.getBoundingClientRect();
-        const sliderStyle = getComputedStyle(slider);
+        // Update the fill width to match thumb position
+        // The fill should reach exactly to where the center of the thumb is
+        this.fillElement.style.width = `${percentage * 100}%`;
         
-        // Account for the actual track area (excluding browser-specific padding)
-        const trackPadding = 12; // Typical browser slider track padding
-        const trackWidth = sliderRect.width - (trackPadding * 2);
-        const position = percentage * trackWidth + trackPadding;
-        
-        // Position the triangle (note: CSS already handles centering with left: -8px)
-        this.triangleElement.style.left = `${position}px`;
-        
-        // Show the triangle with a fade-in effect
-        this.triangleElement.classList.add('visible');
+        // Show the fill with a fade-in effect
+        this.fillElement.style.opacity = '1';
     }
 
-    // Hide triangle (called during disconnection or emergency stop)
-    hideTriangle() {
-        if (this.triangleElement) {
-            this.triangleElement.classList.remove('visible');
+    // Hide fill (called during disconnection or emergency stop)
+    hideFill() {
+        if (this.fillElement) {
+            this.fillElement.style.opacity = '0';
         }
     }
 
@@ -550,8 +552,8 @@ class SpeedControl extends Control {
                 }
             }
             
-            // Update the triangle indicator position
-            this.updateTrianglePosition(statusUpdate.currentSpeed);
+            // Update the fill indicator position
+            this.updateFillPosition(statusUpdate.currentSpeed);
         }
     }
 }
@@ -824,8 +826,18 @@ class TMCStatusControl extends Control {
             this.setDisplayState('VALID');
             
             this.statusElement.textContent = statusUpdate.tmc2209Status ? 'OK' : 'Error';
-            this.statusElement.style.opacity = '1.0'; // VALID state - data received
-            this.statusElement.style.color = statusUpdate.tmc2209Status ? '#10b981' : '#e74c3c';
+            this.statusElement.className = statusUpdate.tmc2209Status ? 'status-value status-success' : 'status-value status-error';
+        }
+        
+        if (statusUpdate.tmc2209Temperature !== undefined) {
+            // Temperature status handling
+            const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
+            const tempIdx = Math.max(0, Math.min(4, statusUpdate.tmc2209Temperature));
+            this.stallStatusElement.textContent = tempLabels[tempIdx];
+            this.stallStatusElement.className = 'status-value ' + (
+                tempIdx === 0 ? 'status-success' :
+                tempIdx < 3 ? 'status-warning' : 'status-error'
+            );
         }
         
         if (statusUpdate.stallDetected !== undefined) {
@@ -922,6 +934,352 @@ class StatisticsControl extends Control {
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const secs = totalSeconds % 60;
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`;
+    }
+}
+
+// Specialized control for Power Delivery management
+class PowerDeliveryControl extends Control {
+    constructor(voltageSelectElement, negotiateButton, autoNegotiateButton, statusElement, powerGoodElement, negotiatedVoltageElement, currentVoltageElement, options = {}) {
+        super(voltageSelectElement, null, options); // Use voltage select as main element
+        this.negotiateButton = negotiateButton;
+        this.autoNegotiateButton = autoNegotiateButton;
+        this.statusElement = statusElement;
+        this.powerGoodElement = powerGoodElement;
+        this.negotiatedVoltageElement = negotiatedVoltageElement;
+        this.currentVoltageElement = currentVoltageElement;
+        this.negotiationTimeout = null;
+        
+        // Add all status elements as additional elements
+        this.addAdditionalElement(this.statusElement, { applyDisabled: false });
+        this.addAdditionalElement(this.powerGoodElement, { applyDisabled: false });
+        this.addAdditionalElement(this.negotiatedVoltageElement, { applyDisabled: false });
+        this.addAdditionalElement(this.currentVoltageElement, { applyDisabled: false });
+        this.addAdditionalElement(this.negotiateButton, { applyDisabled: true });
+        this.addAdditionalElement(this.autoNegotiateButton, { applyDisabled: true });
+        
+        // Initialize with disabled state
+        this.setDisplayState(CONTROL_STATES.DISABLED);
+        
+        // State mapping for negotiation status (simplified states)
+        this.negotiationStates = {
+            0: { text: 'Idle', class: 'status-unknown' },
+            1: { text: 'Negotiating...', class: 'status-warning' },
+            2: { text: 'Success', class: 'status-success' },
+            3: { text: 'Failed (No PD Adapter)', class: 'status-error' },
+            4: { text: 'Auto-Negotiating...', class: 'status-warning' }
+        };
+    }
+
+    bindEvents() {
+        if (this.negotiateButton && this.element) {
+            this.negotiateButton.addEventListener('click', () => {
+                const selectedVoltage = parseInt(this.element.value);
+                if (selectedVoltage && this.bratendreherble) {
+                    // Provide immediate visual feedback
+                    this.showNegotiationStarted(false); // false = single voltage negotiation
+                    
+                    // Send power delivery command to set target voltage and start negotiation
+                    this.bratendreherble.sendCommand('pd_voltage', selectedVoltage);
+                }
+            });
+        }
+        
+        if (this.autoNegotiateButton) {
+            this.autoNegotiateButton.addEventListener('click', () => {
+                if (this.bratendreherble) {
+                    // Provide immediate visual feedback
+                    this.showNegotiationStarted(true); // true = auto-negotiation
+                    
+                    // Send power delivery command for auto-negotiation
+                    this.bratendreherble.sendCommand('pd_auto_negotiate', 1);
+                }
+            });
+        }
+    }
+
+    showNegotiationStarted(isAutoNegotiation = false) {
+        // Update status to show negotiation is starting
+        if (isAutoNegotiation) {
+            this.statusElement.textContent = 'Auto-Negotiating...';
+        } else {
+            this.statusElement.textContent = 'Negotiating...';
+        }
+        this.statusElement.className = 'power-value status-warning negotiating';
+        this.statusElement.style.opacity = '1.0';
+        
+        // Temporarily disable both buttons and show feedback
+        this.negotiateButton.disabled = true;
+        this.autoNegotiateButton.disabled = true;
+        
+        if (isAutoNegotiation) {
+            this.autoNegotiateButton.textContent = '🔄 Auto-Negotiating...';
+            this.autoNegotiateButton.className = 'btn btn-primary negotiating';
+            this.autoNegotiateButton.style.opacity = '0.8';
+        } else {
+            this.negotiateButton.textContent = '🔄 Negotiating...';
+            this.negotiateButton.className = 'btn btn-secondary negotiating';
+            this.negotiateButton.style.opacity = '0.8';
+        }
+        
+        // Set a timeout to re-enable buttons if no response (fallback)
+        if (this.negotiationTimeout) {
+            clearTimeout(this.negotiationTimeout);
+        }
+        this.negotiationTimeout = setTimeout(() => {
+            this.resetNegotiateButtons();
+        }, 15000); // 15 second timeout for auto-negotiation (longer than single)
+    }
+
+    resetNegotiateButtons() {
+        this.negotiateButton.disabled = false;
+        this.negotiateButton.textContent = '🔌 Renegotiate';
+        this.negotiateButton.className = 'btn btn-secondary';
+        this.negotiateButton.style.opacity = '1.0';
+        
+        this.autoNegotiateButton.disabled = false;
+        this.autoNegotiateButton.textContent = '⚡ Auto-Negotiate Highest Power';
+        this.autoNegotiateButton.className = 'btn btn-primary';
+        this.autoNegotiateButton.style.opacity = '1.0';
+        
+        if (this.negotiationTimeout) {
+            clearTimeout(this.negotiationTimeout);
+            this.negotiationTimeout = null;
+        }
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        // Call parent to get common timeout clearing and retry reset
+        super.handleStatusUpdate(statusUpdate);
+        
+        // Update negotiation status
+        if (statusUpdate.pdNegotiationStatus !== undefined) {
+            this.setDisplayState('VALID');
+            
+            // Ensure we have an integer value
+            let statusValue = statusUpdate.pdNegotiationStatus;
+            if (typeof statusValue === 'number') {
+                statusValue = Math.round(statusValue); // Round to nearest integer
+            } else {
+                statusValue = 0; // Default to IDLE
+            }
+            
+            const status = this.negotiationStates[statusValue] || 
+                          { text: `Unknown (${statusUpdate.pdNegotiationStatus})`, class: 'status-error' };
+            
+            this.statusElement.textContent = status.text;
+            
+            // Apply status class, keeping negotiating class for active negotiations
+            if (statusValue === 1 || statusValue === 4) { // NEGOTIATING or AUTO_NEGOTIATING
+                this.statusElement.className = `power-value ${status.class} negotiating`;
+            } else {
+                this.statusElement.className = `power-value ${status.class}`;
+            }
+            this.statusElement.style.opacity = '1.0';
+            
+            // Only reset negotiate buttons when negotiation is complete (not in progress)
+            if (statusValue !== 1 && statusValue !== 4) { // Not NEGOTIATING or AUTO_NEGOTIATING
+                this.resetNegotiateButtons();
+            }
+            
+            // Show fallback mode notice if PD failed
+            if (statusValue === 3) { // FAILED
+                this.showFallbackNotice();
+            } else {
+                this.hideFallbackNotice();
+            }
+            
+            // Update voltage selector when negotiation succeeds
+            if (statusValue === 2 && statusUpdate.pdNegotiatedVoltage > 0) { // SUCCESS
+                this.element.value = statusUpdate.pdNegotiatedVoltage;
+                console.log(`PowerDelivery: Negotiation successful, updated voltage selector to ${statusUpdate.pdNegotiatedVoltage}V`);
+            }
+        }
+        
+        // Update power good status
+        if (statusUpdate.pdPowerGood !== undefined) {
+            this.setDisplayState('VALID');
+            
+            this.powerGoodElement.textContent = statusUpdate.pdPowerGood ? 'Good' : 'Bad';
+            this.powerGoodElement.className = statusUpdate.pdPowerGood ? 
+                'power-value status-success' : 'power-value status-error';
+            this.powerGoodElement.style.opacity = '1.0';
+        }
+        
+        // Update negotiated voltage
+        if (statusUpdate.pdNegotiatedVoltage !== undefined) {
+            this.setDisplayState('VALID');
+            
+            this.negotiatedVoltageElement.textContent = statusUpdate.pdNegotiatedVoltage > 0 ? 
+                `${statusUpdate.pdNegotiatedVoltage}V` : '- V';
+            this.negotiatedVoltageElement.style.opacity = '1.0';
+        }
+        
+        // Update current voltage measurement
+        if (statusUpdate.pdCurrentVoltage !== undefined) {
+            this.setDisplayState('VALID');
+            
+            this.currentVoltageElement.textContent = `${statusUpdate.pdCurrentVoltage.toFixed(1)}V`;
+            this.currentVoltageElement.style.opacity = '1.0';
+        }
+    }
+    
+    showFallbackNotice() {
+        // Find or create fallback notice
+        let notice = document.getElementById('pdFallbackNotice');
+        if (!notice) {
+            notice = document.createElement('div');
+            notice.id = 'pdFallbackNotice';
+            notice.className = 'power-fallback-notice';
+            notice.innerHTML = '⚠️ Power Delivery not available - running in fallback mode. Motor control is still functional.';
+            
+            // Insert after power status grid
+            const powerCard = this.statusElement.closest('.power-card');
+            const powerStatus = powerCard.querySelector('.power-status');
+            powerStatus.appendChild(notice);
+        }
+        notice.style.display = 'block';
+    }
+    
+    hideFallbackNotice() {
+        const notice = document.getElementById('pdFallbackNotice');
+        if (notice) {
+            notice.style.display = 'none';
+        }
+    }
+}
+
+// Specialized control for StallGuard threshold and result display
+class StallGuardControl extends Control {
+    constructor(thresholdSlider, thresholdValueElement, resultValueElement, sliderFillElement, options = {}) {
+        super(thresholdSlider, thresholdValueElement, options);
+        this.resultValueElement = resultValueElement;
+        this.sliderFillElement = sliderFillElement;
+        this.currentSgResult = null; // Store current SG_RESULT for threshold change updates
+        
+        // Add all elements as additional elements
+        this.addAdditionalElement(this.resultValueElement, { applyDisabled: false });
+        this.addAdditionalElement(this.sliderFillElement, { 
+            applyOpacity: false, 
+            applyDisabled: false, 
+            applyColors: false, 
+            applyClasses: false 
+        });
+        
+        // Initialize with disabled state
+        this.setDisplayState(CONTROL_STATES.DISABLED);
+    }
+
+    handleInput(event) {
+        // Call parent to handle standard input processing
+        super.handleInput(event);
+        
+        // Update the threshold display to show percentage
+        if (this.valueElement) {
+            const thresholdRaw = parseInt(this.element.value);
+            const thresholdPercentage = (thresholdRaw / 255) * 100;
+            this.valueElement.textContent = `${thresholdPercentage.toFixed(1)}%`;
+        }
+        
+        // If we have a current SG_RESULT, update the visual representation
+        // with the new threshold value
+        if (this.currentSgResult !== null) {
+            this.updateStallGuardResult(this.currentSgResult);
+        }
+    }
+
+    updateStallGuardResult(sgResult) {
+        if (!this.sliderFillElement || !this.resultValueElement || !this.element) {
+            return;
+        }
+        
+        // Store current SG_RESULT for threshold change updates
+        this.currentSgResult = sgResult;
+        
+        // SG_RESULT: 0-510 (10-bit value), where LOWER values indicate HIGHER load
+        // SGTHRS: 0-255, stall detection occurs when SG_RESULT < (SGTHRS * 2)
+        // 
+        // StallGuard interpretation:
+        // - SG_RESULT = 0: Maximum load (stall condition)
+        // - SG_RESULT = 510: Minimum load (free running)
+        // - SGTHRS = 0: Less sensitive (harder to detect stalls)
+        // - SGTHRS = 255: More sensitive (detects stalls easier)
+        //
+        // For visual representation, we want to show load level as percentage:
+        // - High load (low SG_RESULT) should show high percentage
+        // - Low load (high SG_RESULT) should show low percentage
+        
+        // Convert SG_RESULT to load percentage (invert the scale)
+        // Load % = (510 - SG_RESULT) / 510 * 100
+        const loadPercentage = ((510 - sgResult) / 510) * 100;
+        
+        // Update the fill width to show current load level
+        this.sliderFillElement.style.width = `${loadPercentage}%`;
+        this.sliderFillElement.style.opacity = '1';
+        
+        // Get current threshold value from slider and convert to actual backend value
+        // Slider value is inverted: slider value 255 = backend 0, slider value 0 = backend 255
+        const sliderValue = parseInt(this.element.value);
+        const actualThresholdValue = 255 - sliderValue; // Convert to actual backend threshold
+        const thresholdSensitivity = (sliderValue / 255) * 100; // Convert slider value to percentage
+        const stallThreshold = actualThresholdValue * 2; // Actual threshold value used for stall detection
+        
+        // Color the fill based on proximity to stall threshold
+        if (sgResult < stallThreshold) {
+            // SG_RESULT is below threshold - stall condition detected
+            this.sliderFillElement.style.backgroundColor = '#ef4444'; // Red
+        } else if (sgResult < (stallThreshold * 1.2)) {
+            // SG_RESULT is close to threshold - warning
+            this.sliderFillElement.style.backgroundColor = '#f59e0b'; // Orange
+        } else {
+            // SG_RESULT is well above threshold - normal operation
+            this.sliderFillElement.style.backgroundColor = '#10b981'; // Green
+        }
+        
+        // Update the result value display (show load as percentage)
+        this.resultValueElement.textContent = `${loadPercentage.toFixed(1)}%`;
+        this.resultValueElement.style.opacity = '1.0';
+    }
+
+    hideFill() {
+        if (this.sliderFillElement) {
+            this.sliderFillElement.style.opacity = '0';
+        }
+    }
+
+    handleStatusUpdate(statusUpdate) {
+        // Call parent to handle standard status key mapping and timeout clearing
+        super.handleStatusUpdate(statusUpdate);
+        
+        // Handle StallGuard result updates
+        if (statusUpdate.stallguardResult !== undefined) {
+            this.setDisplayState(CONTROL_STATES.VALID);
+            this.updateStallGuardResult(statusUpdate.stallguardResult);
+        }
+        
+        // Handle threshold updates from backend
+        if (statusUpdate.stallguardThreshold !== undefined) {
+            this.setDisplayState(CONTROL_STATES.VALID);
+            
+            // Backend sends threshold as 0-255, but we need to invert it for the slider
+            // Backend 0 = most sensitive, should show as 100% (slider value 255)
+            // Backend 255 = least sensitive, should show as 0% (slider value 0)
+            const invertedSliderValue = 255 - statusUpdate.stallguardThreshold;
+            const thresholdPercentage = (invertedSliderValue / 255) * 100;
+            
+            // Update slider to inverted value
+            if (this.element) {
+                this.element.value = invertedSliderValue;
+            }
+            // Update display to show percentage
+            if (this.valueElement) {
+                this.valueElement.textContent = `${thresholdPercentage.toFixed(1)}%`;
+            }
+            
+            // Update the visual representation if we have a current result
+            if (this.currentSgResult !== null) {
+                this.updateStallGuardResult(this.currentSgResult);
+            }
+        }
     }
 }
 
@@ -1022,7 +1380,7 @@ class BratenDreherBLE {
         this.speedSlider = document.getElementById('speedSlider');
         this.speedValue = document.getElementById('speedValue');
         this.currentSpeedIndicator = document.getElementById('currentSpeedIndicator');
-        this.currentSpeedTriangle = document.getElementById('currentSpeedTriangle');
+        this.speedSliderFill = document.getElementById('speedSliderFill');
         this.clockwiseBtn = document.getElementById('clockwiseBtn');
         this.counterclockwiseBtn = document.getElementById('counterclockwiseBtn');
         this.emergencyStopBtn = document.getElementById('emergencyStopBtn');
@@ -1049,9 +1407,16 @@ class BratenDreherBLE {
         this.currentDirection = document.getElementById('currentDirection');
         this.currentCurrent = document.getElementById('currentCurrent');
         this.tmc2209Status = document.getElementById('tmc2209Status');
+        this.tmc2209Temperature = document.getElementById('tmc2209Temperature');
         this.stallStatus = document.getElementById('stallStatus');
         this.stallCount = document.getElementById('stallCount');
         this.lastUpdate = document.getElementById('lastUpdate');
+        
+        // StallGuard elements
+        this.stallguardThresholdSlider = document.getElementById('stallguardThresholdSlider');
+        this.stallguardThresholdValue = document.getElementById('stallguardThresholdValue');
+        this.stallguardResultValue = document.getElementById('stallguardResultValue');
+        this.stallguardSliderFill = document.getElementById('stallguardSliderFill');
         
         // Variable speed status elements
         this.variableSpeedStatus = document.getElementById('variableSpeedStatus');
@@ -1060,6 +1425,15 @@ class BratenDreherBLE {
         this.totalRevolutions = document.getElementById('totalRevolutions');
         this.runTime = document.getElementById('runTime');
         this.avgSpeed = document.getElementById('avgSpeed');
+        
+        // Power delivery elements
+        this.voltageSelect = document.getElementById('voltageSelect');
+        this.negotiateBtn = document.getElementById('negotiateBtn');
+        this.autoNegotiateBtn = document.getElementById('autoNegotiateBtn');
+        this.pdStatus = document.getElementById('pdStatus');
+        this.pdPowerGood = document.getElementById('pdPowerGood');
+        this.pdNegotiatedVoltage = document.getElementById('pdNegotiatedVoltage');
+        this.pdCurrentVoltage = document.getElementById('pdCurrentVoltage');
         
         // Preset buttons
         this.presetBtns = document.querySelectorAll('.preset-btn');
@@ -1312,6 +1686,8 @@ class BratenDreherBLE {
             this.connected = true;
             this.updateConnectionStatus('Connected');
             this.updateUI();
+
+            await this.sendCommand('status_request', null);
             
             console.log('Successfully reconnected to BratenDreher');
             
@@ -1502,8 +1878,8 @@ class BratenDreherBLE {
         
         // Hide speed triangle during emergency stop
         const speedControl = this.controls.get('speed');
-        if (speedControl && speedControl.hideTriangle) {
-            speedControl.hideTriangle();
+        if (speedControl && speedControl.hideFill) {
+            speedControl.hideFill();
         }
         
         await this.setMotorEnabled(false);
@@ -1524,8 +1900,6 @@ class BratenDreherBLE {
             const value = new TextDecoder().decode(event.target.value);
             const message = JSON.parse(value);
             
-            console.log('Message received:', message);
-            
             if (message.type === 'status_update') {
                 // Granular status update (new system)
                 this.handleStatusUpdate(message);
@@ -1540,9 +1914,7 @@ class BratenDreherBLE {
         }
     }
     
-    handleStatusUpdate(statusUpdate) {
-        console.log('Status update:', statusUpdate);
-        
+    handleStatusUpdate(statusUpdate) {        
         // Update timestamp and make it fully visible since we're receiving data
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
         this.lastUpdate.style.opacity = '1.0'; // VALID state - data received
@@ -1625,6 +1997,7 @@ class BratenDreherBLE {
         ];
         
         const opacity = this.connected ? '0.7' : '0.4'; // Outdated state for non-controls
+
         const disabled = !this.connected;
         
         otherControls.forEach(control => {
@@ -1652,8 +2025,14 @@ class BratenDreherBLE {
         // Hide triangle indicator when disconnected
         if (!this.connected) {
             const speedControl = this.controls.get('speed');
-            if (speedControl && speedControl.hideTriangle) {
-                speedControl.hideTriangle();
+            if (speedControl && speedControl.hideFill) {
+                speedControl.hideFill();
+            }
+            
+            // Hide StallGuard fill when disconnected
+            const stallguardControl = this.controls.get('stallguard');
+            if (stallguardControl && stallguardControl.hideFill) {
+                stallguardControl.hideFill();
             }
         }
     }
@@ -1776,13 +2155,20 @@ class BratenDreherBLE {
             this.currentDirection,
             this.currentCurrent,
             this.tmc2209Status,
+            this.tmc2209Temperature,
             this.stallStatus,
             this.stallCount,
+            this.stallguardThresholdValue,
+            this.stallguardResultValue,
             this.lastUpdate,
             this.variableSpeedStatus,
             this.totalRevolutions,
             this.runTime,
-            this.avgSpeed
+            this.avgSpeed,
+            this.pdStatus,
+            this.pdPowerGood,
+            this.pdNegotiatedVoltage,
+            this.pdCurrentVoltage
         ];
         
         statusElements.forEach(element => {
@@ -1796,7 +2182,7 @@ class BratenDreherBLE {
             this.speedSlider,
             this.speedValue,
             this.presetBtns,
-            this.currentSpeedTriangle,
+            this.speedSliderFill,
             this.setpointSpeed,
             this.currentSpeed,
             {
@@ -1934,6 +2320,41 @@ class BratenDreherBLE {
             this.tmc2209Status,
             this.stallStatus,
             this.stallCount
+        ));
+
+        // StallGuard control with threshold and result display
+        this.controls.set('stallguard', new StallGuardControl(
+            this.stallguardThresholdSlider,
+            this.stallguardThresholdValue,
+            this.stallguardResultValue,
+            this.stallguardSliderFill,
+            {
+                commandType: 'stallguard_threshold',
+                statusKey: null, // Handled specially in the control
+                displayTransform: (value) => {
+                    // Convert slider value (0-255) to percentage display (inverted)
+                    // Slider right (255) = 100%, Slider left (0) = 0%
+                    const percentage = (value / 255) * 100;
+                    return `${percentage.toFixed(1)}%`;
+                },
+                valueTransform: (value) => {
+                    // Invert the slider value: slider right (255) sends 0, slider left (0) sends 255
+                    const invertedValue = 255 - parseInt(value);
+                    return Math.min(Math.max(invertedValue, 0), 255);
+                },
+                debounceTime: 300 // Shorter debounce for threshold changes
+            }
+        ));
+
+        // Power delivery control
+        this.controls.set('powerDelivery', new PowerDeliveryControl(
+            this.voltageSelect,
+            this.negotiateBtn,
+            this.autoNegotiateBtn,
+            this.pdStatus,
+            this.pdPowerGood,
+            this.pdNegotiatedVoltage,
+            this.pdCurrentVoltage
         ));
 
         // Statistics control with calculation logic

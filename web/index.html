@@ -59,15 +59,15 @@
                     Speed: <span id="speedValue">1.0</span> RPM
                 </label>
                 <div class="speed-slider-container">
-                    <input type="range" 
-                           id="speedSlider" 
-                           class="speed-slider"
-                           min="0.1" 
-                           max="30" 
-                           step="0.1" 
-                           value="1.0">
-                    <div class="current-speed-triangle" id="currentSpeedTriangle">
-                        <div class="triangle-indicator"></div>
+                    <div class="speed-slider-wrapper">
+                        <div class="speed-slider-fill" id="speedSliderFill"></div>
+                        <input type="range" 
+                               id="speedSlider" 
+                               class="speed-slider"
+                               min="0.1" 
+                               max="30" 
+                               step="0.1" 
+                               value="1.0">
                     </div>
                 </div>
                 <div class="speed-presets">
@@ -196,6 +196,47 @@
             </div>
         </div>
 
+        <!-- Power Delivery Status -->
+        <div class="card power-card">
+            <h2>⚡ Power Delivery</h2>
+            <div class="power-status">
+                <div class="power-status-grid">
+                    <div class="power-item">
+                        <span class="power-label">Status:</span>
+                        <span id="pdStatus" class="power-value status-unknown">Unknown</span>
+                    </div>
+                    <div class="power-item">
+                        <span class="power-label">Power Good:</span>
+                        <span id="pdPowerGood" class="power-value status-unknown">Unknown</span>
+                    </div>
+                    <div class="power-item">
+                        <span class="power-label">Negotiated:</span>
+                        <span id="pdNegotiatedVoltage" class="power-value">- V</span>
+                    </div>
+                    <div class="power-item">
+                        <span class="power-label">Current:</span>
+                        <span id="pdCurrentVoltage" class="power-value">- V</span>
+                    </div>
+                </div>
+                <div class="power-controls">
+                    <label for="voltageSelect">Target Voltage:</label>
+                    <select id="voltageSelect" class="voltage-select">
+                        <option value="5">5V</option>
+                        <option value="9">9V</option>
+                        <option value="12" selected>12V</option>
+                        <option value="15">15V</option>
+                        <option value="20">20V</option>
+                    </select>
+                    <button id="negotiateBtn" class="btn btn-secondary">
+                        🔌 Renegotiate
+                    </button>
+                    <button id="autoNegotiateBtn" class="btn btn-primary">
+                        ⚡ Auto-Negotiate Highest Power
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Stall Detection -->
         <div class="card stall-card">
             <h2>Stall Detection</h2>
@@ -203,6 +244,34 @@
                 <div class="stall-info">
                     <p>TMC2209 StallGuard monitors motor load and detects when the motor cannot turn due to excessive resistance.</p>
                 </div>
+                
+                <!-- StallGuard Threshold Control -->
+                <div class="control-group stallguard-settings">
+                    <h3>StallGuard Threshold & Load Monitor</h3>
+                    <div class="control-item">
+                        <label for="stallguardThresholdSlider">
+                            Sensitivity: <span id="stallguardThresholdValue">50.2%</span> | Current Load: <span id="stallguardResultValue">50.0%</span>
+                        </label>
+                        <div class="stallguard-slider-container">
+                            <div class="stallguard-slider-wrapper">
+                                <div class="stallguard-slider-fill" id="stallguardSliderFill"></div>
+                                <input type="range" 
+                                       id="stallguardThresholdSlider" 
+                                       class="stallguard-slider"
+                                       min="0" 
+                                       max="255" 
+                                       step="1" 
+                                       value="128">
+                            </div>
+                        </div>
+                        <div class="stallguard-labels">
+                            <span class="stallguard-label-left">0% (Less Sensitive)</span>
+                            <span class="stallguard-label-right">100% (More Sensitive)</span>
+                        </div>
+                        <small class="setting-hint">Green fill shows current motor load percentage (0-100%). Adjust slider to set stall sensitivity.</small>
+                    </div>
+                </div>
+                
                 <div class="stall-status-grid">
                     <div class="stall-status-item">
                         <span class="status-label">Stall Status:</span>
@@ -219,7 +288,7 @@
                     </button>
                 </div>
                 <div class="stall-help">
-                    <small><em>💡 If stalls occur frequently, try reducing speed or checking for mechanical obstructions.</em></small>
+                    <small><em>💡 If stalls occur frequently, try reducing speed, increasing threshold, or checking for mechanical obstructions.</em></small>
                 </div>
             </div>
         </div>
@@ -261,6 +330,10 @@
                     <span id="tmc2209Status" class="status-value">Unknown</span>
                 </div>
                 <div class="status-item">
+                    <span class="status-label">Temperature:</span>
+                    <span id="tmc2209Temperature" class="status-value">Normal</span>
+                </div>
+                <div class="status-item">
                     <span class="status-label">Last Update:</span>
                     <span id="lastUpdate" class="status-value">Never</span>
                 </div>
@@ -287,6 +360,18 @@
         <p class="version">Version 1.0</p>
     </footer>
 
-    <script src="script.js"></script>
+    <!-- Load new architecture files -->
+    <script src="controls.js"></script>
+    <script src="command-manager.js"></script>
+    <script src="control-bindings.js"></script>
+    <script src="app.js"></script>
+    
+    <!-- Initialize the application -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Initializing BratenDreher Web Interface with New Architecture');
+            new BratenDreherApp();
+        });
+    </script>
 </body>
 </html>

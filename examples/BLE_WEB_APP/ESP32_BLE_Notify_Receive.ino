@@ -38,8 +38,8 @@ class MyCharacteristicCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* pLedCharacteristic) {
     String value = pLedCharacteristic->getValue();
     if (value.length() > 0) {
-      Serial.print("Characteristic event, written: ");
-      Serial.println(static_cast<int>(value[0])); // Print the integer value
+        Serial.print("Characteristic event, written: ");
+        Serial.println(static_cast<int>(value[0])); // Print the integer value
 
       int receivedValue = static_cast<int>(value[0]);
       if (receivedValue == 1) {

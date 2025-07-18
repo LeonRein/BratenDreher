@@ -24,14 +24,14 @@ bool SystemStatus::begin() {
     // Create notification queue
     notificationQueue = xQueueCreate(NOTIFICATION_QUEUE_SIZE, sizeof(NotificationData));
     if (notificationQueue == nullptr) {
-        Serial.println("ERROR: Failed to create notification queue");
+        dbg_println("ERROR: Failed to create notification queue");
         return false;
     }
     
     // Create status update queue
     statusUpdateQueue = xQueueCreate(STATUS_UPDATE_QUEUE_SIZE, sizeof(StatusUpdateData));
     if (statusUpdateQueue == nullptr) {
-        Serial.println("ERROR: Failed to create status update queue");
+        dbg_println("ERROR: Failed to create status update queue");
         vQueueDelete(notificationQueue);
         notificationQueue = nullptr;
         return false;

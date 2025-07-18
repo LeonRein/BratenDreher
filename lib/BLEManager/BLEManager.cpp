@@ -17,7 +17,7 @@ public:
     
     void onConnect(BLEServer* pServer) override {
         bleManager->deviceConnected = true;
-        // No Serial print in time-critical callback
+        // No dbg_print in time-critical callback
         
         // Send all current status to the newly connected client
         // Note: This is called from BLE task context, so it's safe to call sendAllCurrentStatus
@@ -33,7 +33,7 @@ public:
         
         // Restart advertising immediately (safe in task context)
         pServer->startAdvertising();
-        // No Serial print in time-critical callback
+        // No dbg_print in time-critical callback
     }
 };
 
@@ -80,7 +80,7 @@ BLEManager::~BLEManager() {
 }
 
 bool BLEManager::begin(const char* deviceName) {
-    Serial.println("Initializing BLE...");
+    dbg_println("Initializing BLE...");
     
     // Initialize BLE
     BLEDevice::init(deviceName);
@@ -94,7 +94,7 @@ bool BLEManager::begin(const char* deviceName) {
     service = server->createService(SERVICE_UUID);
     
     // Create Command Characteristic (bidirectional)
-    Serial.println("Creating command characteristic...");
+    dbg_println("Creating command characteristic...");
     commandCharacteristic = service->createCharacteristic(
         COMMAND_CHARACTERISTIC_UUID,
         BLECharacteristic::PROPERTY_READ | 
@@ -104,18 +104,18 @@ bool BLEManager::begin(const char* deviceName) {
     commandCallbacks = new CommandCharacteristicCallbacks(this);
     commandCharacteristic->setCallbacks(commandCallbacks);
     commandCharacteristic->addDescriptor(new BLE2902());
-    Serial.println("Command characteristic created");
+    dbg_println("Command characteristic created");
     
     // Verify characteristic was created successfully
     if (!commandCharacteristic) {
-        Serial.println("ERROR: Failed to create command characteristic!");
+        dbg_println("ERROR: Failed to create command characteristic!");
         return false;
     }
     
-    Serial.println("BLE characteristic created successfully");
+    dbg_println("BLE characteristic created successfully");
     
     // Start the service
-    Serial.println("Starting BLE service...");
+    dbg_println("Starting BLE service...");
     service->start();
     
     // Start advertising
@@ -125,8 +125,8 @@ bool BLEManager::begin(const char* deviceName) {
     pAdvertising->setMinPreferred(0x0);
     BLEDevice::startAdvertising();
     
-    Serial.println("BLE service started. Waiting for client connection...");
-    Serial.printf("Device name: %s\n", deviceName);
+    dbg_println("BLE service started. Waiting for client connection...");
+    dbg_printf("Device name: %s\n", deviceName);
     
     return true;
 }
@@ -134,11 +134,11 @@ bool BLEManager::begin(const char* deviceName) {
 // setStepperController method removed - using SystemCommand singleton directly
 
 void BLEManager::handleCommand(const std::string& command) {
-    Serial.printf("Processing command: %s (length: %d)\n", command.c_str(), command.length());
+    dbg_printf("Processing command: %s (length: %d)\n", command.c_str(), command.length());
     
     // Prevent buffer overflow attacks  
     if (command.length() > 256 || command.length() == 0) {
-        Serial.printf("ERROR: Invalid command length: %d\n", command.length());
+        dbg_printf("ERROR: Invalid command length: %d\n", command.length());
         return;
     }
     
@@ -147,35 +147,35 @@ void BLEManager::handleCommand(const std::string& command) {
     DeserializationError error = deserializeJson(doc, command);
     
     if (error) {
-        Serial.printf("JSON parse error: %s\n", error.c_str());
+        dbg_printf("JSON parse error: %s\n", error.c_str());
         return;
     }
     
     const char* type = doc["type"];
     if (!type) {
-        Serial.println("Missing command type");
+        dbg_println("Missing command type");
         return;
     }
     
     // Validate that we have the required value field for most commands
     if (strcmp(type, "status_request") != 0 && doc["value"].isNull()) {
-        Serial.println("ERROR: Command missing required 'value' field");
+        dbg_println("ERROR: Command missing required 'value' field");
         return;
     }
     
-    Serial.printf("Processing command type: %s\n", type);
+    dbg_printf("Processing command type: %s\n", type);
     
     if (strcmp(type, "speed") == 0) {
         float speed = doc["value"];
         StepperCommandData cmd(StepperCommand::SET_SPEED, speed);
         systemCommand.sendCommand(cmd);
-        Serial.printf("Speed command queued: %.2f RPM\n", speed);
+        dbg_printf("Speed command queued: %.2f RPM\n", speed);
     }
     else if (strcmp(type, "direction") == 0) {
         bool clockwise = doc["value"];
         StepperCommandData cmd(StepperCommand::SET_DIRECTION, clockwise);
         systemCommand.sendCommand(cmd);
-        Serial.printf("Direction command queued: %s\n", clockwise ? "clockwise" : "counter-clockwise");
+        dbg_printf("Direction command queued: %s\n", clockwise ? "clockwise" : "counter-clockwise");
     }
     else if (strcmp(type, "enable") == 0) {
         bool enable = doc["value"];
@@ -186,31 +186,33 @@ void BLEManager::handleCommand(const std::string& command) {
             StepperCommandData cmd(StepperCommand::DISABLE);
             systemCommand.sendCommand(cmd);
         }
-        Serial.printf("Motor %s command queued\n", enable ? "enable" : "disable");
+        dbg_printf("Motor %s command queued\n", enable ? "enable" : "disable");
     }
     else if (strcmp(type, "current") == 0) {
         int current = doc["value"];
         if (current >= 10 && current <= 100) {
             StepperCommandData cmd(StepperCommand::SET_CURRENT, current);
             systemCommand.sendCommand(cmd);
-            Serial.printf("Current command queued: %d%%\n", current);
+            dbg_printf("Current command queued: %d%%\n", current);
         }
     }
     else if (strcmp(type, "reset") == 0) {
         StepperCommandData cmd(StepperCommand::RESET_COUNTERS);
         systemCommand.sendCommand(cmd);
-        Serial.printf("Reset counters command queued\n");
+        dbg_printf("Reset counters command queued\n");
     }
     else if (strcmp(type, "reset_stall") == 0) {
         StepperCommandData cmd(StepperCommand::RESET_STALL_COUNT);
         systemCommand.sendCommand(cmd);
-        Serial.printf("Reset stall count command queued\n");
+        dbg_printf("Reset stall count command queued\n");
     }
     else if (strcmp(type, "status_request") == 0) {
         // Request all current status from StepperController
-        Serial.println("Status request received, requesting all current status...");
+        dbg_println("Status request received, requesting all current status...");
         StepperCommandData cmd(StepperCommand::REQUEST_ALL_STATUS);
         systemCommand.sendCommand(cmd);
+        PowerDeliveryCommandData pdCmd(PowerDeliveryCommand::REQUEST_ALL_STATUS);
+        systemCommand.sendPowerDeliveryCommand(pdCmd);
     }
     else if (strcmp(type, "acceleration") == 0) {
         // Set acceleration directly in steps/s²
@@ -219,9 +221,9 @@ void BLEManager::handleCommand(const std::string& command) {
         if (accelerationStepsPerSec2 >= 100 && accelerationStepsPerSec2 <= 100000) {
             StepperCommandData cmd(StepperCommand::SET_ACCELERATION, (int)accelerationStepsPerSec2);
             systemCommand.sendCommand(cmd);
-            Serial.printf("Acceleration command queued: %u steps/s²\n", accelerationStepsPerSec2);
+            dbg_printf("Acceleration command queued: %u steps/s²\n", accelerationStepsPerSec2);
         } else {
-            Serial.println("Invalid acceleration parameters");
+            dbg_println("Invalid acceleration parameters");
             sendNotification("error", "Acceleration must be 100-100000 steps/s²");
         }
     }
@@ -230,9 +232,9 @@ void BLEManager::handleCommand(const std::string& command) {
         if (strength >= 0.0f && strength <= 1.0f) {
             StepperCommandData cmd(StepperCommand::SET_SPEED_VARIATION, strength);
             systemCommand.sendCommand(cmd);
-            Serial.printf("Speed variation strength command queued: %.2f\n", strength);
+            dbg_printf("Speed variation strength command queued: %.2f\n", strength);
         } else {
-            Serial.println("Invalid speed variation strength");
+            dbg_println("Invalid speed variation strength");
             sendNotification("error", "Speed variation strength must be 0.0-1.0");
         }
     }
@@ -240,33 +242,63 @@ void BLEManager::handleCommand(const std::string& command) {
         float phase = doc["value"];
         StepperCommandData cmd(StepperCommand::SET_SPEED_VARIATION_PHASE, phase);
         systemCommand.sendCommand(cmd);
-        Serial.printf("Speed variation phase command queued: %.2f radians\n", phase);
+        dbg_printf("Speed variation phase command queued: %.2f radians\n", phase);
     }
     else if (strcmp(type, "enable_speed_variation") == 0) {
         StepperCommandData cmd(StepperCommand::ENABLE_SPEED_VARIATION);
         systemCommand.sendCommand(cmd);
-        Serial.printf("Enable speed variation command queued\n");
+        dbg_printf("Enable speed variation command queued\n");
     }
     else if (strcmp(type, "disable_speed_variation") == 0) {
         StepperCommandData cmd(StepperCommand::DISABLE_SPEED_VARIATION);
         systemCommand.sendCommand(cmd);
-        Serial.printf("Disable speed variation command queued\n");
+        dbg_printf("Disable speed variation command queued\n");
+    }
+    else if (strcmp(type, "stallguard_threshold") == 0) {
+        int threshold = doc["value"];
+        if (threshold >= 0 && threshold <= 255) {
+            StepperCommandData cmd(StepperCommand::SET_STALLGUARD_THRESHOLD, threshold);
+            systemCommand.sendCommand(cmd);
+            dbg_printf("StallGuard threshold command queued: %d\n", threshold);
+        } else {
+            dbg_println("Invalid StallGuard threshold");
+            sendNotification("error", "StallGuard threshold must be 0-255");
+        }
+    }
+    else if (strcmp(type, "pd_voltage") == 0) {
+        // Set power delivery target voltage and start negotiation
+        int voltage = doc["value"];
+        if (voltage >= 5 && voltage <= 20) {
+            PowerDeliveryCommandData cmd(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
+            systemCommand.sendPowerDeliveryCommand(cmd);
+            
+            dbg_printf("Power delivery voltage set to %dV and negotiation started\n", voltage);
+        } else {
+            dbg_printf("Invalid voltage value: %d (must be 5-20V)\n", voltage);
+        }
+    }
+    else if (strcmp(type, "pd_auto_negotiate") == 0) {
+        // Start auto-negotiation for highest available voltage
+        PowerDeliveryCommandData cmd(PowerDeliveryCommand::AUTO_NEGOTIATE_HIGHEST);
+        systemCommand.sendPowerDeliveryCommand(cmd);
+        
+        dbg_printf("Power delivery auto-negotiation started\n");
     }
     else {
-        Serial.printf("Unknown command type: %s\n", type);
+        dbg_printf("Unknown command type: %s\n", type);
     }
 }
 
 void BLEManager::run() {
-    Serial.println("BLE Task started");
+    dbg_println("BLE Task started");
     
     // Initialize BLE manager
     if (!begin("BratenDreher")) {
-        Serial.println("Failed to initialize BLE manager!");
+        dbg_println("Failed to initialize BLE manager!");
         return;
     }
     
-    Serial.println("BLE Manager initialized successfully!");
+    dbg_println("BLE Manager initialized successfully!");
     
     while (true) {
         update(); // update() now includes its own delay
@@ -280,19 +312,16 @@ void BLEManager::update() {
     // Process status updates from StepperController (simple batching)
     processStatusUpdates();
     
-    // Process status updates from StepperController (simple batching)
-    processStatusUpdates();
-    
     // Handle connection state changes
     if (!deviceConnected && oldDeviceConnected) {
         server->startAdvertising(); // Restart advertising
-        Serial.println("BLE client disconnected - restarted advertising");
+        dbg_println("BLE client disconnected - restarted advertising");
         oldDeviceConnected = deviceConnected;
     }
     
     if (deviceConnected && !oldDeviceConnected) {
         oldDeviceConnected = deviceConnected;
-        Serial.println("BLE client connected");
+        dbg_println("BLE client connected");
     }
     
     // Small delay to prevent busy waiting when no commands are queued
@@ -318,11 +347,11 @@ void BLEManager::processNotifications() {
                 break;
         }
         
-        Serial.printf("Notification: %s", level.c_str());
+        dbg_printf("Notification: %s", level.c_str());
         if (strlen(notification.message) > 0) {
-            Serial.printf(" - %s", notification.message);
+            dbg_printf(" - %s", notification.message);
         }
-        Serial.println();
+        dbg_println();
         
         // Send notification to client
         sendNotification(level, String(notification.message));
@@ -339,7 +368,6 @@ void BLEManager::processStatusUpdates() {
         // Create JSON document and add the first update
         JsonDocument statusDoc;
         statusDoc["type"] = "status_update";
-        statusDoc["timestamp"] = millis();
         
         // Add the first status update
         addStatusToJson(statusDoc, statusUpdate);
@@ -352,7 +380,7 @@ void BLEManager::processStatusUpdates() {
             String tempString;
             size_t tempSize = serializeJson(statusDoc, tempString);
             if (tempSize >= MAX_BLE_PACKET_SIZE) {
-                Serial.printf("Warning: Status update approaching size limit (%d bytes), sending now\n", tempSize);
+                dbg_printf("Warning: Status update approaching size limit (%d bytes), sending now\n", tempSize);
                 break;
             }
         }
@@ -406,6 +434,27 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
         case StatusUpdateType::TMC2209_STATUS_UPDATE:
             doc["tmc2209Status"] = statusUpdate.boolValue;
             break;
+        case StatusUpdateType::TMC2209_TEMPERATURE_UPDATE:
+            doc["tmc2209Temperature"] = statusUpdate.intValue;
+            break;
+        case StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED:
+            doc["stallguardThreshold"] = statusUpdate.intValue;
+            break;
+        case StatusUpdateType::STALLGUARD_RESULT_UPDATE:
+            doc["stallguardResult"] = statusUpdate.intValue;
+            break;
+        case StatusUpdateType::PD_NEGOTIATION_STATUS:
+            doc["pdNegotiationStatus"] = statusUpdate.intValue;
+            break;
+        case StatusUpdateType::PD_NEGOTIATED_VOLTAGE:
+            doc["pdNegotiatedVoltage"] = statusUpdate.floatValue;
+            break;
+        case StatusUpdateType::PD_CURRENT_VOLTAGE:
+            doc["pdCurrentVoltage"] = statusUpdate.floatValue;
+            break;
+        case StatusUpdateType::PD_POWER_GOOD_STATUS:
+            doc["pdPowerGood"] = statusUpdate.boolValue;
+            break;
     }
 }
 
@@ -413,11 +462,11 @@ void BLEManager::sendStatusUpdate(JsonDocument& statusDoc) {
     String statusString;
     size_t result = serializeJson(statusDoc, statusString);
     if (result == 0) {
-        Serial.println("ERROR: Failed to serialize status JSON");
+        dbg_println("ERROR: Failed to serialize status JSON");
         return;
     }
     
-    Serial.printf("Sending status update (%d bytes): %s\n", 
+    dbg_printf("Sending status update (%d bytes): %s\n", 
                   statusString.length(), statusString.c_str());
     
     try {
@@ -427,7 +476,7 @@ void BLEManager::sendStatusUpdate(JsonDocument& statusDoc) {
         // Small delay to prevent overwhelming BLE stack
         vTaskDelay(pdMS_TO_TICKS(10));
     } catch (...) {
-        Serial.println("Failed to send status update notification");
+        dbg_println("Failed to send status update notification");
     }
 }
 
@@ -445,13 +494,13 @@ void BLEManager::sendNotification(const String& level, const String& message) {
     String response;
     size_t result = serializeJson(doc, response);
     if (result == 0) {
-        Serial.println("ERROR: Failed to serialize notification JSON");
+        dbg_println("ERROR: Failed to serialize notification JSON");
         return;
     }
     
     // Ensure response is not too long for BLE characteristic
     if (response.length() > 512) {
-        Serial.printf("WARNING: Notification too long (%d chars), truncating\n", response.length());
+        dbg_printf("WARNING: Notification too long (%d chars), truncating\n", response.length());
         response = response.substring(0, 512);
     }
     
@@ -463,7 +512,7 @@ void BLEManager::sendNotification(const String& level, const String& message) {
         // Small delay to prevent overwhelming BLE stack
         vTaskDelay(pdMS_TO_TICKS(5));
     } catch (...) {
-        Serial.println("ERROR: Failed to send notification");
+        dbg_println("ERROR: Failed to send notification");
     }
 }
 
@@ -472,10 +521,15 @@ void BLEManager::sendAllCurrentStatus() {
         return;
     }
     
-    Serial.println("Requesting all current status from StepperController...");
+    dbg_println("Requesting all current status from StepperController and PowerDeliveryTask...");
     
     // Use the thread-safe SystemCommand to request all status information
-    StepperCommandData cmd(StepperCommand::REQUEST_ALL_STATUS);
-    systemCommand.sendCommand(cmd);
-    Serial.println("Status request sent");
+    StepperCommandData stepperCmd(StepperCommand::REQUEST_ALL_STATUS);
+    systemCommand.sendCommand(stepperCmd);
+    
+    // Also request power delivery status
+    PowerDeliveryCommandData pdCmd(PowerDeliveryCommand::REQUEST_ALL_STATUS);
+    systemCommand.sendPowerDeliveryCommand(pdCmd);
+    
+    dbg_println("Status requests sent");
 }

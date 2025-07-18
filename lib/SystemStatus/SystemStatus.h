@@ -14,6 +14,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "StatusTypes.h"
+#include "dbg_print.h"
 
 // Queue size configuration
 #define NOTIFICATION_QUEUE_SIZE     10     // Notification queue size (smaller since only warnings/errors)

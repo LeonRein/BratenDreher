@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "dbg_print.h"
 
 class Task {
 protected:
@@ -48,10 +49,10 @@ public:
         
         if (result == pdPASS) {
             isRunning = true;
-            Serial.printf("Task '%s' started successfully\n", taskName);
+            dbg_printf("Task '%s' started successfully\n", taskName);
             return true;
         } else {
-            Serial.printf("Failed to create task '%s'\n", taskName);
+            dbg_printf("Failed to create task '%s'\n", taskName);
             return false;
         }
     }
@@ -62,7 +63,7 @@ public:
             vTaskDelete(taskHandle);
             taskHandle = NULL;
             isRunning = false;
-            Serial.printf("Task '%s' stopped\n", taskName);
+            dbg_printf("Task '%s' stopped\n", taskName);
         }
     }
     
