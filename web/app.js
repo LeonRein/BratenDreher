@@ -163,14 +163,9 @@ class BratenDreherApp {
             activeClass: 'active'
         }));
 
-        // Direction buttons
-        this.controls.set('clockwiseBtn', new ButtonControl(this.clockwiseBtn, {
-            type: 'toggle',
-            activeClass: 'active'
-        }));
-
-        this.controls.set('counterclockwiseBtn', new ButtonControl(this.counterclockwiseBtn, {
-            type: 'toggle',
+        // Direction buttons - create as radio group
+        this.controls.set('directionButtons', new ButtonControl([this.clockwiseBtn, this.counterclockwiseBtn], {
+            type: 'radio-group',
             activeClass: 'active'
         }));
 
@@ -325,8 +320,7 @@ class BratenDreherApp {
 
         // Direction control binding
         this.bindings.set('direction', new DirectionControlBinding(
-            this.controls.get('clockwiseBtn'),
-            this.controls.get('counterclockwiseBtn'),
+            this.controls.get('directionButtons'),
             this.controls.get('directionDisplay')
         ));
 
@@ -523,12 +517,9 @@ class BratenDreherApp {
         };
 
         // Direction button events
-        this.controls.get('clockwiseBtn').options.onClick = () => {
-            this.bindings.get('direction').setDirection(true);
-        };
-
-        this.controls.get('counterclockwiseBtn').options.onClick = () => {
-            this.bindings.get('direction').setDirection(false);
+        this.controls.get('directionButtons').options.onClick = (value, index, button) => {
+            const clockwise = index === 0; // First button is clockwise
+            this.bindings.get('direction').setDirection(clockwise);
         };
 
         // Motor toggle event
@@ -685,7 +676,7 @@ class BratenDreherApp {
         
         // Update all controls
         this.controls.forEach(control => {
-            control.setDisplayState(state);
+            control.setDisplayState(state, true);
         });
 
         // Handle other UI elements

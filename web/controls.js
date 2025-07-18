@@ -73,9 +73,9 @@ class BaseControl {
      * Unified display state management with performance optimization
      * @param {string} state - The display state to apply
      */
-    setDisplayState(state) {
+    setDisplayState(state, force = false) {
         // Skip if state hasn't changed (performance optimization)
-        if (this.displayState === state) {
+        if (!force && this.displayState === state) {
             return;
         }
         

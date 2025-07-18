@@ -143,7 +143,7 @@ class SpeedControlBinding extends ControlBinding {
                 this.speedDisplay.updateValue(speed);
                 
                 // Update preset button active state
-                this.presetButtons.setActiveByValue(speed);
+                this.updatePresetButtonState(speed);
             }
 
             if (statusUpdate.currentSpeed !== undefined) {
@@ -152,23 +152,62 @@ class SpeedControlBinding extends ControlBinding {
             }
         };
     }
+
+    // Override handleValueChange to update preset buttons when slider moves
+    async handleValueChange(value) {
+        // Update preset buttons immediately when slider moves
+        this.updatePresetButtonState(value);
+        
+        // Call parent implementation
+        return await super.handleValueChange(value);
+    }
+
+    // Update preset button active state based on current speed
+    updatePresetButtonState(currentSpeed) {
+        if (!this.presetButtons || !this.presetButtons.buttons) return;
+        
+        // Find the closest preset button to the current speed
+        let closestButton = null;
+        let closestDifference = Infinity;
+        
+        this.presetButtons.buttons.forEach(button => {
+            if (button && button.dataset.speed) {
+                const presetSpeed = parseFloat(button.dataset.speed);
+                const difference = Math.abs(presetSpeed - currentSpeed);
+                
+                if (difference < closestDifference && difference < 0.1) { // Within 0.1 RPM tolerance
+                    closestDifference = difference;
+                    closestButton = button;
+                }
+            }
+        });
+        
+        // Update button states
+        this.presetButtons.buttons.forEach(button => {
+            if (button) {
+                if (button === closestButton) {
+                    button.classList.add(this.presetButtons.options.activeClass);
+                } else {
+                    button.classList.remove(this.presetButtons.options.activeClass);
+                }
+            }
+        });
+    }
 }
 
 // Direction control binding with button coordination
 class DirectionControlBinding extends ControlBinding {
-    constructor(clockwiseBtn, counterclockwiseBtn, directionDisplay, config = {}) {
+    constructor(directionButtons, directionDisplay, config = {}) {
         super({
             commandType: 'direction',
             statusKeys: ['direction'],
             ...config
         });
 
-        this.clockwiseBtn = clockwiseBtn;
-        this.counterclockwiseBtn = counterclockwiseBtn;
+        this.directionButtons = directionButtons;
         this.directionDisplay = directionDisplay;
 
-        this.addControl(clockwiseBtn);
-        this.addControl(counterclockwiseBtn);
+        this.addControl(directionButtons);
         this.addControl(directionDisplay);
 
         // Custom status handler for direction control
@@ -176,9 +215,8 @@ class DirectionControlBinding extends ControlBinding {
             if (statusUpdate.direction !== undefined) {
                 const clockwise = statusUpdate.direction === 'cw';
                 
-                // Update button states
-                this.clockwiseBtn.setActiveButton(clockwise ? 0 : -1);
-                this.counterclockwiseBtn.setActiveButton(clockwise ? -1 : 0);
+                // Update button states - index 0 is clockwise, index 1 is counterclockwise
+                this.directionButtons.setActiveButton(clockwise ? 0 : 1);
                 
                 // Update direction display
                 this.directionDisplay.updateValue(clockwise ? 'Clockwise' : 'Counter-clockwise');
