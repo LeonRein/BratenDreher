@@ -502,6 +502,15 @@ class BratenDreherApp {
         }));
         this.bindings.get('currentSpeed').addControl(this.controls.get('currentSpeedDisplay'));
         
+        // Timestamp binding
+        this.bindings.set('timestamp', new ControlBinding({
+            statusKeys: [], // Always update on any status update
+            customStatusHandler: () => {
+                this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
+            }
+        }));
+        this.bindings.get('timestamp').addControl(this.controls.get('lastUpdateDisplay'));
+        
 
         // Set command manager for all bindings
         this.bindings.forEach(binding => {
@@ -615,17 +624,10 @@ class BratenDreherApp {
     }
 
     handleStatusUpdate(statusUpdate) {
-        // Update timestamp
-        this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
-
-
         // Delegate to all bindings
         this.bindings.forEach(binding => {
             binding.handleStatusUpdate(statusUpdate);
         });
-        
-        // Update current speed display must be handled by bindings
-        // Removed separate handling to ensure consistency
     }
 
     handleNotification(notification) {
