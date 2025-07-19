@@ -361,6 +361,11 @@ class BratenDreherApp {
                     return minAcceleration;
                 }
                 return acceleration;
+            },
+            statusTransform: (accelerationValue) => {
+                // Convert from microsteps/s² (backend) to time seconds (UI slider)
+                const timeSeconds = this.accelerationToTime(accelerationValue);
+                return parseFloat(timeSeconds.toFixed(1));
             }
         }));
         this.bindings.get('acceleration').addControl(this.controls.get('accelerationSlider'));
@@ -672,7 +677,14 @@ class BratenDreherApp {
     }
 
     updateUI() {
-        const state = this.commandManager.isConnected() ? CONTROL_STATES.OUTDATED : CONTROL_STATES.DISABLED;
+        // Determine the appropriate state based on connection status
+        let state;
+        if (!this.commandManager.isConnected()) {
+            state = CONTROL_STATES.DISABLED;
+        } else {
+            // When connected, set to OUTDATED initially - status updates will set to VALID
+            state = CONTROL_STATES.OUTDATED;
+        }
         
         // Update all controls
         this.controls.forEach(control => {
