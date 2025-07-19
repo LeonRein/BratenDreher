@@ -490,6 +490,17 @@ class BratenDreherApp {
                 }
             }
         }));
+
+        // Current speed display binding
+        this.bindings.set('currentSpeed', new ControlBinding({
+            statusKeys: ['currentSpeed'],
+            customStatusHandler: (statusUpdate, controls, config) => {
+                if (statusUpdate.currentSpeed !== undefined) {
+                    controls[0].updateValue(statusUpdate.currentSpeed);
+                }
+            }
+        }));
+        this.bindings.get('currentSpeed').addControl(this.controls.get('currentSpeedDisplay'));
         
 
         // Set command manager for all bindings
@@ -607,15 +618,14 @@ class BratenDreherApp {
         // Update timestamp
         this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
 
-        // Update current speed display
-        if (statusUpdate.currentSpeed !== undefined) {
-            this.controls.get('currentSpeedDisplay').updateValue(statusUpdate.currentSpeed);
-        }
 
         // Delegate to all bindings
         this.bindings.forEach(binding => {
             binding.handleStatusUpdate(statusUpdate);
         });
+        
+        // Update current speed display must be handled by bindings
+        // Removed separate handling to ensure consistency
     }
 
     handleNotification(notification) {
