@@ -108,7 +108,6 @@ void StepperController::applyStop()
     motorEnabled = false;
     publishTMC2209Communication();
 
-    systemStatus.sendNotification(NotificationType::WARNING, "Stepper stopped");
     systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
 }
 
@@ -130,7 +129,6 @@ void StepperController::applyCurrent(uint8_t current)
     runCurrent = current;
     stepperDriver.setRunCurrent(current);
 
-    systemStatus.sendNotification(NotificationType::WARNING, "Run current set to " + String(current) + "%");
     systemStatus.publishStatusUpdate(StatusUpdateType::CURRENT_CHANGED, current);
 }
 

@@ -361,6 +361,11 @@ class BratenDreherApp {
                     return minAcceleration;
                 }
                 return acceleration;
+            },
+            statusTransform: (accelerationValue) => {
+                // Convert from microsteps/s² (backend) to time seconds (UI slider)
+                const timeSeconds = this.accelerationToTime(accelerationValue);
+                return parseFloat(timeSeconds.toFixed(1));
             }
         }));
         this.bindings.get('acceleration').addControl(this.controls.get('accelerationSlider'));
@@ -485,6 +490,26 @@ class BratenDreherApp {
                 }
             }
         }));
+
+        // Current speed display binding
+        this.bindings.set('currentSpeed', new ControlBinding({
+            statusKeys: ['currentSpeed'],
+            customStatusHandler: (statusUpdate, controls, config) => {
+                if (statusUpdate.currentSpeed !== undefined) {
+                    controls[0].updateValue(statusUpdate.currentSpeed);
+                }
+            }
+        }));
+        this.bindings.get('currentSpeed').addControl(this.controls.get('currentSpeedDisplay'));
+        
+        // Timestamp binding
+        this.bindings.set('timestamp', new ControlBinding({
+            statusKeys: [], // Always update on any status update
+            customStatusHandler: () => {
+                this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
+            }
+        }));
+        this.bindings.get('timestamp').addControl(this.controls.get('lastUpdateDisplay'));
         
 
         // Set command manager for all bindings
@@ -599,14 +624,6 @@ class BratenDreherApp {
     }
 
     handleStatusUpdate(statusUpdate) {
-        // Update timestamp
-        this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
-
-        // Update current speed display
-        if (statusUpdate.currentSpeed !== undefined) {
-            this.controls.get('currentSpeedDisplay').updateValue(statusUpdate.currentSpeed);
-        }
-
         // Delegate to all bindings
         this.bindings.forEach(binding => {
             binding.handleStatusUpdate(statusUpdate);
@@ -672,7 +689,14 @@ class BratenDreherApp {
     }
 
     updateUI() {
-        const state = this.commandManager.isConnected() ? CONTROL_STATES.OUTDATED : CONTROL_STATES.DISABLED;
+        // Determine the appropriate state based on connection status
+        let state;
+        if (!this.commandManager.isConnected()) {
+            state = CONTROL_STATES.DISABLED;
+        } else {
+            // When connected, set to OUTDATED initially - status updates will set to VALID
+            state = CONTROL_STATES.OUTDATED;
+        }
         
         // Update all controls
         this.controls.forEach(control => {

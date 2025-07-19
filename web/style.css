@@ -548,32 +548,6 @@ body {
     padding: 8px 16px;
 }
 
-.status-value-with-action {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.btn-inline {
-    font-size: 0.75rem;
-    padding: 4px 8px;
-    min-height: auto;
-    line-height: 1.2;
-}
-
-.status-item-with-button {
-    align-items: center;
-    justify-content: center;
-}
-
-.status-item-with-button .btn {
-    width: 100%;
-    max-width: 200px;
-    font-size: 0.9rem;
-    padding: 8px 16px;
-}
-
 .status-label {
     font-weight: 500;
     color: #374151;
