@@ -525,9 +525,9 @@ class BratenDreherApp {
         this.disconnectBtn.addEventListener('click', () => this.commandManager.disconnect());
 
         // Bind all control events
-        this.controls.forEach(control => {
-            control.bindEvents();
-        });
+        // this.controls.forEach(control => {
+        //     control.bindEvents();
+        // });
 
         // Speed slider event
         this.controls.get('speedSlider').options.onValueChange = (value) => {
@@ -710,7 +710,7 @@ class BratenDreherApp {
             this.resetStallBtn
         ];
         
-        const opacity = this.commandManager.isConnected() ? '0.7' : '0.4';
+        const opacity = this.commandManager.isConnected() ? '1' : '0.4';
         const disabled = !this.commandManager.isConnected();
         
         otherControls.forEach(control => {
@@ -737,7 +737,8 @@ class BratenDreherApp {
         
         // Hide speed fill during emergency stop
         this.controls.get('speedSlider').hideFill();
-        
+
+        await this.bindings.get('acceleration').handleValueChange(1);
         await this.bindings.get('motor').handleValueChange(false);
         
         // Visual feedback

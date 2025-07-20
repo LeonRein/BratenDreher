@@ -186,6 +186,8 @@ class SliderControl extends BaseControl {
                 applyClasses: false 
             });
         }
+        
+        this.bindEvents();
     }
 
     bindEvents() {
@@ -260,6 +262,8 @@ class ButtonControl extends BaseControl {
             clickValue: undefined,
             ...options
         };
+
+        this.bindEvents();
     }
 
     bindEvents() {
@@ -324,6 +328,8 @@ class ToggleControl extends BaseControl {
             debounceTime: 0, // No debouncing for toggles by default
             ...options
         };
+
+        this.bindEvents();
     }
 
     bindEvents() {
@@ -365,6 +371,8 @@ class SelectControl extends BaseControl {
             debounceTime: 0, // No debouncing for selects by default
             ...options
         };
+
+        this.bindEvents();
     }
 
     bindEvents() {
@@ -407,6 +415,8 @@ class DisplayControl extends BaseControl {
             colorizer: null, // Function that returns color based on value
             ...options
         };
+
+        this.bindEvents();
     }
 
     updateValue(value) {
@@ -450,6 +460,8 @@ class CompositeControl extends BaseControl {
         this.options = {
             ...options
         };
+
+        this.bindEvents();
     }
 
     addChildControl(control) {

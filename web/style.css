@@ -399,7 +399,7 @@ body {
 .stallguard-settings {
     margin-bottom: 20px;
     padding: 16px;
-    background: rgba(239, 68, 68, 0.05);
+    background: rgba(16, 185, 129, 0.05);
     border-radius: 8px;
     border: 1px solid rgba(239, 68, 68, 0.15);
 }
@@ -669,7 +669,7 @@ body {
 
 .stall-info {
     padding: 12px;
-    background: rgba(245, 158, 11, 0.05);
+    background: rgba(59, 130, 246, 0.05);
     border-radius: 8px;
     border: 1px solid rgba(245, 158, 11, 0.15);
 }
@@ -788,7 +788,7 @@ body {
 .variable-speed-controls {
     margin-top: 16px;
     padding: 16px;
-    background: #f9fafb;
+    background: rgba(16, 185, 129, 0.05);
     border-radius: 8px;
     border: 1px solid #e5e7eb;
     transition: all 0.3s ease;

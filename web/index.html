@@ -156,6 +156,7 @@
                                max="100" 
                                step="5" 
                                value="30">
+                        <small class="setting-hint">Set to lowest value that does not stall the motor the reduce heat</small>
                     </div>
                     <div class="setting-item">
                         <label for="accelerationTimeSlider">Acceleration Time: <span id="accelerationTimeValue">5</span>s</label>
@@ -272,12 +273,12 @@
                     </div>
                 </div>
                 
-                <div class="stall-status-grid">
-                    <div class="stall-status-item">
+                <div class="status-grid">
+                    <div class="status-item">
                         <span class="status-label">Stall Status:</span>
                         <span id="stallStatus" class="status-value">OK</span>
                     </div>
-                    <div class="stall-status-item">
+                    <div class="status-item">
                         <span class="status-label">Stall Count:</span>
                         <span id="stallCount" class="status-value">0</span>
                     </div>
