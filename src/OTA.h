@@ -2,6 +2,8 @@
 #include "../../secrets.h"
 #include "StepperController.h"
 
+#define OTA_UPDATE_BUTTON_PIN 35 // GPIO pin for OTA update button
+
 void setupOTA()
 {
   WiFi.mode(WIFI_STA);
@@ -58,4 +60,15 @@ void setupOTA()
 void loopOTA()
 {
   ArduinoOTA.handle();
+}
+
+void handleOTAButton() {
+  if (digitalRead(OTA_UPDATE_BUTTON_PIN) == LOW) {
+    dbg_println("OTA update button pressed, starting OTA...");
+    setupOTA();
+    while (true) {
+      loopOTA();
+      delay(100); // Allow some time for OTA handling
+    }   
+  }
 }

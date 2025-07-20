@@ -19,6 +19,8 @@ unsigned long lastLedToggle = 0;
 bool ledState = false;
 
 void setup() {
+    handleOTAButton();
+
     delay(200);
     // Initialize USB CDC for ESP32-S3
     Serial.begin(115200);
@@ -91,12 +93,8 @@ void setup() {
     
     // Turn on status LED to indicate ready state
     digitalWrite(STATUS_LED_PIN, HIGH);
-
-    setupOTA();
 }
 
 void loop() {
-    vTaskDelay(pdMS_TO_TICKS(100)); // 100ms delay, plenty for LED control
-
-    loopOTA(); // Handle OTA updates if available
+    vTaskDelay(pdMS_TO_TICKS(100));
 }

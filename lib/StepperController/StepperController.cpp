@@ -1481,4 +1481,9 @@ void StepperController::setStallGuardThresholdInternal(uint8_t threshold)
 
     // Publish status update for StallGuard threshold change
     systemStatus.publishStatusUpdate(StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED, threshold);
+
+    if (!isInitializing)
+    {
+        saveSettings();
+    }
 }
