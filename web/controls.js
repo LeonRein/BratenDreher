@@ -227,8 +227,6 @@ class SliderControl extends BaseControl {
             if (this.valueElement) {
                 this.valueElement.textContent = this.options.displayTransform(value);
             }
-            // Update fill immediately for backend/programmatic changes
-            this.updateFillPosition(value);
         }
     }
 

@@ -225,7 +225,7 @@
                 </div>
             </div>
             <div class="stats-buttons">
-                <button id="resetStatsBtn" class="btn secondary stats-reset">
+                <button id="resetStatsBtn" class="btn secondary stats-reset" style="width:100%;">
                     📊 Reset Statistics
                 </button>
             </div>
@@ -278,16 +278,13 @@
         <div class="card accent-orange">
             <h2>Stall Detection</h2>
             <div class="stall-content">
-                <div class="stall-info">
-                    <p>TMC2209 StallGuard monitors motor load and detects when the motor cannot turn due to excessive resistance.</p>
-                </div>
-                
-                <!-- StallGuard Threshold Control -->
-                <div class="control-group stallguard-settings">
+
+                <div class="group-box">
                     <h3>StallGuard Threshold & Load Monitor</h3>
-                    <div class="control-item">
+                    <div class="control-group">
                         <label for="stallguardThresholdSlider" class="label">
-                            Sensitivity: <span id="stallguardThresholdValue">50.2%</span> | Current Load: <span id="stallguardResultValue">50.0%</span>
+                            Sensitivity: <span id="stallguardThresholdValue">50.2%</span>
+                            &nbsp;|&nbsp; Current Load: <span id="stallguardResultValue">50.0%</span>
                         </label>
                         <div class="slider-container">
                             <div class="slider-wrapper">
@@ -306,23 +303,25 @@
                         </div>
                     </div>
                 </div>
-                
-                <div class="grid cols-2">
-                    <div class="status-item item-box">
-                        <span class="status-label">Stall Status:</span>
-                        <span id="stallStatus" class="status-value">OK</span>
+
+                <div class="group-box">
+                    <h3>Status</h3>
+                    <div class="grid cols-2">
+                        <div class="item-box">
+                            <span class="status-label">Stall Status:</span>
+                            <span id="stallStatus" class="status-value">OK</span>
+                        </div>
+                        <div class="item-box">
+                            <span class="status-label">Stall Count:</span>
+                            <span id="stallCount" class="status-value">0</span>
+                        </div>
                     </div>
-                    <div class="status-item item-box">
-                        <span class="status-label">Stall Count:</span>
-                        <span id="stallCount" class="status-value">0</span>
-                    </div>
-                </div>
-                <div class="stall-actions">
-                    <button id="resetStallBtn" class="btn warning">
+                    <button id="resetStallBtn" class="btn warning" style="width:100%;margin-top:8px;">
                         ⚠️ Reset Stall Count
                     </button>
                 </div>
-                <div class="stall-help hint-box">
+
+                <div class="hint-box" style="margin-top:16px;">
                     <small><em>💡 If stalls occur frequently, try reducing speed, increasing threshold, or checking for mechanical obstructions.</em></small>
                 </div>
             </div>
