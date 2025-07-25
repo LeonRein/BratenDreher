@@ -14,6 +14,7 @@
   --color-accent-blue: #3b82f6;
   --color-accent-green: #10b981;
   --color-accent-purple: #8b5cf6;
+  --spacing: 16px;
   --color-accent-red: #ef4444;
   --color-accent-orange: #f59e0b;
   --color-accent-dark: #6b7280;
@@ -129,6 +130,11 @@ body {
   width: 100%;
   gap: 8px;
 }
+.preset-buttons,
+.direction-buttons,
+.connection-buttons {
+  margin-bottom: var(--spacing);
+}
 
 .preset-buttons .btn,
 .direction-buttons .btn,
@@ -203,4 +209,12 @@ body {
 }
 .voltage-select option {
   font-size: var(--font-size-base);
+}
+
+.control-group:not(:last-child) {
+  margin-bottom: var(--spacing);
+}
+
+.stats-buttons {
+  margin-top: var(--spacing);
 }
