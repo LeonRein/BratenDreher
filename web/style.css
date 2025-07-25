@@ -113,6 +113,42 @@ body {
 .grid.cols-2 { grid-template-columns: 1fr 1fr; }
 .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 
+/* Full-width button groups */
+.preset-buttons,
+.direction-buttons,
+.connection-buttons {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+}
+
+.preset-buttons .btn,
+.direction-buttons .btn,
+.connection-buttons .btn {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Status Item Box */
+.item-box {
+  background: var(--item-box-bg, rgba(16,185,129,0.05));
+  border-radius: var(--item-box-radius, 8px);
+  border: 1px solid var(--item-box-border, rgba(16,185,129,0.15));
+  padding: var(--item-box-padding, 8px 12px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.stat-item.item-box {
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  padding: var(--stat-item-padding, 16px 12px);
+  background: var(--stat-item-bg, rgba(139,92,246,0.05));
+  border: 1px solid var(--stat-item-border, rgba(139,92,246,0.15));
+}
+
 /* Toggles */
 .toggle-switch { position: relative; display: inline-block; }
 .toggle-input { display: none; }
