@@ -187,7 +187,7 @@ body {
 .toggle-input:checked + .toggle-label .toggle-text-on { opacity: 1; color: #fff; }
 
 /* Labels & Info */
-.label { display: block; margin-bottom: calc(var(--spacing) / 2); font-weight: 600; color: #374151; }
+.label { display: block; margin-bottom: calc(var(--spacing) / 2); margin-top: calc(var(--spacing) / 2); font-weight: 600; color: #374151; }
 .hint { font-size: 0.75rem; color: var(--color-subtle); font-style: italic; margin-top: 4px; }
 .info { font-size: var(--font-size-small); color: #4b5563; margin-bottom: calc(var(--spacing) / 2); }
 
