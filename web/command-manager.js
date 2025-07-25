@@ -365,7 +365,10 @@ class CommandManager {
             'speedVariationStrength': ['speed_variation_strength'],
             'speedVariationPhase': ['speed_variation_phase'],
             'stallguardThreshold': ['stallguard_threshold'],
-            'pdNegotiationStatus': ['pd_voltage', 'pd_auto_negotiate']
+            'pdNegotiationStatus': ['pd_voltage', 'pd_auto_negotiate'],
+            'totalRevolutions': ['reset'],
+            'runtime': ['reset'],
+            'stallCount': ['reset_stall']
         };
         
         for (const [statusKey, relatedCommands] of Object.entries(statusToCommandMap)) {

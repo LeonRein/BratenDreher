@@ -803,6 +803,10 @@ void StepperController::resetCountersInternal()
     startTime = millis();
     isFirstStart = false;
 
+    // Publish status updates for reset statistics
+    systemStatus.publishStatusUpdate(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, 0.0f);
+    systemStatus.publishStatusUpdate(StatusUpdateType::RUNTIME_UPDATE, 0UL);
+
     dbg_println("Counters reset");
     // Success is indicated by the status update - no notification needed
 }
