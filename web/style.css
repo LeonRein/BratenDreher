@@ -45,10 +45,19 @@ body {
   line-height: 1.6;
   min-height: 100vh;
 }
-.container { max-width: 600px; margin: 0 auto; padding: var(--spacing); }
+.container { 
+  max-width: 700px; 
+  margin: var(--spacing) auto; 
+  padding: calc(var(--spacing) * 1.5); 
+}
 
 /* Header */
-.header { text-align: center; margin-bottom: var(--spacing); color: var(--color-header); }
+.header { 
+  text-align: center; 
+  margin-bottom: calc(var(--spacing) * 2); 
+  margin-top: calc(var(--spacing) * 2); 
+  color: var(--color-header); 
+}
 .header h1 { font-size: var(--font-size-xlarge); font-weight: 700; margin-bottom: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
 .subtitle { font-size: var(--font-size-medium); opacity: 0.9; font-weight: 300; }
 
@@ -56,8 +65,8 @@ body {
 .card {
   background: var(--color-card-bg);
   border-radius: var(--border-radius);
-  padding: calc(var(--spacing) * 1.5);
-  margin-bottom: var(--spacing);
+  padding: calc(var(--spacing) * 1.25);
+  margin-bottom: calc(var(--spacing) * 1.5);
   box-shadow: var(--box-shadow-card);
   border: 1px solid rgba(255,255,255,0.2);
   animation: fadeIn 0.5s var(--transition) forwards;
@@ -118,7 +127,7 @@ body {
 .slider::-webkit-slider-thumb:hover, .slider::-moz-range-thumb:hover { transform: scale(1.1); }
 
 /* Grids */
-.grid { display: grid; gap: var(--spacing); }
+.grid { display: grid; gap: calc(var(--spacing) * 1.25); }
 .grid.cols-2 { grid-template-columns: 1fr 1fr; }
 .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 
@@ -128,8 +137,8 @@ body {
 .connection-buttons {
   display: flex;
   width: 100%;
-  gap: var(--spacing);
-  margin-bottom: var(--spacing);
+  gap: calc(var(--spacing) * 1.25);
+  margin-bottom: calc(var(--spacing) * 1.25);
 }
 
 .preset-buttons .btn,
@@ -144,7 +153,7 @@ body {
   background: var(--item-box-bg, rgba(16,185,129,0.05));
   border-radius: var(--item-box-radius, 8px);
   border: 1px solid var(--item-box-border, rgba(16,185,129,0.15));
-  padding: var(--item-box-padding, 8px 12px);
+  padding: calc(var(--spacing) * 0.75) calc(var(--spacing) * 1.25);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -154,7 +163,7 @@ body {
   gap: calc(var(--spacing) / 4);
   align-items: center;
   justify-content: center;
-  padding: var(--stat-item-padding, calc(var(--spacing)) calc(var(--spacing) * 0.75));
+  padding: calc(var(--spacing) * 1.25);
   background: var(--stat-item-bg, rgba(139,92,246,0.05));
   border: 1px solid var(--stat-item-border, rgba(139,92,246,0.15));
 }
@@ -188,10 +197,10 @@ body {
 
 /* Responsive */
 @media (max-width: 480px) {
-  .container { padding: calc(var(--spacing) * 0.75); }
+  .container { padding: var(--spacing); }
   .header h1 { font-size: 2rem; }
-  .card { padding: var(--spacing); }
-  .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; gap: calc(var(--spacing) / 2); }
+  .card { padding: var(--spacing); margin-bottom: var(--spacing); }
+  .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; gap: var(--spacing); }
   .direction-buttons { flex-direction: column; gap: var(--spacing); }
 }
 
@@ -207,8 +216,11 @@ body {
   font-size: var(--font-size-base);
 }
 
-.control-group:not(:last-child) {
-  margin-bottom: var(--spacing);
+.control-group {
+  margin-bottom: calc(var(--spacing) * 1.25);
+}
+.control-group:last-child {
+  margin-bottom: 0;
 }
 
 .stats-buttons {
@@ -218,8 +230,8 @@ body {
 .hint-box {
   background: rgba(59,130,246,0.05);
   border-radius: var(--border-radius-btn);
-  padding: calc(var(--spacing) / 2) var(--spacing);
-  margin-top: calc(var(--spacing) / 2);
+  padding: var(--spacing);
+  margin-top: var(--spacing);
   font-size: var(--font-size-small);
   color: var(--color-subtle);
 }
@@ -228,9 +240,9 @@ body {
   background: rgba(16,185,129,0.03);
   border: 1px solid rgba(16,185,129,0.10);
   border-radius: var(--border-radius-btn);
-  padding: var(--spacing);
-  margin-bottom: var(--spacing);
-  margin-top: var(--spacing);
+  padding: calc(var(--spacing) * 1.25);
+  margin-bottom: calc(var(--spacing) * 1.25);
+  margin-top: calc(var(--spacing) * 1.25);
 }
 
 .card-divider {
