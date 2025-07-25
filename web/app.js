@@ -612,6 +612,8 @@ class BratenDreherApp {
 
         // Status updates from backend
         this.commandManager.onStatusUpdate = (statusUpdate) => {
+// Update last update time on every status message
+this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
             this.handleStatusUpdate(statusUpdate);
         };
 
