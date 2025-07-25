@@ -4,6 +4,13 @@
   --color-header: #fff;
   --color-text: #333;
   --color-subtle: #6b7280;
+
+  /* Font sizes */
+  --font-size-base: 1rem;
+  --font-size-small: 0.85rem;
+  --font-size-medium: 1.1rem;
+  --font-size-large: 2rem;
+  --font-size-xlarge: 2.5rem;
   --color-accent-blue: #3b82f6;
   --color-accent-green: #10b981;
   --color-accent-purple: #8b5cf6;
@@ -33,6 +40,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   background: var(--color-bg-gradient);
   color: var(--color-text);
+  font-size: var(--font-size-base);
   line-height: 1.6;
   min-height: 100vh;
 }
@@ -40,8 +48,8 @@ body {
 
 /* Header */
 .header { text-align: center; margin-bottom: 30px; color: var(--color-header); }
-.header h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
-.subtitle { font-size: 1.1rem; opacity: 0.9; font-weight: 300; }
+.header h1 { font-size: var(--font-size-xlarge); font-weight: 700; margin-bottom: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+.subtitle { font-size: var(--font-size-medium); opacity: 0.9; font-weight: 300; }
 
 /* Card System */
 .card {
@@ -59,7 +67,7 @@ body {
 .card.accent-red { border-left: 3px solid var(--color-accent-red); }
 .card.accent-orange { border-left: 3px solid var(--color-accent-orange); }
 .card.accent-dark { border-left: 3px solid var(--color-accent-dark); }
-.card h2 { font-size: 1.4rem; margin-bottom: 20px; color: #2d3748; font-weight: 600; }
+.card h2 { font-size: var(--font-size-large); margin-bottom: 20px; color: #2d3748; font-weight: 600; }
 
 /* Connection Card Accent */
 .connection-card {
@@ -72,7 +80,7 @@ body {
   padding: 12px 20px;
   border: none;
   border-radius: var(--border-radius-btn);
-  font-size: 0.95rem;
+  font-size: var(--font-size-base);
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition);
@@ -171,7 +179,7 @@ body {
 /* Labels & Info */
 .label { display: block; margin-bottom: 8px; font-weight: 600; color: #374151; }
 .hint { font-size: 0.75rem; color: var(--color-subtle); font-style: italic; margin-top: 4px; }
-.info { font-size: 0.9rem; color: #4b5563; margin-bottom: 8px; }
+.info { font-size: var(--font-size-small); color: #4b5563; margin-bottom: 8px; }
 
 /* Animations */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -183,4 +191,16 @@ body {
   .card { padding: 20px; }
   .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; gap: 12px; }
   .direction-buttons { flex-direction: column; }
+}
+
+.voltage-select {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: var(--border-radius-btn);
+  background: white;
+  font-size: var(--font-size-base);
+  min-width: 80px;
+}
+.voltage-select option {
+  font-size: var(--font-size-base);
 }

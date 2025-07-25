@@ -240,18 +240,20 @@
                     </div>
                 </div>
                 <div class="power-controls">
-                    <label for="voltageSelect" class="label">Target Voltage:</label>
-                    <select id="voltageSelect" class="voltage-select">
-                        <option value="5">5V</option>
-                        <option value="9">9V</option>
-                        <option value="12" selected>12V</option>
-                        <option value="15">15V</option>
-                        <option value="20">20V</option>
-                    </select>
-                    <button id="negotiateBtn" class="btn secondary">
-                        🔌 Renegotiate
-                    </button>
-                    <button id="autoNegotiateBtn" class="btn primary">
+                    <label for="voltageSelect" class="label" style="margin-bottom:8px;">Target Voltage:</label>
+                    <div class="power-controls-row" style="display:flex; gap:8px; margin-bottom:8px;">
+                        <select id="voltageSelect" class="voltage-select" style="flex:1;">
+                            <option value="5">5V</option>
+                            <option value="9">9V</option>
+                            <option value="12" selected>12V</option>
+                            <option value="15">15V</option>
+                            <option value="20">20V</option>
+                        </select>
+                        <button id="negotiateBtn" class="btn secondary" style="flex:1;">
+                            🔌 Renegotiate
+                        </button>
+                    </div>
+                    <button id="autoNegotiateBtn" class="btn primary" style="width:100%;">
                         ⚡ Auto-Negotiate Highest Power
                     </button>
                 </div>
