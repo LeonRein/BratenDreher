@@ -45,7 +45,7 @@ class BratenDreherApp {
         }
         const maxStepsPerSecond = this.rpmToStepsPerSecond(this.MAX_SPEED_RPM);
         const timeSeconds = maxStepsPerSecond / accelerationStepsPerSec2;
-        return Math.max(1.0, Math.min(30.0, timeSeconds));
+        return Math.max(1.0, timeSeconds);
     }
     
     timeToAcceleration(timeSeconds) {
@@ -204,15 +204,11 @@ class BratenDreherApp {
         }));
 
         this.controls.set('accelerationDisplay', new DisplayControl(this.currentAcceleration, {
-            formatter: (acceleration) => {
-                const time = this.accelerationToTime(acceleration).toFixed(1);
-                return `${time}s to max`;
-            },
-            colorizer: (acceleration) => {
-                const time = this.accelerationToTime(acceleration);
-                if (time <= 2) return '#8b5cf6';
-                if (time <= 5) return '#3b82f6';
-                if (time <= 10) return '#10b981';
+            formatter: (timeSeconds) => `${timeSeconds.toFixed(1)}s to max`,
+            colorizer: (timeSeconds) => {
+                if (timeSeconds <= 2) return '#8b5cf6';
+                if (timeSeconds <= 5) return '#3b82f6';
+                if (timeSeconds <= 10) return '#10b981';
                 return '#1f2937';
             }
         }));
@@ -346,8 +342,10 @@ class BratenDreherApp {
         this.bindings.set('acceleration', new ControlBinding({
             commandType: 'acceleration',
             statusKeys: ['acceleration'],
-            valueTransform: (timeValue) => {
-                const acceleration = this.timeToAcceleration(parseInt(timeValue));
+            valueTransform: (sliderValue) => {
+                // sliderValue is time in seconds from the UI
+                const time = parseFloat(sliderValue);
+                const acceleration = this.timeToAcceleration(time);
                 const minAcceleration = 100;
                 if (acceleration < minAcceleration) {
                     const minTime = this.accelerationToTime(minAcceleration).toFixed(1);
