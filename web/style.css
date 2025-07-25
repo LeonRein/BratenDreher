@@ -129,7 +129,7 @@ body {
 /* Grids */
 .grid { display: grid; gap: calc(var(--spacing) * 1.25); }
 .grid.cols-2 { grid-template-columns: 1fr 1fr; }
-.grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.grid.cols-3 { grid-template-columns: repeat(3, 1fr); gap: var(--spacing); }
 
 /* Full-width button groups */
 .preset-buttons,
@@ -160,10 +160,9 @@ body {
 }
 .stat-item.item-box {
   flex-direction: column;
-  gap: calc(var(--spacing) / 4);
   align-items: center;
   justify-content: center;
-  padding: calc(var(--spacing) * 1.25);
+  padding: var(--spacing);
   background: var(--stat-item-bg, rgba(139,92,246,0.05));
   border: 1px solid var(--stat-item-border, rgba(139,92,246,0.15));
 }
@@ -249,4 +248,11 @@ body {
   border: none;
   border-top: 1px solid #e5e7eb;
   margin: calc(var(--spacing) * 1.25) 0;
+}
+
+/* Improved statistics card styles */
+/* Removed custom stat-item, stat-value, stat-label, stats-buttons styles to use general item-box and grid classes */
+
+.stat-value {
+  font-weight: 700;
 }
