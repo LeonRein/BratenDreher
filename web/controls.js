@@ -227,11 +227,17 @@ class SliderControl extends BaseControl {
             if (this.valueElement) {
                 this.valueElement.textContent = this.options.displayTransform(value);
             }
+            // Update fill immediately for backend/programmatic changes
+            this.updateFillPosition(value);
         }
     }
 
     updateFillPosition(currentValue) {
-        if (!this.fillElement || !this.slider) return;
+        if (!this.fillElement || !this.slider) {
+            console.warn('Slider fill update failed: fillElement or slider missing', this.fillElement, this.slider);
+            return;
+        }
+        // Removed debug log
         
         const min = parseFloat(this.slider.min);
         const max = parseFloat(this.slider.max);
