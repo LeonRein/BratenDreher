@@ -218,3 +218,26 @@ body {
 .stats-buttons {
   margin-top: var(--spacing);
 }
+
+.hint-box {
+  background: rgba(59,130,246,0.05);
+  border-radius: var(--border-radius-btn);
+  padding: 8px 12px;
+  margin-top: 4px;
+  font-size: var(--font-size-small);
+  color: var(--color-subtle);
+}
+
+.group-box {
+  background: rgba(16,185,129,0.03);
+  border: 1px solid rgba(16,185,129,0.10);
+  border-radius: var(--border-radius-btn);
+  padding: var(--spacing);
+  margin-bottom: var(--spacing);
+}
+
+.card-divider {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: var(--spacing) 0;
+}
