@@ -349,7 +349,7 @@ class BratenDreherApp {
         this.bindings.set('current', new ControlBinding({
             commandType: 'sc',
             statusKeys: ['cur'],
-            valueTransform: (value) => parseInt(value)
+            inputValueTransform: (value) => parseInt(value)
         }));
         this.bindings.get('current').addControl(this.controls.get('currentSlider'));
         this.bindings.get('current').addControl(this.controls.get('currentDisplay'));
@@ -387,8 +387,8 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
         this.bindings.set('strength', new ControlBinding({
             commandType: 'sv',
             statusKeys: ['svs'],
-            valueTransform: (value) => parseInt(value) / 100.0,
-            statusTransform: (value) => Math.round(value * 100)
+            inputValueTransform: (value) => parseInt(value) / 100.0,
+            statusValueTransform: (value) => Math.round(value * 100)
         }));
         this.bindings.get('strength').addControl(this.controls.get('strengthSlider'));
 
@@ -396,7 +396,7 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
         this.bindings.set('phase', new ControlBinding({
             commandType: 'svp',
             statusKeys: ['svp'],
-            valueTransform: (value) => {
+            inputValueTransform: (value) => {
                 const phase = parseInt(value);
                 let phaseForRadians = phase;
                 if (phaseForRadians < 0) {
@@ -404,7 +404,7 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
                 }
                 return (phaseForRadians * Math.PI) / 180;
             },
-            statusTransform: (value) => {
+            statusValueTransform: (value) => {
                 let phaseDegrees = Math.round((value * 180) / Math.PI);
                 if (phaseDegrees > 180) {
                     phaseDegrees -= 360;

@@ -7,8 +7,8 @@ class ControlBinding {
         this.config = {
             commandType: null,
             statusKeys: [], // Array of status keys this binding responds to
-            valueTransform: (value) => value, // Transform UI value before sending command
-            statusTransform: (value) => value, // Transform status value before updating UI
+            inputValueTransform: (value) => value, // Transform UI value before sending command
+            statusValueTransform: (value) => value, // Transform status value before updating UI
             displayTransform: (value) => value.toString(), // Transform value for display
             customStatusHandler: null, // Custom function for complex status handling
             ...config
@@ -39,7 +39,7 @@ class ControlBinding {
         });
 
         // Transform value and send command
-        const transformedValue = this.config.valueTransform(value);
+        const transformedValue = this.config.inputValueTransform(value);
         const success = await this.commandManager.sendCommand(
             this.config.commandType, 
             transformedValue, 
@@ -81,7 +81,7 @@ class ControlBinding {
         // Default handling for simple cases
         relevantKeys.forEach(key => {
             const value = statusUpdate[key];
-            const transformedValue = this.config.statusTransform(value);
+            const transformedValue = this.config.statusValueTransform(value);
             
             // Update controls based on their type
             this.controls.forEach(control => {
@@ -145,7 +145,7 @@ class AccelerationControlBinding extends ControlBinding {
         const defaults = {
             commandType: 'sa',
             statusKeys: ['acc'],
-            valueTransform: (sliderValue) => {
+            inputValueTransform: (sliderValue) => {
                 const time = parseFloat(sliderValue);
                 const acceleration = timeToAcceleration(time);
                 const minAcceleration = 100;
@@ -159,7 +159,7 @@ class AccelerationControlBinding extends ControlBinding {
                 }
                 return acceleration;
             },
-            statusTransform: (accelerationValue) => {
+            statusValueTransform: (accelerationValue) => {
                 const timeSeconds = accelerationToTime(accelerationValue);
                 return parseFloat(timeSeconds.toFixed(1));
             }
@@ -282,7 +282,7 @@ class SpeedControlBinding extends ControlBinding {
             commandType: 'ss',
             statusKeys: ['sp', 'cs'],
             displayTransform: (value) => value.toFixed(1),
-            valueTransform: (value) => Math.max(0.1, Math.min(30.0, value)),
+            inputValueTransform: (value) => Math.max(0.1, Math.min(30.0, value)),
             customStatusHandler: null
         };
         super({ ...defaults, ...config });
@@ -674,7 +674,7 @@ class StallGuardControlBinding extends ControlBinding {
                 const percentage = (value / 255) * 100;
                 return `${percentage.toFixed(1)}%`;
             },
-            valueTransform: (value) => {
+            inputValueTransform: (value) => {
                 // Invert slider value: right (255) sends 0, left (0) sends 255
                 return 255 - parseInt(value);
             },
