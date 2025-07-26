@@ -57,6 +57,8 @@ void StepperController::applyRunClockwise()
         systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, true);
     }
 
+
+    applyStepperAcceleration(setpointAcceleration); // Ensure acceleration is set before running
     stepper->runForward(); // In FastAccelStepper, backward means clockwise
     clockwise = true;
 
@@ -90,6 +92,7 @@ void StepperController::applyRunCounterClockwise()
         systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, true);
     }
 
+    applyStepperAcceleration(setpointAcceleration); // Ensure acceleration is set before running
     stepper->runBackward(); // In FastAccelStepper, backward means counter-clockwise
     clockwise = false;
 
@@ -350,9 +353,6 @@ bool StepperController::begin()
 {
     dbg_println("Initializing FastAccelStepper with TMC2209...");
 
-    // Initialize preferences storage
-    initPreferences();
-
     // Configure pins
     pinMode(TMC_EN_PIN, OUTPUT);
     pinMode(MS1_PIN, OUTPUT);
@@ -416,33 +416,6 @@ bool StepperController::begin()
     isInitializing = false;
 
     return true;
-}
-
-bool StepperController::initPreferences()
-{
-    // Try to open the namespace with write permissions to ensure it exists
-    if (preferences.begin("stepper", false))
-    {
-        // Check if this is a fresh namespace by looking for a key
-        if (!preferences.isKey("speed"))
-        {
-            // Fresh namespace - write default values
-            dbg_println("Fresh preferences namespace, writing defaults");
-            preferences.putFloat("speed", setpointRPM);
-            preferences.putInt("microsteps", MICRO_STEPS);
-            preferences.putInt("current", runCurrent);
-            preferences.putInt("stallGuardThreshold", stallGuardThreshold);
-            preferences.putUInt("acceleration", setpointAcceleration);
-        }
-        preferences.end();
-        dbg_println("Preferences namespace initialized");
-        return true;
-    }
-    else
-    {
-        dbg_println("Failed to initialize preferences namespace");
-        return false;
-    }
 }
 
 void StepperController::configureDriver()
@@ -803,6 +776,10 @@ void StepperController::resetCountersInternal()
     startTime = millis();
     isFirstStart = false;
 
+    // Publish status updates for reset statistics
+    systemStatus.publishStatusUpdate(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, 0.0f);
+    systemStatus.publishStatusUpdate(StatusUpdateType::RUNTIME_UPDATE, 0UL);
+
     dbg_println("Counters reset");
     // Success is indicated by the status update - no notification needed
 }
@@ -976,10 +953,21 @@ void StepperController::emergencyStopInternal()
         return;
     }
 
-    stepper->forceStopAndNewPosition(stepper->getCurrentPosition());
+    // Save current acceleration
+    uint32_t prevAcceleration = setpointAcceleration;
 
-    stepperDriver.disable();
-    motorEnabled = false;
+    // Set acceleration to 16000
+    stepper->setAcceleration(16000);
+    stepper->applySpeedAcceleration();
+
+    // Call disable
+    disableInternal();
+
+    delay(100); // Allow time for disable to take effect
+
+    // Restore previous acceleration
+    stepper->setAcceleration(prevAcceleration);
+
 
     dbg_println("EMERGENCY STOP executed");
 
@@ -1094,11 +1082,11 @@ void StepperController::saveSettings()
 {
     if (preferences.begin("stepper", false))
     {
-        preferences.putFloat("speed", setpointRPM);
-        preferences.putBool("clockwise", clockwise);
-        preferences.putInt("current", runCurrent);
-        preferences.putUInt("acceleration", setpointAcceleration);
-        preferences.putUInt("stallGuardThreshold", stallGuardThreshold);
+        preferences.putFloat("sp", setpointRPM);
+        preferences.putBool("cw", clockwise);
+        preferences.putInt("cur", runCurrent);
+        preferences.putUInt("acc", setpointAcceleration);
+        preferences.putUInt("sgt", stallGuardThreshold);
         preferences.end();
         dbg_println("Settings saved to flash");
     }
@@ -1112,10 +1100,11 @@ void StepperController::loadSettings()
 {
     if (preferences.begin("stepper", true))
     {
-        setpointRPM = preferences.getFloat("speed", setpointRPM);
-        clockwise = preferences.getBool("clockwise", clockwise);
-        runCurrent = preferences.getInt("current", runCurrent);
-        setpointAcceleration = preferences.getUInt("acceleration", setpointAcceleration);
+        setpointRPM = preferences.getFloat("sp", setpointRPM);
+        clockwise = preferences.getBool("cw", clockwise);
+        runCurrent = preferences.getInt("cur", runCurrent);
+        setpointAcceleration = preferences.getUInt("acc", setpointAcceleration);
+        stallGuardThreshold = preferences.getUInt("sgt", stallGuardThreshold);
         preferences.end();
         dbg_printf("Settings loaded from flash: %.2f RPM, %s, %d microsteps, %d%% current, %u accel\n",
                    setpointRPM, clockwise ? "CW" : "CCW", MICRO_STEPS, runCurrent, setpointAcceleration);

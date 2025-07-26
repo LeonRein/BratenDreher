@@ -18,7 +18,7 @@
 
 // Queue size configuration
 #define NOTIFICATION_QUEUE_SIZE     10     // Notification queue size (smaller since only warnings/errors)
-#define STATUS_UPDATE_QUEUE_SIZE    30     // Status update queue size
+#define STATUS_UPDATE_QUEUE_SIZE    60     // Status update queue size
 
 class SystemStatus {
 private:

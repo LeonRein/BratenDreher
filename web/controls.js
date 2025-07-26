@@ -190,6 +190,13 @@ class SliderControl extends BaseControl {
         this.bindEvents();
     }
 
+    setDisplayState(state, force = false) {
+        if (state === CONTROL_STATES.DISABLED) {
+            this.hideFill();
+        }
+        super.setDisplayState(state, force);
+    }
+
     bindEvents() {
         if (!this.slider) return;
         
@@ -231,7 +238,11 @@ class SliderControl extends BaseControl {
     }
 
     updateFillPosition(currentValue) {
-        if (!this.fillElement || !this.slider) return;
+        if (!this.fillElement || !this.slider) {
+            console.warn('Slider fill update failed: fillElement or slider missing', this.fillElement, this.slider);
+            return;
+        }
+        // Removed debug log
         
         const min = parseFloat(this.slider.min);
         const max = parseFloat(this.slider.max);

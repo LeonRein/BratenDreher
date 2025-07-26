@@ -15,34 +15,31 @@
         </header>
 
         <!-- Connection Status -->
-        <div class="card connection-card">
+        <div class="card accent-blue connection-card">
             <div class="connection-status">
                 <div class="status-indicator" id="statusIndicator"></div>
                 <span id="connectionStatus">Disconnected</span>
             </div>
-            <div class="connection-info">
-                <small id="connectionInfo">Click Connect to start</small>
-            </div>
             <div class="connection-buttons">
-                <button id="connectBtn" class="btn btn-primary">
+                <button id="connectBtn" class="btn primary">
                     📶 Connect
                 </button>
-                <button id="reconnectBtn" class="btn btn-secondary" disabled>
+                <button id="reconnectBtn" class="btn secondary" disabled>
                     🔄 Reconnect/Retry
                 </button>
-                <button id="disconnectBtn" class="btn btn-secondary" disabled>
+                <button id="disconnectBtn" class="btn secondary" disabled>
                     ❌ Disconnect
                 </button>
             </div>
         </div>
 
         <!-- Motor Control -->
-        <div class="card control-card">
+        <div class="card accent-green">
             <h2>Motor Control</h2>
             
             <!-- Enable/Disable -->
             <div class="control-group">
-                <label class="control-label">Motor Status</label>
+                <label class="label">Motor Status</label>
                 <div class="toggle-switch">
                     <input type="checkbox" id="motorToggle" class="toggle-input">
                     <label for="motorToggle" class="toggle-label">
@@ -53,39 +50,41 @@
                 </div>
             </div>
 
+            <hr class="card-divider">
+
             <!-- Speed Control -->
             <div class="control-group">
-                <label class="control-label" for="speedSlider">
+                <label class="label" for="speedSlider">
                     Speed: <span id="speedValue">1.0</span> RPM
                 </label>
-                <div class="speed-slider-container">
-                    <div class="speed-slider-wrapper">
-                        <div class="speed-slider-fill" id="speedSliderFill"></div>
+                <div class="slider-container">
+                    <div class="slider-wrapper">
+                        <div class="slider-fill" id="speedSliderFill"></div>
                         <input type="range" 
                                id="speedSlider" 
-                               class="speed-slider"
+                               class="slider"
                                min="0.1" 
                                max="30" 
                                step="0.1" 
                                value="1.0">
                     </div>
                 </div>
-                <div class="speed-presets">
-                    <button class="preset-btn" data-speed="0.5">Very Slow</button>
-                    <button class="preset-btn" data-speed="2.0">Slow</button>
-                    <button class="preset-btn" data-speed="10.0">Medium</button>
-                    <button class="preset-btn" data-speed="30.0">Fast</button>
+                <div class="preset-buttons">
+                    <button class="btn preset" data-speed="0.5">Very Slow</button>
+                    <button class="btn preset" data-speed="2.0">Slow</button>
+                    <button class="btn preset" data-speed="10.0">Medium</button>
+                    <button class="btn preset" data-speed="30.0">Fast</button>
                 </div>
             </div>
 
             <!-- Direction Control -->
             <div class="control-group">
-                <label class="control-label">Direction</label>
+                <label class="label">Direction</label>
                 <div class="direction-buttons">
-                    <button id="clockwiseBtn" class="btn btn-direction active" data-direction="1">
+                    <button id="clockwiseBtn" class="btn direction active" data-direction="1">
                         ↻ Clockwise
                     </button>
-                    <button id="counterclockwiseBtn" class="btn btn-direction" data-direction="0">
+                    <button id="counterclockwiseBtn" class="btn direction" data-direction="0">
                         ↺ Counter-clockwise
                     </button>
                 </div>
@@ -93,15 +92,17 @@
 
             <!-- Emergency Stop -->
             <div class="control-group">
-                <button id="emergencyStopBtn" class="btn btn-emergency">
+                <button id="emergencyStopBtn" class="btn emergency">
                     🛑 Emergency Stop
                 </button>
             </div>
 
+            <hr class="card-divider">
+
             <!-- Variable Speed Settings -->
             <div class="control-group variable-speed-settings">
                 <h3>Variable Speed</h3>
-                <p class="setting-description">
+                <p class="info">
                     🔄 For uneven cooking compensation - create a slow zone to give pale areas more time to brown while maintaining the same average cooking time
                 </p>
                 
@@ -114,124 +115,153 @@
                     </label>
                 </div>
                 
-                <div class="variable-speed-controls" id="variableSpeedControls">
+                <div class="group-box variable-speed-controls" id="variableSpeedControls">
                     <div class="setting-item">
-                        <label for="strengthSlider">Variation Strength: <span id="strengthValue">20</span>%</label>
-                        <input type="range" 
-                               id="strengthSlider" 
-                               class="setting-slider"
-                               min="0" 
-                               max="100" 
-                               step="5" 
-                               value="20">
-                        <small class="setting-hint">How much speed varies from fastest to slowest point</small>
+                        <label for="strengthSlider" class="label">Variation Strength: <span id="strengthValue">20</span>%</label>
+                        <div class="slider-container">
+                            <div class="slider-wrapper">
+                                <div class="slider-fill"></div>
+                                <input type="range" 
+                                    id="strengthSlider" 
+                                    class="slider"
+                                    min="0" 
+                                    max="100" 
+                                    step="5" 
+                                    value="20">
+                            </div>
+                        </div>
+                        <div class="hint-box">
+                            <small>How much speed varies from fastest to slowest point</small>
+                        </div>
                     </div>
                     <div class="setting-item">
-                        <label for="phaseSlider">Phase Offset: <span id="phaseValue">0</span>°</label>
-                        <input type="range" 
-                               id="phaseSlider" 
-                               class="setting-slider"
-                               min="-180" 
-                               max="180" 
-                               step="15" 
-                               value="0">
-                        <small class="setting-hint">Rotate the slow zone to the desired position</small>
+                        <label for="phaseSlider" class="label">Phase Offset: <span id="phaseValue">0</span>°</label>
+                        <div class="slider-container">
+                            <div class="slider-wrapper">
+                                <div class="slider-fill"></div>
+                                <input type="range" 
+                                    id="phaseSlider" 
+                                    class="slider"
+                                    min="-180" 
+                                    max="180" 
+                                    step="15" 
+                                    value="0">
+                            </div>
+                        </div>
                     </div>
-                    <div class="variable-speed-info">
+                    <div class="variable-speed-info hint-box">
                         <small>💡 Position your rotisserie so the pale side is at the current position, then enable variable speed. This position will become the slowest point in the rotation cycle.</small>
                     </div>
                 </div>
             </div>
 
+            <hr class="card-divider">
+
             <!-- Advanced Settings -->
             <div class="control-group advanced-settings">
                 <h3>Advanced Settings</h3>
-                <div class="settings-grid">
+                <div class="grid cols-2">
                     <div class="setting-item">
-                        <label for="currentSlider">Current: <span id="currentValue">30</span>%</label>
-                        <input type="range" 
-                               id="currentSlider" 
-                               class="setting-slider"
-                               min="10" 
-                               max="100" 
-                               step="5" 
-                               value="30">
-                        <small class="setting-hint">Set to lowest value that does not stall the motor the reduce heat</small>
+                        <label for="currentSlider" class="label">Current: <span id="currentValue">30</span>%</label>
+                        <div class="slider-container">
+                            <div class="slider-wrapper">
+                                <div class="slider-fill"></div>
+                                <input type="range" 
+                                    id="currentSlider" 
+                                    class="slider"
+                                    min="10" 
+                                    max="100" 
+                                    step="5" 
+                                    value="30">
+                            </div>
+                        </div>
+                        <div class="hint-box">
+                            <small>Set to lowest value that does not stall the motor the reduce heat</small>
+                        </div>
                     </div>
                     <div class="setting-item">
-                        <label for="accelerationTimeSlider">Acceleration Time: <span id="accelerationTimeValue">5</span>s</label>
-                        <input type="range" 
-                               id="accelerationTimeSlider" 
-                               class="setting-slider"
-                               min="1" 
-                               max="30" 
-                               step="1" 
-                               value="5">
-                        <small class="setting-hint">Time to reach maximum speed (30 RPM) from stop</small>
+                        <label for="accelerationTimeSlider" class="label">Acceleration Time: <span id="accelerationTimeValue">5</span>s</label>
+                        <div class="slider-container">
+                            <div class="slider-wrapper">
+                                <div class="slider-fill"></div>
+                                <input type="range" 
+                                    id="accelerationTimeSlider" 
+                                    class="slider"
+                                    min="1" 
+                                    max="30" 
+                                    step="1" 
+                                    value="5">
+                            </div>
+                        </div>
+                        <div class="hint-box">
+                            <small>Time to reach maximum speed (30 RPM) from stop</small>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Statistics Display -->
-        <div class="card stats-card">
+        <div class="card accent-purple">
             <h2>Statistics</h2>
-            <div class="stats-grid">
-                <div class="stat-item">
+            <div class="grid cols-3">
+                <div class="stat-item item-box">
                     <span class="stat-value" id="totalRevolutions">0.000</span>
                     <span class="stat-label">Total Revolutions</span>
                 </div>
-                <div class="stat-item">
+                <div class="stat-item item-box">
                     <span class="stat-value" id="runTime">00:00:00.000</span>
                     <span class="stat-label">Running Time</span>
                 </div>
-                <div class="stat-item">
+                <div class="stat-item item-box">
                     <span class="stat-value" id="avgSpeed">0.000</span>
                     <span class="stat-label">Avg Speed (RPM)</span>
                 </div>
             </div>
             <div class="stats-buttons">
-                <button id="resetStatsBtn" class="btn btn-secondary stats-reset">
+                <button id="resetStatsBtn" class="btn secondary stats-reset" style="width:100%;">
                     📊 Reset Statistics
                 </button>
             </div>
         </div>
 
         <!-- Power Delivery Status -->
-        <div class="card power-card">
+        <div class="card accent-green">
             <h2>⚡ Power Delivery</h2>
             <div class="power-status">
-                <div class="power-status-grid">
-                    <div class="power-item">
+                <div class="grid cols-2">
+                    <div class="power-item item-box">
                         <span class="power-label">Status:</span>
                         <span id="pdStatus" class="power-value status-unknown">Unknown</span>
                     </div>
-                    <div class="power-item">
+                    <div class="power-item item-box">
                         <span class="power-label">Power Good:</span>
                         <span id="pdPowerGood" class="power-value status-unknown">Unknown</span>
                     </div>
-                    <div class="power-item">
+                    <div class="power-item item-box">
                         <span class="power-label">Negotiated:</span>
                         <span id="pdNegotiatedVoltage" class="power-value">- V</span>
                     </div>
-                    <div class="power-item">
+                    <div class="power-item item-box">
                         <span class="power-label">Current:</span>
                         <span id="pdCurrentVoltage" class="power-value">- V</span>
                     </div>
                 </div>
-                <div class="power-controls">
-                    <label for="voltageSelect">Target Voltage:</label>
-                    <select id="voltageSelect" class="voltage-select">
-                        <option value="5">5V</option>
-                        <option value="9">9V</option>
-                        <option value="12" selected>12V</option>
-                        <option value="15">15V</option>
-                        <option value="20">20V</option>
-                    </select>
-                    <button id="negotiateBtn" class="btn btn-secondary">
-                        🔌 Renegotiate
-                    </button>
-                    <button id="autoNegotiateBtn" class="btn btn-primary">
+                <div class="group-box power-controls">
+                    <label for="voltageSelect" class="label" style="margin-bottom:8px;">Target Voltage:</label>
+                    <div class="power-controls-row" style="display:flex; gap:8px; margin-bottom:8px;">
+                        <select id="voltageSelect" class="voltage-select" style="flex:1;">
+                            <option value="5">5V</option>
+                            <option value="9">9V</option>
+                            <option value="12" selected>12V</option>
+                            <option value="15">15V</option>
+                            <option value="20">20V</option>
+                        </select>
+                        <button id="negotiateBtn" class="btn secondary" style="flex:1;">
+                            🔌 Renegotiate
+                        </button>
+                    </div>
+                    <button id="autoNegotiateBtn" class="btn primary" style="width:100%;">
                         ⚡ Auto-Negotiate Highest Power
                     </button>
                 </div>
@@ -239,102 +269,99 @@
         </div>
 
         <!-- Stall Detection -->
-        <div class="card stall-card">
+        <div class="card accent-orange">
             <h2>Stall Detection</h2>
             <div class="stall-content">
-                <div class="stall-info">
-                    <p>TMC2209 StallGuard monitors motor load and detects when the motor cannot turn due to excessive resistance.</p>
-                </div>
-                
-                <!-- StallGuard Threshold Control -->
-                <div class="control-group stallguard-settings">
+
+                <div class="group-box">
                     <h3>StallGuard Threshold & Load Monitor</h3>
-                    <div class="control-item">
-                        <label for="stallguardThresholdSlider">
-                            Sensitivity: <span id="stallguardThresholdValue">50.2%</span> | Current Load: <span id="stallguardResultValue">50.0%</span>
+                    <div class="control-group">
+                        <label for="stallguardThresholdSlider" class="label">
+                            Sensitivity: <span id="stallguardThresholdValue">50.2%</span>
+                            &nbsp;|&nbsp; Current Load: <span id="stallguardResultValue">50.0%</span>
                         </label>
-                        <div class="stallguard-slider-container">
-                            <div class="stallguard-slider-wrapper">
-                                <div class="stallguard-slider-fill" id="stallguardSliderFill"></div>
+                        <div class="slider-container">
+                            <div class="slider-wrapper">
+                                <div class="slider-fill" id="stallguardSliderFill"></div>
                                 <input type="range" 
                                        id="stallguardThresholdSlider" 
-                                       class="stallguard-slider"
+                                       class="slider"
                                        min="0" 
                                        max="255" 
                                        step="1" 
                                        value="128">
                             </div>
                         </div>
-                        <div class="stallguard-labels">
-                            <span class="stallguard-label-left">0% (Less Sensitive)</span>
-                            <span class="stallguard-label-right">100% (More Sensitive)</span>
+                        <div class="hint-box">
+                            <small>Green fill shows current motor load percentage (0-100%). Adjust slider to set stall sensitivity.</small>
                         </div>
-                        <small class="setting-hint">Green fill shows current motor load percentage (0-100%). Adjust slider to set stall sensitivity.</small>
                     </div>
                 </div>
-                
-                <div class="status-grid">
-                    <div class="status-item">
-                        <span class="status-label">Stall Status:</span>
-                        <span id="stallStatus" class="status-value">OK</span>
+
+                <div class="group-box">
+                    <h3>Status</h3>
+                    <div class="grid cols-2">
+                        <div class="item-box">
+                            <span class="status-label">Stall Status:</span>
+                            <span id="stallStatus" class="status-value">OK</span>
+                        </div>
+                        <div class="item-box">
+                            <span class="status-label">Stall Count:</span>
+                            <span id="stallCount" class="status-value">0</span>
+                        </div>
                     </div>
-                    <div class="status-item">
-                        <span class="status-label">Stall Count:</span>
-                        <span id="stallCount" class="status-value">0</span>
-                    </div>
-                </div>
-                <div class="stall-actions">
-                    <button id="resetStallBtn" class="btn btn-warning">
+                    <button id="resetStallBtn" class="btn warning" style="width:100%;margin-top:8px;">
                         ⚠️ Reset Stall Count
                     </button>
                 </div>
-                <div class="stall-help">
+
+                <div class="hint-box" style="margin-top:16px;">
                     <small><em>💡 If stalls occur frequently, try reducing speed, increasing threshold, or checking for mechanical obstructions.</em></small>
                 </div>
             </div>
         </div>
 
         <!-- Status Display -->
-        <div class="card status-card">
+        <div class="card accent-green">
             <h2>Status</h2>
-            <div class="status-grid">
-                <div class="status-item">
+            <div class="grid cols-2">
+                <div class="status-item item-box">
                     <span class="status-label">Motor:</span>
                     <span id="motorStatus" class="status-value">Stopped</span>
                 </div>
-                <div class="status-item">
+                <div class="status-item item-box">
                     <span class="status-label">Direction:</span>
                     <span id="currentDirection" class="status-value">Clockwise</span>
                 </div>
-                <div class="status-item">
+                <div class="status-item item-box">
                     <span class="status-label">Setpoint RPM:</span>
                     <span id="setpointSpeed" class="status-value">0.0 RPM</span>
                 </div>
-                <div class="status-item">
+                <div class="status-item item-box">
                     <span class="status-label">Current RPM:</span>
                     <span id="currentSpeed" class="status-value">0.0 RPM</span>
                 </div>
-                <div class="status-item">
+                <div class="status-item item-box">
                     <span class="status-label">Variable Speed:</span>
                     <span id="variableSpeedStatus" class="status-value">OFF</span>
                 </div>
-                <div class="status-item">
+                <div class="status-item item-box">
                     <span class="status-label">Acceleration:</span>
                     <span id="currentAcceleration" class="status-value">5.0s to max</span>
                 </div>
-                <div class="status-item">
+                <div class="status-item item-box">
                     <span class="status-label">Current:</span>
                     <span id="currentCurrent" class="status-value">30%</span>
                 </div>
-                <div class="status-item">
+                <div class="status-item item-box">
                     <span class="status-label">TMC2209:</span>
                     <span id="tmc2209Status" class="status-value">Unknown</span>
                 </div>
-                <div class="status-item">
+                <div class="status-item item-box">
                     <span class="status-label">Temperature:</span>
                     <span id="tmc2209Temperature" class="status-value">Normal</span>
                 </div>
-                <div class="status-item">
+                <div class="status-item item-box">
                     <span class="status-label">Last Update:</span>
                     <span id="lastUpdate" class="status-value">Never</span>
                 </div>
@@ -342,7 +369,7 @@
         </div>
 
         <!-- Info Card -->
-        <div class="card info-card">
+        <div class="card accent-dark">
             <h2>Info</h2>
             <div class="info-content">
                 <p><strong>Motor:</strong> NEMA 17 Stepper (FastAccelStepper + TMC2209)</p>
@@ -361,6 +388,8 @@
         <p class="version">Version 1.0</p>
     </footer>
 
+    <!-- MsgPack JS library (local, UMD global: window.msgpack) -->
+    <script src="msgpack.min.js"></script>
     <!-- Load new architecture files -->
     <script src="controls.js"></script>
     <script src="command-manager.js"></script>

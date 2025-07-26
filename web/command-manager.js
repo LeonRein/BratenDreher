@@ -21,6 +21,7 @@ class CommandManager {
         // Timeout and retry handling
         this.pendingCommands = new Map(); // Track pending commands for timeout/retry
         this.commandTimeout = 5000; // 5 second timeout
+        this.maxCommandRetries = 1; // Number of retries (1 = 2 attempts total)
         
         // Event callbacks
         this.onConnectionChange = null;
@@ -101,7 +102,7 @@ class CommandManager {
             
             // Request all current status to synchronize
             console.log('Requesting current status...');
-            await this.sendCommand('status_request', null);
+            await this.sendCommand('ras', null);
             
             console.log('Successfully connected to BratenDreher');
             return true;
@@ -206,7 +207,7 @@ class CommandManager {
         this.connected = true;
         this.updateConnectionStatus('Connected');
 
-        await this.sendCommand('status_request', null);
+        await this.sendCommand('ras', null);
         console.log('Successfully reconnected to BratenDreher');
     }
 
@@ -252,13 +253,14 @@ class CommandManager {
         }
 
         try {
+            // Use short command types directly
             const command = { type, value, ...additionalParams };
-            const commandString = JSON.stringify(command);
-            await this.commandCharacteristic.writeValue(new TextEncoder().encode(commandString));
-            console.log(`Command sent: ${commandString}`);
+            const commandBuffer = window.msgpack.encode(command);
+            await this.commandCharacteristic.writeValue(commandBuffer);
+            console.log(`Command sent (MsgPack):`, command);
             
             // Track command for timeout handling (if not a status request)
-            if (type !== 'status_request') {
+            if (type !== 'ras') {
                 const commandId = `${type}_${Date.now()}`;
                 this.pendingCommands.set(commandId, {
                     type,
@@ -285,26 +287,44 @@ class CommandManager {
     handleCommandTimeout(commandId) {
         const command = this.pendingCommands.get(commandId);
         if (!command) return; // Command was already processed
-        
-        if (command.retryCount === 0) {
-            // First timeout - attempt retry
-            console.log(`Retrying command ${command.type} (attempt 2/2)...`);
-            command.retryCount = 1;
-            
-            // Retry the command
+
+        if (command.retryCount < this.maxCommandRetries) {
+            // Retry attempt
+            const attemptNum = command.retryCount + 2; // 1st retry is attempt 2
+            console.log(`Retrying command ${command.type} (attempt ${attemptNum}/${this.maxCommandRetries + 1})...`);
+            command.retryCount += 1;
+
+            // Retry the command, but do not create a new pendingCommand entry
             setTimeout(() => {
-                this.sendCommand(command.type, command.value, command.additionalParams);
+                if (this.commandCharacteristic) {
+                    const commandObj = {
+                        type: command.type,
+                        value: command.value,
+                        ...command.additionalParams
+                    };
+                    const commandBuffer = window.msgpack.encode(commandObj);
+                    this.commandCharacteristic.writeValue(commandBuffer)
+                        .then(() => {
+                            setTimeout(() => {
+                                this.handleCommandTimeout(commandId);
+                            }, this.commandTimeout);
+                        })
+                        .catch((error) => {
+                            console.error(`Failed to resend ${command.type} command:`, error);
+                            this.pendingCommands.delete(commandId);
+                        });
+                }
             }, 500);
         } else {
-            // Second timeout - give up
-            console.warn(`Command ${command.type} failed after retry - giving up`);
+            // Max retries reached - give up
+            console.warn(`Command ${command.type} failed after ${this.maxCommandRetries + 1} attempts - giving up`);
             this.pendingCommands.delete(commandId);
-            
+
             // Notify about communication failure
             if (this.onNotification) {
                 this.onNotification({
                     level: 'warning',
-                    message: `Command ${command.type} failed after retry. Check connection.`
+                    message: `Command ${command.type} failed after ${this.maxCommandRetries + 1} attempts. Check connection.`
                 });
             }
         }
@@ -313,8 +333,8 @@ class CommandManager {
     // Message Handling
     handleMessage(event) {
         try {
-            const value = new TextDecoder().decode(event.target.value);
-            const message = JSON.parse(value);
+            const value = event.target.value.buffer ? new Uint8Array(event.target.value.buffer) : new Uint8Array(event.target.value);
+            const message = window.msgpack.decode(value);
             
             if (message.type === 'status_update') {
                 // Clear any pending commands that might be related to this status
@@ -355,17 +375,20 @@ class CommandManager {
     isStatusRelatedToCommand(statusUpdate, commandType) {
         // Map status update fields to command types
         const statusToCommandMap = {
-            'speed': ['speed'],
-            'currentSpeed': ['speed'],
-            'direction': ['direction'],
-            'enabled': ['enable'],
-            'current': ['current'],
-            'acceleration': ['acceleration'],
-            'speedVariationEnabled': ['enable_speed_variation', 'disable_speed_variation'],
-            'speedVariationStrength': ['speed_variation_strength'],
-            'speedVariationPhase': ['speed_variation_phase'],
-            'stallguardThreshold': ['stallguard_threshold'],
-            'pdNegotiationStatus': ['pd_voltage', 'pd_auto_negotiate']
+            'sp': ['ss'],
+            'cs': ['ss'],
+            'dir': ['sd'],
+            'en': ['en', 'es'],
+            'cur': ['sc'],
+            'acc': ['sa'],
+            'sve': ['esv', 'dsv'],
+            'svs': ['sv'],
+            'svp': ['svp'],
+            'sgt': ['st'],
+            'pdns': ['stv', 'anh'],
+            'tr': ['rc'],
+            'rt': ['rc'],
+            'sc': ['rs']
         };
         
         for (const [statusKey, relatedCommands] of Object.entries(statusToCommandMap)) {

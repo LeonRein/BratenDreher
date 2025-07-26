@@ -28,13 +28,13 @@ void PowerDeliveryTask::run() {
     dbg_println("PowerDeliveryTask: Starting...");
     
     // Initialize hardware and load settings
-    initializeHardware();
+    loadSettings();
     
+    initializeHardware();
+    pdConfigureVoltage(targetVoltage);
+
     isInitialized = true;
     dbg_println("PowerDeliveryTask: Initialization complete");
-    
-    // Start with automatic highest voltage negotiation
-    autoNegotiateHighestVoltageInternal();
     
     // Main task loop
     while (true) {
@@ -65,6 +65,12 @@ void PowerDeliveryTask::run() {
 
 void PowerDeliveryTask::pdConfigureVoltage(int voltage) {
     dbg_printf("PowerDeliveryTask: Configuring CFG pins for %dV\n", voltage);
+
+    // Reset negotiation state and start fresh
+    negotiationState = PDNegotiationState::NEGOTIATING;
+    negotiationStartTime = millis();
+    targetVoltage = voltage;
+    negotiatedVoltage = 0; // Reset negotiated voltage until success
     
     // Configure CFG pins based on desired voltage
     // From PD_Stepper example:
@@ -165,12 +171,6 @@ void PowerDeliveryTask::applyNegotiationVoltage(int voltage) {
     dbg_printf("PowerDeliveryTask: Starting negotiation for %dV (previous state: %d)\n", 
                  voltage, static_cast<int>(negotiationState));
     
-    // Reset negotiation state and start fresh
-    negotiationState = PDNegotiationState::NEGOTIATING;
-    negotiationStartTime = millis();
-    targetVoltage = voltage;
-    negotiatedVoltage = 0; // Reset negotiated voltage until success
-    
     // Configure hardware for target voltage
     pdConfigureVoltage(voltage);
 
@@ -229,6 +229,8 @@ void PowerDeliveryTask::handleSingleVoltageNegotiation(unsigned long currentTime
     if (currentPGState) {
         negotiationState = PDNegotiationState::SUCCESS;
         negotiatedVoltage = targetVoltage;
+        saveSettings();
+        saveSettings();
         dbg_printf("PowerDeliveryTask: Single voltage negotiation successful at %dV\n", negotiatedVoltage);
         
         // Publish immediate status updates
@@ -259,6 +261,7 @@ void PowerDeliveryTask::handleAutoNegotiation(unsigned long currentTime) {
         negotiationState = PDNegotiationState::SUCCESS;
         negotiatedVoltage = autoNegotiationHighestVoltage;
         targetVoltage = autoNegotiationHighestVoltage; // Update target to match
+        saveSettings();
         isAutoNegotiating = false;
         
         dbg_printf("PowerDeliveryTask: Auto-negotiation successful! Highest voltage: %dV\n", autoNegotiationHighestVoltage);
@@ -404,9 +407,6 @@ void PowerDeliveryTask::initializeHardware() {
     pinMode(VBUS_PIN, INPUT);
     pinMode(NTC_PIN, INPUT);
     
-    // Set default configuration (12V)
-    pdConfigureVoltage(PD_VOLTAGE_12V);
-    
     dbg_println("PowerDeliveryTask: Hardware initialization complete");
 }
 
@@ -459,4 +459,29 @@ bool PowerDeliveryTask::autoNegotiateHighestVoltage() {
 bool PowerDeliveryTask::requestStatus() {
     SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::REQUEST_ALL_STATUS, 0);
     return true;
+}
+
+// ============================================================================
+// PERSISTENT VOLTAGE STORAGE
+// ============================================================================
+
+void PowerDeliveryTask::loadSettings() {
+    if (preferences.begin("powerdelivery", true)) {
+        targetVoltage = preferences.getInt("voltage", PD_VOLTAGE_12V);
+        dbg_printf("PowerDeliveryTask: Loaded last negotiated voltage from flash: %dV\n", targetVoltage);
+        preferences.end();
+    } else {
+        targetVoltage = PD_VOLTAGE_12V;
+        dbg_println("PowerDeliveryTask: Failed to open preferences, using default voltage 12V");
+    }
+}
+
+void PowerDeliveryTask::saveSettings() {
+    if (preferences.begin("powerdelivery", false)) {
+        preferences.putInt("voltage", negotiatedVoltage);
+        preferences.end();
+        dbg_printf("PowerDeliveryTask: Saved negotiated voltage to flash: %dV\n", negotiatedVoltage);
+    } else {
+        dbg_println("PowerDeliveryTask: Failed to open preferences for saving voltage");
+    }
 }
