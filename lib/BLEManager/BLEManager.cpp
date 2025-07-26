@@ -18,10 +18,6 @@ public:
     void onConnect(BLEServer* pServer) override {
         bleManager->deviceConnected = true;
         // No dbg_print in time-critical callback
-        
-        // Send all current status to the newly connected client
-        // Note: This is called from BLE task context, so it's safe to call sendAllCurrentStatus
-        bleManager->sendAllCurrentStatus();
     }
     
     void onDisconnect(BLEServer* pServer) override {
@@ -56,14 +52,12 @@ public:
     }
 };
 
-BLEManager::BLEManager() 
+BLEManager::BLEManager()
     : Task("BLE_Task", 8192, 2, 0), // Task name, 8KB stack (reduced from 12KB), priority 2, core 0
       server(nullptr), service(nullptr), commandCharacteristic(nullptr),
       serverCallbacks(nullptr), commandCallbacks(nullptr),
       deviceConnected(false), oldDeviceConnected(false),
       systemStatus(SystemStatus::getInstance()), systemCommand(SystemCommand::getInstance()) {
-    
-    // No internal command queue needed - using SystemCommand singleton directly
 }
 
 BLEManager::~BLEManager() {
@@ -84,6 +78,8 @@ bool BLEManager::begin(const char* deviceName) {
     
     // Initialize BLE
     BLEDevice::init(deviceName);
+    // Set preferred MTU before advertising
+    BLEDevice::setMTU(BLEManager::BLE_MTU);
     
     // Create BLE Server
     server = BLEDevice::createServer();
@@ -151,13 +147,17 @@ void BLEManager::handleCommand(const std::string& command) {
         return;
     }
 
+    //print the json document for debugging
+    dbg_println("Received command JSON:");
+    serializeJsonPretty(doc, Serial);
+
     const char* type = doc["type"];
     if (!type) {
         dbg_println("Missing command type");
         return;
     }
 
-    if (strcmp(type, "status_request") != 0 && doc["value"].isNull()) {
+    if (strcmp(type, "ras") != 0 && doc["value"].isNull()) {
         dbg_println("ERROR: Command missing required 'value' field");
         return;
     }
@@ -355,34 +355,29 @@ void BLEManager::processNotifications() {
 
 void BLEManager::processStatusUpdates() {
     if (!commandCharacteristic || !deviceConnected) return;
-    
+
     StatusUpdateData statusUpdate;
-    
-    // Check if there are any status updates available
+
+    // Use constant MTU for buffer size
+    constexpr uint16_t bufferSize = BLEManager::BLE_MTU;
+
     if (systemStatus.getStatusUpdate(statusUpdate)) {
-        // Create JSON document and add the first update
         JsonDocument statusDoc;
         statusDoc["type"] = "status_update";
-        
-        // Add the first status update
         addStatusToJson(statusDoc, statusUpdate);
-        
-        // Process all remaining status updates in the queue
+
+        uint8_t tempBuffer[bufferSize];
+        size_t tempSize = 0;
         while (systemStatus.getStatusUpdate(statusUpdate)) {
             addStatusToJson(statusDoc, statusUpdate);
-            
-            // Check if we're approaching size limit
-            // MsgPack serialization for size check using ArduinoJson
-            uint8_t tempBuffer[MAX_BLE_PACKET_SIZE];
-            size_t tempSize = serializeMsgPack(statusDoc, tempBuffer, MAX_BLE_PACKET_SIZE);
-            if (tempSize >= MAX_BLE_PACKET_SIZE) {
+            tempSize = serializeMsgPack(statusDoc, tempBuffer, bufferSize);
+            if (tempSize >= bufferSize - 32) {
                 dbg_printf("Warning: Status update approaching size limit (%d bytes), sending now\n", tempSize);
                 break;
             }
         }
-        
-        // Send the batched updates
-        sendStatusUpdate(statusDoc);
+
+        sendStatusUpdate(tempBuffer, tempSize);
     }
 }
 
@@ -454,13 +449,7 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
     }
 }
 
-void BLEManager::sendStatusUpdate(JsonDocument& statusDoc) {
-    // MsgPack serialization using ArduinoJson
-    uint8_t buffer[MAX_BLE_PACKET_SIZE];
-    size_t len = serializeMsgPack(statusDoc, buffer, MAX_BLE_PACKET_SIZE);
-
-    dbg_printf("Sending status update (%d bytes)\n", len);
-
+void BLEManager::sendStatusUpdate(uint8_t* buffer, size_t len) {
     try {
         commandCharacteristic->setValue(buffer, len);
         commandCharacteristic->notify();
@@ -482,8 +471,8 @@ void BLEManager::sendNotification(const String& level, const String& message) {
     }
     
     // MsgPack serialization for notification using ArduinoJson
-        uint8_t buffer[MAX_BLE_PACKET_SIZE];
-        size_t len = serializeMsgPack(doc, buffer, MAX_BLE_PACKET_SIZE);
+        uint8_t buffer[BLEManager::BLE_MTU];
+        size_t len = serializeMsgPack(doc, buffer, BLEManager::BLE_MTU);
 
     // Truncate if too long
     if (len > 512) {

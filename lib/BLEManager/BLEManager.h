@@ -48,7 +48,7 @@ private:
     SystemCommand& systemCommand;
     
     // Status update batching configuration
-    static const size_t MAX_BLE_PACKET_SIZE = 500;            // Conservative BLE MTU size
+    static constexpr uint16_t BLE_MTU = 517; // Use highest possible MTU for BLE
 
     BLEManager();
     ~BLEManager();
@@ -62,7 +62,7 @@ private:
     void update();
     bool isConnected() const { return deviceConnected; }
     void addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate); // Helper to add status to JSON
-    void sendStatusUpdate(JsonDocument& statusDoc); // Send a status update JSON
+    void sendStatusUpdate(uint8_t* buffer, size_t len); // Send a status update
     void sendNotification(const String& level, const String& message = "");
     void sendAllCurrentStatus(); // Send all current status information to newly connected client
     void handleCommand(const std::string& command);
