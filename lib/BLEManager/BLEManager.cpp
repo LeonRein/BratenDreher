@@ -163,23 +163,23 @@ void BLEManager::handleCommand(const std::string& command) {
     }
     dbg_printf("Processing command type: %s\n", type);
 
-    if (strcmp(type, "speed") == 0) {
+    if (strcmp(type, "ss") == 0) {
         float speed = doc["value"];
         StepperCommandData cmd(StepperCommand::SET_SPEED, speed);
         systemCommand.sendCommand(cmd);
         dbg_printf("Speed command queued: %.2f RPM\n", speed);
     }
-    else if (strcmp(type, "emergency_stop") == 0) {
+    else if (strcmp(type, "es") == 0) {
         systemCommand.sendCommand(StepperCommand::EMERGENCY_STOP);
         dbg_printf("Emergency stop command queued\n");
     }
-    else if (strcmp(type, "direction") == 0) {
+    else if (strcmp(type, "sd") == 0) {
         bool clockwise = doc["value"];
         StepperCommandData cmd(StepperCommand::SET_DIRECTION, clockwise);
         systemCommand.sendCommand(cmd);
         dbg_printf("Direction command queued: %s\n", clockwise ? "clockwise" : "counter-clockwise");
     }
-    else if (strcmp(type, "enable") == 0) {
+    else if (strcmp(type, "en") == 0) {
         bool enable = doc["value"];
         if (enable) {
             StepperCommandData cmd(StepperCommand::ENABLE);
@@ -190,7 +190,7 @@ void BLEManager::handleCommand(const std::string& command) {
         }
         dbg_printf("Motor %s command queued\n", enable ? "enable" : "disable");
     }
-    else if (strcmp(type, "current") == 0) {
+    else if (strcmp(type, "sc") == 0) {
         int current = doc["value"];
         if (current >= 10 && current <= 100) {
             StepperCommandData cmd(StepperCommand::SET_CURRENT, current);
@@ -198,24 +198,24 @@ void BLEManager::handleCommand(const std::string& command) {
             dbg_printf("Current command queued: %d%%\n", current);
         }
     }
-    else if (strcmp(type, "reset") == 0) {
+    else if (strcmp(type, "rc") == 0) {
         StepperCommandData cmd(StepperCommand::RESET_COUNTERS);
         systemCommand.sendCommand(cmd);
         dbg_printf("Reset counters command queued\n");
     }
-    else if (strcmp(type, "reset_stall") == 0) {
+    else if (strcmp(type, "rs") == 0) {
         StepperCommandData cmd(StepperCommand::RESET_STALL_COUNT);
         systemCommand.sendCommand(cmd);
         dbg_printf("Reset stall count command queued\n");
     }
-    else if (strcmp(type, "status_request") == 0) {
+    else if (strcmp(type, "ras") == 0) {
         dbg_println("Status request received, requesting all current status...");
         StepperCommandData cmd(StepperCommand::REQUEST_ALL_STATUS);
         systemCommand.sendCommand(cmd);
         PowerDeliveryCommandData pdCmd(PowerDeliveryCommand::REQUEST_ALL_STATUS);
         systemCommand.sendPowerDeliveryCommand(pdCmd);
     }
-    else if (strcmp(type, "acceleration") == 0) {
+    else if (strcmp(type, "sa") == 0) {
         uint32_t accelerationStepsPerSec2 = doc["value"];
         if (accelerationStepsPerSec2 >= 100 && accelerationStepsPerSec2 <= 100000) {
             StepperCommandData cmd(StepperCommand::SET_ACCELERATION, (int)accelerationStepsPerSec2);
@@ -226,7 +226,7 @@ void BLEManager::handleCommand(const std::string& command) {
             sendNotification("error", "Acceleration must be 100-100000 steps/s²");
         }
     }
-    else if (strcmp(type, "speed_variation_strength") == 0) {
+    else if (strcmp(type, "sv") == 0) {
         float strength = doc["value"];
         if (strength >= 0.0f && strength <= 1.0f) {
             StepperCommandData cmd(StepperCommand::SET_SPEED_VARIATION, strength);
@@ -237,23 +237,23 @@ void BLEManager::handleCommand(const std::string& command) {
             sendNotification("error", "Speed variation strength must be 0.0-1.0");
         }
     }
-    else if (strcmp(type, "speed_variation_phase") == 0) {
+    else if (strcmp(type, "svp") == 0) {
         float phase = doc["value"];
         StepperCommandData cmd(StepperCommand::SET_SPEED_VARIATION_PHASE, phase);
         systemCommand.sendCommand(cmd);
         dbg_printf("Speed variation phase command queued: %.2f radians\n", phase);
     }
-    else if (strcmp(type, "enable_speed_variation") == 0) {
+    else if (strcmp(type, "esv") == 0) {
         StepperCommandData cmd(StepperCommand::ENABLE_SPEED_VARIATION);
         systemCommand.sendCommand(cmd);
         dbg_printf("Enable speed variation command queued\n");
     }
-    else if (strcmp(type, "disable_speed_variation") == 0) {
+    else if (strcmp(type, "dsv") == 0) {
         StepperCommandData cmd(StepperCommand::DISABLE_SPEED_VARIATION);
         systemCommand.sendCommand(cmd);
         dbg_printf("Disable speed variation command queued\n");
     }
-    else if (strcmp(type, "stallguard_threshold") == 0) {
+    else if (strcmp(type, "st") == 0) {
         int threshold = doc["value"];
         if (threshold >= 0 && threshold <= 255) {
             StepperCommandData cmd(StepperCommand::SET_STALLGUARD_THRESHOLD, threshold);
@@ -264,7 +264,7 @@ void BLEManager::handleCommand(const std::string& command) {
             sendNotification("error", "StallGuard threshold must be 0-255");
         }
     }
-    else if (strcmp(type, "pd_voltage") == 0) {
+    else if (strcmp(type, "stv") == 0) {
         int voltage = doc["value"];
         if (voltage >= 5 && voltage <= 20) {
             PowerDeliveryCommandData cmd(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
@@ -274,7 +274,7 @@ void BLEManager::handleCommand(const std::string& command) {
             dbg_printf("Invalid voltage value: %d (must be 5-20V)\n", voltage);
         }
     }
-    else if (strcmp(type, "pd_auto_negotiate") == 0) {
+    else if (strcmp(type, "anh") == 0) {
         PowerDeliveryCommandData cmd(PowerDeliveryCommand::AUTO_NEGOTIATE_HIGHEST);
         systemCommand.sendPowerDeliveryCommand(cmd);
         dbg_printf("Power delivery auto-negotiation started\n");

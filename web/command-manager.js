@@ -102,7 +102,7 @@ class CommandManager {
             
             // Request all current status to synchronize
             console.log('Requesting current status...');
-            await this.sendCommand('status_request', null);
+            await this.sendCommand('ras', null);
             
             console.log('Successfully connected to BratenDreher');
             return true;
@@ -207,7 +207,7 @@ class CommandManager {
         this.connected = true;
         this.updateConnectionStatus('Connected');
 
-        await this.sendCommand('status_request', null);
+        await this.sendCommand('ras', null);
         console.log('Successfully reconnected to BratenDreher');
     }
 
@@ -253,13 +253,14 @@ class CommandManager {
         }
 
         try {
+            // Use short command types directly
             const command = { type, value, ...additionalParams };
             const commandBuffer = window.msgpack.encode(command);
             await this.commandCharacteristic.writeValue(commandBuffer);
             console.log(`Command sent (MsgPack):`, command);
             
             // Track command for timeout handling (if not a status request)
-            if (type !== 'status_request') {
+            if (type !== 'ras') {
                 const commandId = `${type}_${Date.now()}`;
                 this.pendingCommands.set(commandId, {
                     type,
@@ -374,20 +375,20 @@ class CommandManager {
     isStatusRelatedToCommand(statusUpdate, commandType) {
         // Map status update fields to command types
         const statusToCommandMap = {
-            'speed': ['speed'],
-            'currentSpeed': ['speed'],
-            'direction': ['direction'],
-            'enabled': ['enable', 'emergency_stop'],
-            'current': ['current'],
-            'acceleration': ['acceleration'],
-            'speedVariationEnabled': ['enable_speed_variation', 'disable_speed_variation'],
-            'speedVariationStrength': ['speed_variation_strength'],
-            'speedVariationPhase': ['speed_variation_phase'],
-            'stallguardThreshold': ['stallguard_threshold'],
-            'pdNegotiationStatus': ['pd_voltage', 'pd_auto_negotiate'],
-            'totalRevolutions': ['reset'],
-            'runtime': ['reset'],
-            'stallCount': ['reset_stall']
+            'speed': ['ss'],
+            'currentSpeed': ['ss'],
+            'direction': ['sd'],
+            'enabled': ['en', 'es'],
+            'current': ['sc'],
+            'acceleration': ['sa'],
+            'speedVariationEnabled': ['esv', 'dsv'],
+            'speedVariationStrength': ['sv'],
+            'speedVariationPhase': ['svp'],
+            'stallguardThreshold': ['st'],
+            'pdNegotiationStatus': ['stv', 'anh'],
+            'totalRevolutions': ['rc'],
+            'runtime': ['rc'],
+            'stallCount': ['rs']
         };
         
         for (const [statusKey, relatedCommands] of Object.entries(statusToCommandMap)) {

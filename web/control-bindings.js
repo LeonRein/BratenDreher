@@ -118,7 +118,7 @@ class ControlBinding {
 class SpeedControlBinding extends ControlBinding {
     constructor(speedSlider, speedDisplay, presetButtons, fillElement, config = {}) {
         super({
-            commandType: 'speed',
+            commandType: 'ss',
             statusKeys: ['speed', 'currentSpeed'],
             displayTransform: (value) => value.toFixed(1),
             valueTransform: (value) => Math.max(0.1, Math.min(30.0, value)),
@@ -199,7 +199,7 @@ class SpeedControlBinding extends ControlBinding {
 class DirectionControlBinding extends ControlBinding {
     constructor(directionButtons, directionDisplay, config = {}) {
         super({
-            commandType: 'direction',
+            commandType: 'sd',
             statusKeys: ['direction'],
             ...config
         });
@@ -287,7 +287,7 @@ class VariableSpeedControlBinding extends ControlBinding {
     }
 
     async setVariableSpeedEnabled(enabled) {
-        const commandType = enabled ? 'enable_speed_variation' : 'disable_speed_variation';
+        const commandType = enabled ? 'esv' : 'dsv';
         
         // Update UI immediately
         this.toggle.setValue(enabled);
@@ -358,7 +358,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
         const selectedVoltage = parseInt(this.voltageSelect.getValue());
         if (selectedVoltage && this.commandManager) {
             this.showNegotiationStarted(false);
-            return await this.commandManager.sendCommand('pd_voltage', selectedVoltage);
+            return await this.commandManager.sendCommand('stv', selectedVoltage);
         }
         return false;
     }
@@ -366,7 +366,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
     async autoNegotiate() {
         if (this.commandManager) {
             this.showNegotiationStarted(true);
-            return await this.commandManager.sendCommand('pd_auto_negotiate', 1);
+            return await this.commandManager.sendCommand('anh', 1);
         }
         return false;
     }
@@ -458,7 +458,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
 class StallGuardControlBinding extends ControlBinding {
     constructor(thresholdSlider, resultDisplay, fillElement, config = {}) {
         super({
-            commandType: 'stallguard_threshold',
+            commandType: 'st',
             statusKeys: ['stallguardThreshold', 'stallguardResult'],
             displayTransform: (value) => {
                 const percentage = (value / 255) * 100;
@@ -542,7 +542,7 @@ class StallGuardControlBinding extends ControlBinding {
 class EmergencyStopControlBinding extends ControlBinding {
     constructor(emergencyStopBtn, config = {}) {
         super({
-            commandType: 'emergency_stop',
+            commandType: 'es',
             ...config
         });
         this.emergencyStopBtn = emergencyStopBtn;
@@ -556,7 +556,7 @@ class EmergencyStopControlBinding extends ControlBinding {
         }
         // Optionally: send emergency stop command
         if (this.commandManager) {
-            await this.commandManager.sendCommand('emergency_stop', true);
+            await this.commandManager.sendCommand('es', true);
         }
         // Visual feedback
         if (this.emergencyStopBtn && this.emergencyStopBtn.elements && this.emergencyStopBtn.elements[0]) {
@@ -577,7 +577,7 @@ class EmergencyStopControlBinding extends ControlBinding {
 class StatisticsResetControlBinding extends ControlBinding {
     constructor(resetStatsBtn, config = {}) {
         super({
-            commandType: 'reset',
+            commandType: 'rc',
             ...config
         });
         this.resetStatsBtn = resetStatsBtn;
@@ -586,7 +586,7 @@ class StatisticsResetControlBinding extends ControlBinding {
 
     async handleValueChange() {
         if (this.commandManager) {
-            const success = await this.commandManager.sendCommand('reset', true);
+            const success = await this.commandManager.sendCommand('rc', true);
             if (success && this.resetStatsBtn && this.resetStatsBtn.elements && this.resetStatsBtn.elements[0]) {
                 this.resetStatsBtn.elements[0].textContent = '📊 Reset Successful';
                 setTimeout(() => {
@@ -605,7 +605,7 @@ class StatisticsResetControlBinding extends ControlBinding {
 class StallResetControlBinding extends ControlBinding {
     constructor(resetStallBtn, config = {}) {
         super({
-            commandType: 'reset_stall',
+            commandType: 'rs',
             ...config
         });
         this.resetStallBtn = resetStallBtn;
@@ -614,7 +614,7 @@ class StallResetControlBinding extends ControlBinding {
 
     async handleValueChange() {
         if (this.commandManager) {
-            const success = await this.commandManager.sendCommand('reset_stall', true);
+            const success = await this.commandManager.sendCommand('rs', true);
             if (success && this.resetStallBtn && this.resetStallBtn.elements && this.resetStallBtn.elements[0]) {
                 this.resetStallBtn.elements[0].textContent = '⚠️ Reset Successful';
                 setTimeout(() => {

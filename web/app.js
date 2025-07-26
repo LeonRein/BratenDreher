@@ -328,13 +328,15 @@ class BratenDreherApp {
             this.controls.get('speedSlider'),
             this.controls.get('setpointSpeedDisplay'),
             this.controls.get('presetButtons'),
-            this.speedSliderFill
+            this.speedSliderFill,
+            { commandType: 'ss' }
         ));
 
         // Direction control binding
         this.bindings.set('direction', new DirectionControlBinding(
             this.controls.get('directionButtons'),
-            this.controls.get('directionDisplay')
+            this.controls.get('directionDisplay'),
+            { commandType: 'sd' }
         ));
         // Emergency stop binding
         this.bindings.set('emergencyStop', new window.EmergencyStopControlBinding(
@@ -359,7 +361,7 @@ class BratenDreherApp {
 
         // Motor control binding
         this.bindings.set('motor', new ControlBinding({
-            commandType: 'enable',
+            commandType: 'en',
             statusKeys: ['enabled'],
             debounceTime: 0
         }));
@@ -368,7 +370,7 @@ class BratenDreherApp {
 
         // Current control binding
         this.bindings.set('current', new ControlBinding({
-            commandType: 'current',
+            commandType: 'sc',
             statusKeys: ['current'],
             valueTransform: (value) => parseInt(value)
         }));
@@ -377,7 +379,7 @@ class BratenDreherApp {
 
         // Acceleration control binding
         this.bindings.set('acceleration', new ControlBinding({
-            commandType: 'acceleration',
+            commandType: 'sa',
             statusKeys: ['acceleration'],
             valueTransform: (sliderValue) => {
                 // sliderValue is time in seconds from the UI
@@ -417,7 +419,7 @@ class BratenDreherApp {
 
         // Strength binding
         this.bindings.set('strength', new ControlBinding({
-            commandType: 'speed_variation_strength',
+            commandType: 'sv',
             statusKeys: ['speedVariationStrength'],
             valueTransform: (value) => parseInt(value) / 100.0,
             statusTransform: (value) => Math.round(value * 100)
@@ -426,7 +428,7 @@ class BratenDreherApp {
 
         // Phase binding
         this.bindings.set('phase', new ControlBinding({
-            commandType: 'speed_variation_phase',
+            commandType: 'svp',
             statusKeys: ['speedVariationPhase'],
             valueTransform: (value) => {
                 const phase = parseInt(value);
@@ -653,6 +655,7 @@ class BratenDreherApp {
         // Status updates from backend
         this.commandManager.onStatusUpdate = (statusUpdate) => {
             // Update last update time on every status message
+            console.log('Status update received:', statusUpdate);
             this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
             this.handleStatusUpdate(statusUpdate);
         };
