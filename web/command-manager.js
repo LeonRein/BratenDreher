@@ -254,9 +254,9 @@ class CommandManager {
 
         try {
             const command = { type, value, ...additionalParams };
-            const commandString = JSON.stringify(command);
-            await this.commandCharacteristic.writeValue(new TextEncoder().encode(commandString));
-            console.log(`Command sent: ${commandString}`);
+            const commandBuffer = window.msgpack.encode(command);
+            await this.commandCharacteristic.writeValue(commandBuffer);
+            console.log(`Command sent (MsgPack):`, command);
             
             // Track command for timeout handling (if not a status request)
             if (type !== 'status_request') {
@@ -301,8 +301,8 @@ class CommandManager {
                         value: command.value,
                         ...command.additionalParams
                     };
-                    const commandString = JSON.stringify(commandObj);
-                    this.commandCharacteristic.writeValue(new TextEncoder().encode(commandString))
+                    const commandBuffer = window.msgpack.encode(commandObj);
+                    this.commandCharacteristic.writeValue(commandBuffer)
                         .then(() => {
                             setTimeout(() => {
                                 this.handleCommandTimeout(commandId);
@@ -332,8 +332,8 @@ class CommandManager {
     // Message Handling
     handleMessage(event) {
         try {
-            const value = new TextDecoder().decode(event.target.value);
-            const message = JSON.parse(value);
+            const value = event.target.value.buffer ? new Uint8Array(event.target.value.buffer) : new Uint8Array(event.target.value);
+            const message = window.msgpack.decode(value);
             
             if (message.type === 'status_update') {
                 // Clear any pending commands that might be related to this status

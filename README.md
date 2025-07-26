@@ -119,30 +119,32 @@ python3 -m http.server 8000
 | Speed | ...ab1 | R/W | Geschwindigkeit (0.1-30 RPM) |
 | Direction | ...ab2 | R/W | Richtung (1=CW, 0=CCW) |
 | Enable | ...ab3 | R/W | Motor Ein/Aus (1=Ein, 0=Aus) |
-| Status | ...ab4 | R/N | JSON Status-Updates |
+| Status | ...ab4 | R/N | MsgPack Status-Updates |
 | Microsteps | ...ab5 | R/W | Microsteps (8, 16, 32, 64, 128, 256) |
 | Current | ...ab6 | R/W | Motorstrom (10-100%) |
 | Reset | ...ab7 | W | Statistiken zurücksetzen (1=Reset) |
 
-### Status JSON Format
+### Status MsgPack Format
 
-```json
-{
-  "enabled": true,
-  "speed": 15.0,
-  "direction": "cw",
-  "running": true,
-  "connected": true,
-  "totalRevolutions": 25.234,
-  "runtime": 3024,
-  "microsteps": 32,
-  "current": 60,
-  "tmc2209Status": true,
-  "stallDetected": false,
-  "stallCount": 0,
-  "timestamp": 123456
-}
-```
+Status updates and commands are now exchanged as MsgPack binary objects.
+The structure remains the same as the previous JSON example, but is encoded/decoded using MsgPack on both the ESP32 and Web frontend.
+
+Example structure:
+- enabled: boolean
+- speed: float
+- direction: string ("cw" or "ccw")
+- running: boolean
+- connected: boolean
+- totalRevolutions: float
+- runtime: integer
+- microsteps: integer
+- current: integer
+- tmc2209Status: boolean
+- stallDetected: boolean
+- stallCount: integer
+- timestamp: integer
+
+Refer to the code for exact field names and types.
 
 ## 🎮 Bedienung
 
@@ -227,7 +229,8 @@ await navigator.bluetooth.requestDevice({
 
 - **FastAccelStepper**: Hardware-Timer basierte Step-Generierung für ESP32
 - **TMC2209**: Stepper Driver Library von Janelia für UART-Kommunikation
-- **ArduinoJson**: JSON Parsing für BLE-Kommunikation
+- **ArduinoJson**: MsgPack Parsing/Serialization für BLE-Kommunikation
+- **@msgpack/msgpack**: MsgPack JS library for Web frontend
 - **ESP32 BLE**: Bluetooth Low Energy Stack
 - **Preferences**: ESP32 Flash-Speicher für Einstellungen
 - **Web Bluetooth API**: Browser-seitige BLE-Unterstützung

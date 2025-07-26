@@ -143,11 +143,11 @@ void BLEManager::handleCommand(const std::string& command) {
     }
 
     // Use fixed-size JSON document to prevent heap issues (compatible with ArduinoJson v6)
+    // MsgPack deserialization using ArduinoJson
     JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, command);
-
+    DeserializationError error = deserializeMsgPack(doc, (uint8_t*)command.data(), command.size());
     if (error) {
-        dbg_printf("JSON parse error: %s\n", error.c_str());
+        dbg_printf("MsgPack parse error: %s\n", error.c_str());
         return;
     }
 
@@ -157,12 +157,10 @@ void BLEManager::handleCommand(const std::string& command) {
         return;
     }
 
-    // Validate that we have the required value field for most commands
     if (strcmp(type, "status_request") != 0 && doc["value"].isNull()) {
         dbg_println("ERROR: Command missing required 'value' field");
         return;
     }
-
     dbg_printf("Processing command type: %s\n", type);
 
     if (strcmp(type, "speed") == 0) {
@@ -211,7 +209,6 @@ void BLEManager::handleCommand(const std::string& command) {
         dbg_printf("Reset stall count command queued\n");
     }
     else if (strcmp(type, "status_request") == 0) {
-        // Request all current status from StepperController
         dbg_println("Status request received, requesting all current status...");
         StepperCommandData cmd(StepperCommand::REQUEST_ALL_STATUS);
         systemCommand.sendCommand(cmd);
@@ -219,9 +216,7 @@ void BLEManager::handleCommand(const std::string& command) {
         systemCommand.sendPowerDeliveryCommand(pdCmd);
     }
     else if (strcmp(type, "acceleration") == 0) {
-        // Set acceleration directly in steps/s²
-        uint32_t accelerationStepsPerSec2 = doc["value"];  // Acceleration in steps/s²
-
+        uint32_t accelerationStepsPerSec2 = doc["value"];
         if (accelerationStepsPerSec2 >= 100 && accelerationStepsPerSec2 <= 100000) {
             StepperCommandData cmd(StepperCommand::SET_ACCELERATION, (int)accelerationStepsPerSec2);
             systemCommand.sendCommand(cmd);
@@ -270,22 +265,18 @@ void BLEManager::handleCommand(const std::string& command) {
         }
     }
     else if (strcmp(type, "pd_voltage") == 0) {
-        // Set power delivery target voltage and start negotiation
         int voltage = doc["value"];
         if (voltage >= 5 && voltage <= 20) {
             PowerDeliveryCommandData cmd(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
             systemCommand.sendPowerDeliveryCommand(cmd);
-
             dbg_printf("Power delivery voltage set to %dV and negotiation started\n", voltage);
         } else {
             dbg_printf("Invalid voltage value: %d (must be 5-20V)\n", voltage);
         }
     }
     else if (strcmp(type, "pd_auto_negotiate") == 0) {
-        // Start auto-negotiation for highest available voltage
         PowerDeliveryCommandData cmd(PowerDeliveryCommand::AUTO_NEGOTIATE_HIGHEST);
         systemCommand.sendPowerDeliveryCommand(cmd);
-
         dbg_printf("Power delivery auto-negotiation started\n");
     }
     else {
@@ -381,8 +372,9 @@ void BLEManager::processStatusUpdates() {
             addStatusToJson(statusDoc, statusUpdate);
             
             // Check if we're approaching size limit
-            String tempString;
-            size_t tempSize = serializeJson(statusDoc, tempString);
+            // MsgPack serialization for size check using ArduinoJson
+            uint8_t tempBuffer[MAX_BLE_PACKET_SIZE];
+            size_t tempSize = serializeMsgPack(statusDoc, tempBuffer, MAX_BLE_PACKET_SIZE);
             if (tempSize >= MAX_BLE_PACKET_SIZE) {
                 dbg_printf("Warning: Status update approaching size limit (%d bytes), sending now\n", tempSize);
                 break;
@@ -463,21 +455,15 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
 }
 
 void BLEManager::sendStatusUpdate(JsonDocument& statusDoc) {
-    String statusString;
-    size_t result = serializeJson(statusDoc, statusString);
-    if (result == 0) {
-        dbg_println("ERROR: Failed to serialize status JSON");
-        return;
-    }
-    
-    dbg_printf("Sending status update (%d bytes): %s\n", 
-                  statusString.length(), statusString.c_str());
-    
+    // MsgPack serialization using ArduinoJson
+    uint8_t buffer[MAX_BLE_PACKET_SIZE];
+    size_t len = serializeMsgPack(statusDoc, buffer, MAX_BLE_PACKET_SIZE);
+
+    dbg_printf("Sending status update (%d bytes)\n", len);
+
     try {
-        commandCharacteristic->setValue(statusString.c_str());
+        commandCharacteristic->setValue(buffer, len);
         commandCharacteristic->notify();
-        
-        // Small delay to prevent overwhelming BLE stack
         vTaskDelay(pdMS_TO_TICKS(10));
     } catch (...) {
         dbg_println("Failed to send status update notification");
@@ -495,25 +481,19 @@ void BLEManager::sendNotification(const String& level, const String& message) {
         doc["message"] = message;
     }
     
-    String response;
-    size_t result = serializeJson(doc, response);
-    if (result == 0) {
-        dbg_println("ERROR: Failed to serialize notification JSON");
-        return;
+    // MsgPack serialization for notification using ArduinoJson
+        uint8_t buffer[MAX_BLE_PACKET_SIZE];
+        size_t len = serializeMsgPack(doc, buffer, MAX_BLE_PACKET_SIZE);
+
+    // Truncate if too long
+    if (len > 512) {
+        dbg_printf("WARNING: Notification too long (%d bytes), truncating\n", len);
+        len = 512;
     }
-    
-    // Ensure response is not too long for BLE characteristic
-    if (response.length() > 512) {
-        dbg_printf("WARNING: Notification too long (%d chars), truncating\n", response.length());
-        response = response.substring(0, 512);
-    }
-    
-    // Send via BLE notification
+
     try {
-        commandCharacteristic->setValue(response.c_str());
+        commandCharacteristic->setValue(buffer, len);
         commandCharacteristic->notify();
-        
-        // Small delay to prevent overwhelming BLE stack
         vTaskDelay(pdMS_TO_TICKS(5));
     } catch (...) {
         dbg_println("ERROR: Failed to send notification");
