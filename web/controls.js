@@ -97,8 +97,6 @@ class SliderControl extends BaseControl {
         this.fillElement = options.fillElement;
         this.options = {
             debounceTime: 500,
-            displayTransform: (value) => value.toString(),
-            inputValueTransform: (value) => value,
             ...options
         };
         if (this.valueElement) this.addAdditionalElement(this.valueElement, { applyDisabled: false });
@@ -118,19 +116,19 @@ class SliderControl extends BaseControl {
 
     handleInput(event) {
         const rawValue = parseFloat(event.target.value);
-        const displayValue = this.options.displayTransform(rawValue);
+        const displayValue = rawValue.toString();
         if (this.valueElement) this.valueElement.textContent = displayValue;
         this.setDisplayState(CONTROL_STATES.OUTDATED);
         if (this.timer) clearTimeout(this.timer);
         this.timer = setTimeout(() => {
-            if (this._onChange) this._onChange(this.options.inputValueTransform(rawValue));
+            if (this._onChange) this._onChange(rawValue);
         }, this.options.debounceTime);
     }
 
     setValue(value) {
         if (this.slider) {
             this.slider.value = value;
-            if (this.valueElement) this.valueElement.textContent = this.options.displayTransform(value);
+            if (this.valueElement) this.valueElement.textContent = value.toString();
         }
     }
 

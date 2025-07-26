@@ -178,12 +178,13 @@ class StatisticsControlBinding extends ControlBinding {
     constructor(totalRevolutionsDisplay, runTimeDisplay, avgSpeedDisplay, updateAverageSpeed, config = {}) {
         const defaults = {
             statusKeys: ['tr', 'rt'],
+            statusValueTransform: (value) => value,
             customStatusHandler: (statusUpdate, controls, config) => {
                 if (statusUpdate.tr !== undefined) {
-                    totalRevolutionsDisplay.updateValue(statusUpdate.tr);
+                    totalRevolutionsDisplay.updateValue(config.statusValueTransform(statusUpdate.tr));
                 }
                 if (statusUpdate.rt !== undefined) {
-                    runTimeDisplay.updateValue(statusUpdate.rt);
+                    runTimeDisplay.updateValue(config.statusValueTransform(statusUpdate.rt));
                     if (typeof updateAverageSpeed === 'function') {
                         updateAverageSpeed();
                     }
@@ -202,22 +203,33 @@ class TmcStatusControlBinding extends ControlBinding {
     constructor(tmcStatusDisplay, tmcTempDisplay, stallStatusDisplay, stallCountDisplay, config = {}) {
         const defaults = {
             statusKeys: ['tmcst', 'tmct', 'sd', 'sc'],
+            statusValueTransform: (value, key) => {
+                if (key === 'tmcst') return value ? 'OK' : 'Error';
+                if (key === 'tmct') {
+                    const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
+                    const tempIdx = Math.max(0, Math.min(4, value));
+                    return { label: tempLabels[tempIdx], className: tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error') };
+                }
+                if (key === 'sd') return value ? 'STALL!' : 'OK';
+                if (key === 'sc') return value;
+                return value;
+            },
             customStatusHandler: (statusUpdate, controls, config) => {
                 if (statusUpdate.tmcst !== undefined) {
-                    tmcStatusDisplay.updateValue(statusUpdate.tmcst ? 'OK' : 'Error');
-                    tmcStatusDisplay.updateClass(statusUpdate.tmcst ? 'status-success' : 'status-error');
+                    const transformed = config.statusValueTransform(statusUpdate.tmcst, 'tmcst');
+                    tmcStatusDisplay.updateValue(transformed);
+                    tmcStatusDisplay.updateClass(transformed === 'OK' ? 'status-success' : 'status-error');
                 }
 
                 if (statusUpdate.tmct !== undefined) {
-                    const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
-                    const tempIdx = Math.max(0, Math.min(4, statusUpdate.tmct));
-                    tmcTempDisplay.updateValue(tempLabels[tempIdx]);
-                    const className = tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error');
-                    tmcTempDisplay.updateClass(className);
+                    const transformed = config.statusValueTransform(statusUpdate.tmct, 'tmct');
+                    tmcTempDisplay.updateValue(transformed.label);
+                    tmcTempDisplay.updateClass(transformed.className);
                 }
 
                 if (statusUpdate.sd !== undefined) {
-                    stallStatusDisplay.updateValue(statusUpdate.sd ? 'STALL!' : 'OK');
+                    const transformed = config.statusValueTransform(statusUpdate.sd, 'sd');
+                    stallStatusDisplay.updateValue(transformed);
                     const color = statusUpdate.sd ? '#e74c3c' : '#10b981';
                     stallStatusDisplay.displays.forEach(element => {
                         if (element) element.style.color = color;
@@ -226,7 +238,8 @@ class TmcStatusControlBinding extends ControlBinding {
                 }
 
                 if (statusUpdate.sc !== undefined) {
-                    stallCountDisplay.updateValue(statusUpdate.sc);
+                    const transformed = config.statusValueTransform(statusUpdate.sc, 'sc');
+                    stallCountDisplay.updateValue(transformed);
                     const color = statusUpdate.sc > 0 ? '#e74c3c' : '#10b981';
                     stallCountDisplay.displays.forEach(element => {
                         if (element) element.style.color = color;
@@ -440,16 +453,12 @@ class VariableSpeedControlBinding extends ControlBinding {
                 }
 
                 if (statusUpdate.svs !== undefined) {
-                    const strength = Math.round(statusUpdate.svs * 100);
+                    const strength = config.statusValueTransform(statusUpdate.svs, 'svs');
                     this.strengthSlider.setValue(strength);
                 }
 
                 if (statusUpdate.svp !== undefined) {
-                    // Convert from radians to degrees and then to -180 to 180 range
-                    let phaseDegrees = Math.round((statusUpdate.svp * 180) / Math.PI);
-                    if (phaseDegrees > 180) {
-                        phaseDegrees -= 360;
-                    }
+                    const phaseDegrees = config.statusValueTransform(statusUpdate.svp, 'svp');
                     this.phaseSlider.setValue(phaseDegrees);
                 }
             };
@@ -492,6 +501,17 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
     constructor(graphControl, config = {}) {
         const defaults = {
             statusKeys: ['ca', 'cs', 'sp'],
+            statusValueTransform: (value, key) => {
+                if (key === 'svs') return Math.round(value * 100);
+                if (key === 'svp') {
+                    let phaseDegrees = Math.round((value * 180) / Math.PI);
+                    if (phaseDegrees > 180) {
+                        phaseDegrees -= 360;
+                    }
+                    return phaseDegrees;
+                }
+                return value;
+            },
             customStatusHandler: null
         };
         super({ ...defaults, ...config });
