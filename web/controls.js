@@ -539,7 +539,9 @@ class GraphControl extends BaseControl {
     addSample(rot, speed, setSpeed) {
         this.samples.push({ rot, speed });
         // Only keep samples from current rotation
-        this.samples = this.samples.filter(s => s.rot  > rot - 1);
+        const threshold = rot - 1;
+        const firstIdx = this.samples.findIndex(s => s.rot > threshold);
+        this.samples = firstIdx === -1 ? [] : this.samples.slice(firstIdx);
         this.setSpeed = setSpeed;
         this.drawGraph();
     }
