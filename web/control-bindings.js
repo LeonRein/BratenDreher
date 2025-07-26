@@ -3,19 +3,33 @@
  * Provides configuration-driven binding between controls and command manager
  */
 class ControlBinding {
-    constructor(config) {
-        this.config = {
-            commandType: null,
-            statusKeys: [], // Array of status keys this binding responds to
-            inputValueTransform: (value) => value, // Transform UI value before sending command
-            statusValueTransform: (value) => value, // Transform status value before updating UI
-            displayTransform: (value) => value.toString(), // Transform value for display
-            customStatusHandler: null, // Custom function for complex status handling
-            ...config
-        };
-        
+    constructor({
+        commandType = null,
+        statusKeys = [],
+        additionalParams = {}
+    } = {}) {
+        this.commandType = commandType;
+        this.statusKeys = statusKeys;
+        this.additionalParams = additionalParams;
+
         this.controls = [];
         this.commandManager = null;
+    }
+
+    inputValueTransform(value) {
+        return value;
+    }
+
+    statusValueTransform(value, key) {
+        return value;
+    }
+
+    displayTransform(value) {
+        return value.toString();
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        // Default: no custom handling
     }
 
     setCommandManager(commandManager) {
@@ -28,7 +42,7 @@ class ControlBinding {
 
     // Handle value changes from UI controls
     async handleValueChange(value) {
-        if (!this.commandManager || !this.config.commandType) {
+        if (!this.commandManager || !this.commandType) {
             console.warn('ControlBinding: No command manager or command type configured');
             return false;
         }
@@ -39,11 +53,11 @@ class ControlBinding {
         });
 
         // Transform value and send command
-        const transformedValue = this.config.inputValueTransform(value);
+        const transformedValue = this.inputValueTransform(value);
         const success = await this.commandManager.sendCommand(
-            this.config.commandType, 
+            this.commandType, 
             transformedValue, 
-            this.config.additionalParams || {}
+            this.additionalParams || {}
         );
 
         if (success) {
@@ -59,7 +73,7 @@ class ControlBinding {
     // Handle status updates from the backend
     handleStatusUpdate(statusUpdate) {
         // Check if this status update is relevant to this binding
-        const relevantKeys = this.config.statusKeys.filter(key => 
+        const relevantKeys = this.statusKeys.filter(key => 
             statusUpdate[key] !== undefined
         );
 
@@ -72,16 +86,16 @@ class ControlBinding {
             control.setDisplayState(CONTROL_STATES.VALID);
         });
 
-        // Use custom handler if provided
-        if (this.config.customStatusHandler) {
-            this.config.customStatusHandler(statusUpdate, this.controls, this.config);
+        // Use custom handler if overridden
+        if (this.customStatusHandler !== ControlBinding.prototype.customStatusHandler) {
+            this.customStatusHandler(statusUpdate, this.controls);
             return;
         }
 
         // Default handling for simple cases
         relevantKeys.forEach(key => {
             const value = statusUpdate[key];
-            const transformedValue = this.config.statusValueTransform(value);
+            const transformedValue = this.statusValueTransform(value, key);
             
             // Update controls based on their type
             this.controls.forEach(control => {
@@ -115,56 +129,11 @@ class ControlBinding {
  */
 
 class AccelerationControlBinding extends ControlBinding {
-    constructor(accelerationSlider, accelerationDisplay, config = {}) {
-        const MAX_SPEED_RPM = 30.0;
-        const GEAR_RATIO = 10;
-        const STEPS_PER_REVOLUTION = 200;
-        const MICROSTEPS = 16;
-
-        function rpmToStepsPerSecond(rpm) {
-            const motorRPM = rpm * GEAR_RATIO;
-            const motorStepsPerSecond = (motorRPM * STEPS_PER_REVOLUTION * MICROSTEPS) / 60.0;
-            return Math.floor(motorStepsPerSecond);
-        }
-
-        function accelerationToTime(accelerationStepsPerSec2) {
-            if (accelerationStepsPerSec2 === 0) {
-                return 5.0;
-            }
-            const maxStepsPerSecond = rpmToStepsPerSecond(MAX_SPEED_RPM);
-            const timeSeconds = maxStepsPerSecond / accelerationStepsPerSec2;
-            return Math.max(1.0, timeSeconds);
-        }
-
-        function timeToAcceleration(timeSeconds) {
-            const maxStepsPerSecond = rpmToStepsPerSecond(MAX_SPEED_RPM);
-            const acceleration = maxStepsPerSecond / timeSeconds;
-            return Math.floor(acceleration);
-        }
-
-        const defaults = {
+    constructor(accelerationSlider, accelerationDisplay) {
+        super({
             commandType: 'sa',
-            statusKeys: ['acc'],
-            inputValueTransform: (sliderValue) => {
-                const time = parseFloat(sliderValue);
-                const acceleration = timeToAcceleration(time);
-                const minAcceleration = 100;
-                if (acceleration < minAcceleration) {
-                    const minTime = accelerationToTime(minAcceleration).toFixed(1);
-                    if (accelerationSlider) {
-                        accelerationSlider.setValue(minTime);
-                    }
-                    // Optionally: show warning if needed (requires commandManager reference)
-                    return minAcceleration;
-                }
-                return acceleration;
-            },
-            statusValueTransform: (accelerationValue) => {
-                const timeSeconds = accelerationToTime(accelerationValue);
-                return parseFloat(timeSeconds.toFixed(1));
-            }
-        };
-        super({ ...defaults, ...config });
+            statusKeys: ['acc']
+        });
 
         this.accelerationSlider = accelerationSlider;
         this.accelerationDisplay = accelerationDisplay;
@@ -172,87 +141,146 @@ class AccelerationControlBinding extends ControlBinding {
         this.addControl(accelerationSlider);
         this.addControl(accelerationDisplay);
     }
+
+    static MAX_SPEED_RPM = 30.0;
+    static GEAR_RATIO = 10;
+    static STEPS_PER_REVOLUTION = 200;
+    static MICROSTEPS = 16;
+
+    rpmToStepsPerSecond(rpm) {
+        const motorRPM = rpm * AccelerationControlBinding.GEAR_RATIO;
+        const motorStepsPerSecond = (motorRPM * AccelerationControlBinding.STEPS_PER_REVOLUTION * AccelerationControlBinding.MICROSTEPS) / 60.0;
+        return Math.floor(motorStepsPerSecond);
+    }
+
+    accelerationToTime(accelerationStepsPerSec2) {
+        if (accelerationStepsPerSec2 === 0) {
+            return 5.0;
+        }
+        const maxStepsPerSecond = this.rpmToStepsPerSecond(AccelerationControlBinding.MAX_SPEED_RPM);
+        const timeSeconds = maxStepsPerSecond / accelerationStepsPerSec2;
+        return Math.max(1.0, timeSeconds);
+    }
+
+    timeToAcceleration(timeSeconds) {
+        const maxStepsPerSecond = this.rpmToStepsPerSecond(AccelerationControlBinding.MAX_SPEED_RPM);
+        const acceleration = maxStepsPerSecond / timeSeconds;
+        return Math.floor(acceleration);
+    }
+
+    inputValueTransform(sliderValue) {
+        const time = parseFloat(sliderValue);
+        const acceleration = this.timeToAcceleration(time);
+        const minAcceleration = 100;
+        if (acceleration < minAcceleration) {
+            const minTime = this.accelerationToTime(minAcceleration).toFixed(1);
+            if (this.accelerationSlider) {
+                this.accelerationSlider.setValue(minTime);
+            }
+            return minAcceleration;
+        }
+        return acceleration;
+    }
+
+    statusValueTransform(accelerationValue) {
+        const timeSeconds = this.accelerationToTime(accelerationValue);
+        return parseFloat(timeSeconds.toFixed(1));
+    }
 }
 
 class StatisticsControlBinding extends ControlBinding {
-    constructor(totalRevolutionsDisplay, runTimeDisplay, avgSpeedDisplay, updateAverageSpeed, config = {}) {
-        const defaults = {
-            statusKeys: ['tr', 'rt'],
-            statusValueTransform: (value) => value,
-            customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.tr !== undefined) {
-                    totalRevolutionsDisplay.updateValue(config.statusValueTransform(statusUpdate.tr));
-                }
-                if (statusUpdate.rt !== undefined) {
-                    runTimeDisplay.updateValue(config.statusValueTransform(statusUpdate.rt));
-                    if (typeof updateAverageSpeed === 'function') {
-                        updateAverageSpeed();
-                    }
-                }
-            }
-        };
-        super({ ...defaults, ...config });
+    constructor(totalRevolutionsDisplay, runTimeDisplay, avgSpeedDisplay, updateAverageSpeed) {
+        super({
+            statusKeys: ['tr', 'rt']
+        });
+
+        this.totalRevolutionsDisplay = totalRevolutionsDisplay;
+        this.runTimeDisplay = runTimeDisplay;
+        this.avgSpeedDisplay = avgSpeedDisplay;
+        this.updateAverageSpeed = updateAverageSpeed;
 
         this.addControl(totalRevolutionsDisplay);
         this.addControl(runTimeDisplay);
         this.addControl(avgSpeedDisplay);
     }
+
+    statusValueTransform(value) {
+        return value;
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.tr !== undefined) {
+            this.totalRevolutionsDisplay.updateValue(this.statusValueTransform(statusUpdate.tr));
+        }
+        if (statusUpdate.rt !== undefined) {
+            this.runTimeDisplay.updateValue(this.statusValueTransform(statusUpdate.rt));
+            if (typeof this.updateAverageSpeed === 'function') {
+                this.updateAverageSpeed();
+            }
+        }
+    }
 }
 
 class TmcStatusControlBinding extends ControlBinding {
-    constructor(tmcStatusDisplay, tmcTempDisplay, stallStatusDisplay, stallCountDisplay, config = {}) {
-        const defaults = {
-            statusKeys: ['tmcst', 'tmct', 'sd', 'sc'],
-            statusValueTransform: (value, key) => {
-                if (key === 'tmcst') return value ? 'OK' : 'Error';
-                if (key === 'tmct') {
-                    const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
-                    const tempIdx = Math.max(0, Math.min(4, value));
-                    return { label: tempLabels[tempIdx], className: tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error') };
-                }
-                if (key === 'sd') return value ? 'STALL!' : 'OK';
-                if (key === 'sc') return value;
-                return value;
-            },
-            customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.tmcst !== undefined) {
-                    const transformed = config.statusValueTransform(statusUpdate.tmcst, 'tmcst');
-                    tmcStatusDisplay.updateValue(transformed);
-                    tmcStatusDisplay.updateClass(transformed === 'OK' ? 'status-success' : 'status-error');
-                }
+    constructor(tmcStatusDisplay, tmcTempDisplay, stallStatusDisplay, stallCountDisplay) {
+        super({
+            statusKeys: ['tmcst', 'tmct', 'sd', 'sc']
+        });
 
-                if (statusUpdate.tmct !== undefined) {
-                    const transformed = config.statusValueTransform(statusUpdate.tmct, 'tmct');
-                    tmcTempDisplay.updateValue(transformed.label);
-                    tmcTempDisplay.updateClass(transformed.className);
-                }
-
-                if (statusUpdate.sd !== undefined) {
-                    const transformed = config.statusValueTransform(statusUpdate.sd, 'sd');
-                    stallStatusDisplay.updateValue(transformed);
-                    const color = statusUpdate.sd ? '#e74c3c' : '#10b981';
-                    stallStatusDisplay.displays.forEach(element => {
-                        if (element) element.style.color = color;
-                        element.style.fontWeight = statusUpdate.sd ? 'bold' : 'normal';
-                    });
-                }
-
-                if (statusUpdate.sc !== undefined) {
-                    const transformed = config.statusValueTransform(statusUpdate.sc, 'sc');
-                    stallCountDisplay.updateValue(transformed);
-                    const color = statusUpdate.sc > 0 ? '#e74c3c' : '#10b981';
-                    stallCountDisplay.displays.forEach(element => {
-                        if (element) element.style.color = color;
-                    });
-                }
-            }
-        };
-        super({ ...defaults, ...config });
+        this.tmcStatusDisplay = tmcStatusDisplay;
+        this.tmcTempDisplay = tmcTempDisplay;
+        this.stallStatusDisplay = stallStatusDisplay;
+        this.stallCountDisplay = stallCountDisplay;
 
         this.addControl(tmcStatusDisplay);
         this.addControl(tmcTempDisplay);
         this.addControl(stallStatusDisplay);
         this.addControl(stallCountDisplay);
+    }
+
+    statusValueTransform(value, key) {
+        if (key === 'tmcst') return value ? 'OK' : 'Error';
+        if (key === 'tmct') {
+            const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
+            const tempIdx = Math.max(0, Math.min(4, value));
+            return { label: tempLabels[tempIdx], className: tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error') };
+        }
+        if (key === 'sd') return value ? 'STALL!' : 'OK';
+        if (key === 'sc') return value;
+        return value;
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.tmcst !== undefined) {
+            const transformed = this.statusValueTransform(statusUpdate.tmcst, 'tmcst');
+            this.tmcStatusDisplay.updateValue(transformed);
+            this.tmcStatusDisplay.updateClass(transformed === 'OK' ? 'status-success' : 'status-error');
+        }
+
+        if (statusUpdate.tmct !== undefined) {
+            const transformed = this.statusValueTransform(statusUpdate.tmct, 'tmct');
+            this.tmcTempDisplay.updateValue(transformed.label);
+            this.tmcTempDisplay.updateClass(transformed.className);
+        }
+
+        if (statusUpdate.sd !== undefined) {
+            const transformed = this.statusValueTransform(statusUpdate.sd, 'sd');
+            this.stallStatusDisplay.updateValue(transformed);
+            const color = statusUpdate.sd ? '#e74c3c' : '#10b981';
+            this.stallStatusDisplay.displays.forEach(element => {
+                if (element) element.style.color = color;
+                element.style.fontWeight = statusUpdate.sd ? 'bold' : 'normal';
+            });
+        }
+
+        if (statusUpdate.sc !== undefined) {
+            const transformed = this.statusValueTransform(statusUpdate.sc, 'sc');
+            this.stallCountDisplay.updateValue(transformed);
+            const color = statusUpdate.sc > 0 ? '#e74c3c' : '#10b981';
+            this.stallCountDisplay.displays.forEach(element => {
+                if (element) element.style.color = color;
+            });
+        }
     }
 }
 
@@ -293,31 +321,7 @@ class SpeedControlBinding extends ControlBinding {
     constructor(speedSlider, speedDisplay, presetButtons) {
         super({
             commandType: 'ss',
-            statusKeys: ['sp', 'cs'],
-            displayTransform: (value) => value.toFixed(1),
-            inputValueTransform: (value) => Math.max(0.1, Math.min(30.0, value)),
-            customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.sp !== undefined) {
-                    // Update setpoint speed
-                    const speed = statusUpdate.sp;
-                    this.speedSlider.setValue(speed);
-                    this.speedDisplay.updateValue(speed);
-
-                    // Update preset button active state
-                    this.updatePresetButtonState(speed);
-                }
-
-                if (statusUpdate.cs !== undefined) {
-                    // Update fill indicator to show current speed
-                    if (this.speedSlider && this.speedSlider.slider) {
-                        const min = parseFloat(this.speedSlider.slider.min);
-                        const max = parseFloat(this.speedSlider.slider.max);
-                        const clampedValue = Math.max(min, Math.min(max, statusUpdate.cs));
-                        const percentage = ((clampedValue - min) / (max - min)) * 100;
-                        this.speedSlider.updateFillWidth(percentage);
-                    }
-                }
-            }
+            statusKeys: ['sp', 'cs']
         });
 
         this.speedSlider = speedSlider;
@@ -327,6 +331,37 @@ class SpeedControlBinding extends ControlBinding {
         this.addControl(speedSlider);
         this.addControl(speedDisplay);
         this.addControl(presetButtons);
+    }
+
+    displayTransform(value) {
+        return value.toFixed(1);
+    }
+
+    inputValueTransform(value) {
+        return Math.max(0.1, Math.min(30.0, value));
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.sp !== undefined) {
+            // Update setpoint speed
+            const speed = statusUpdate.sp;
+            this.speedSlider.setValue(speed);
+            this.speedDisplay.updateValue(speed);
+
+            // Update preset button active state
+            this.updatePresetButtonState(speed);
+        }
+
+        if (statusUpdate.cs !== undefined) {
+            // Update fill indicator to show current speed
+            if (this.speedSlider && this.speedSlider.slider) {
+                const min = parseFloat(this.speedSlider.slider.min);
+                const max = parseFloat(this.speedSlider.slider.max);
+                const clampedValue = Math.max(min, Math.min(max, statusUpdate.cs));
+                const percentage = ((clampedValue - min) / (max - min)) * 100;
+                this.speedSlider.updateFillWidth(percentage);
+            }
+        }
     }
 
     // Override handleValueChange to update preset buttons when slider moves
@@ -376,24 +411,7 @@ class DirectionControlBinding extends ControlBinding {
     constructor(directionButtons, directionDisplay) {
         super({
             commandType: 'sd',
-            statusKeys: ['dir'],
-            customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.dir !== undefined) {
-                    const clockwise = statusUpdate.dir === 'cw';
-
-                    // Update button states - index 0 is clockwise, index 1 is counterclockwise
-                    this.directionButtons.setActiveButton(clockwise ? 0 : 1);
-
-                    // Update direction display
-                    this.directionDisplay.updateValue(clockwise ? 'Clockwise' : 'Counter-clockwise');
-
-                    // Apply color coding
-                    const color = clockwise ? '#3b82f6' : '#8b5cf6';
-                    this.directionDisplay.displays.forEach(element => {
-                        if (element) element.style.color = color;
-                    });
-                }
-            }
+            statusKeys: ['dir']
         });
 
         this.directionButtons = directionButtons;
@@ -403,6 +421,24 @@ class DirectionControlBinding extends ControlBinding {
         this.addControl(directionDisplay);
     }
 
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.dir !== undefined) {
+            const clockwise = statusUpdate.dir === 'cw';
+
+            // Update button states - index 0 is clockwise, index 1 is counterclockwise
+            this.directionButtons.setActiveButton(clockwise ? 0 : 1);
+
+            // Update direction display
+            this.directionDisplay.updateValue(clockwise ? 'Clockwise' : 'Counter-clockwise');
+
+            // Apply color coding
+            const color = clockwise ? '#3b82f6' : '#8b5cf6';
+            this.directionDisplay.displays.forEach(element => {
+                if (element) element.style.color = color;
+            });
+        }
+    }
+
     async setDirection(clockwise) {
         return await this.handleValueChange(clockwise);
     }
@@ -410,13 +446,11 @@ class DirectionControlBinding extends ControlBinding {
 
 // Variable speed control binding with UI coordination
 class VariableSpeedControlBinding extends ControlBinding {
-    constructor(toggle, strengthSlider, phaseSlider, statusDisplay, controlsContainer, config = {}) {
-        const defaults = {
+    constructor(toggle, strengthSlider, phaseSlider, statusDisplay, controlsContainer) {
+        super({
             commandType: null, // Multiple command types
-            statusKeys: ['sve', 'svs', 'svp'],
-            customStatusHandler: null
-        };
-        super({ ...defaults, ...config });
+            statusKeys: ['sve', 'svs', 'svp']
+        });
 
         this.toggle = toggle;
         this.strengthSlider = strengthSlider;
@@ -428,34 +462,43 @@ class VariableSpeedControlBinding extends ControlBinding {
         this.addControl(strengthSlider);
         this.addControl(phaseSlider);
         this.addControl(statusDisplay);
+    }
 
-        // If no customStatusHandler provided, use default
-        if (!this.config.customStatusHandler) {
-            this.config.customStatusHandler = (statusUpdate, controls, config) => {
-                if (statusUpdate.sve !== undefined) {
-                    const enabled = statusUpdate.sve;
-                    this.toggle.setValue(enabled);
-                    this.updateVariableSpeedUI(enabled);
-                    this.statusDisplay.updateValue(enabled ? 'ON' : 'OFF');
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.sve !== undefined) {
+            const enabled = statusUpdate.sve;
+            this.toggle.setValue(enabled);
+            this.updateVariableSpeedUI(enabled);
+            this.statusDisplay.updateValue(enabled ? 'ON' : 'OFF');
 
-                    // Color coding
-                    const color = enabled ? '#10b981' : '#1f2937';
-                    this.statusDisplay.displays.forEach(element => {
-                        if (element) element.style.color = color;
-                    });
-                }
-
-                if (statusUpdate.svs !== undefined) {
-                    const strength = config.statusValueTransform(statusUpdate.svs, 'svs');
-                    this.strengthSlider.setValue(strength);
-                }
-
-                if (statusUpdate.svp !== undefined) {
-                    const phaseDegrees = config.statusValueTransform(statusUpdate.svp, 'svp');
-                    this.phaseSlider.setValue(phaseDegrees);
-                }
-            };
+            // Color coding
+            const color = enabled ? '#10b981' : '#1f2937';
+            this.statusDisplay.displays.forEach(element => {
+                if (element) element.style.color = color;
+            });
         }
+
+        if (statusUpdate.svs !== undefined) {
+            const strength = this.statusValueTransform(statusUpdate.svs, 'svs');
+            this.strengthSlider.setValue(strength);
+        }
+
+        if (statusUpdate.svp !== undefined) {
+            const phaseDegrees = this.statusValueTransform(statusUpdate.svp, 'svp');
+            this.phaseSlider.setValue(phaseDegrees);
+        }
+    }
+
+    statusValueTransform(value, key) {
+        if (key === 'svs') return Math.round(value * 100);
+        if (key === 'svp') {
+            let phaseDegrees = Math.round((value * 180) / Math.PI);
+            if (phaseDegrees > 180) {
+                phaseDegrees -= 360;
+            }
+            return phaseDegrees;
+        }
+        return value;
     }
 
     async setVariableSpeedEnabled(enabled) {
@@ -491,23 +534,10 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
     /**
      * @param {GraphControl} graphControl
      */
-    constructor(graphControl, config = {}) {
-        const defaults = {
-            statusKeys: ['ca', 'cs', 'sp'],
-            statusValueTransform: (value, key) => {
-                if (key === 'svs') return Math.round(value * 100);
-                if (key === 'svp') {
-                    let phaseDegrees = Math.round((value * 180) / Math.PI);
-                    if (phaseDegrees > 180) {
-                        phaseDegrees -= 360;
-                    }
-                    return phaseDegrees;
-                }
-                return value;
-            },
-            customStatusHandler: null
-        };
-        super({ ...defaults, ...config });
+    constructor(graphControl) {
+        super({
+            statusKeys: ['ca', 'cs', 'sp']
+        });
 
         this.graphControl = graphControl;
 
@@ -517,18 +547,29 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
         this.lastCa = null;
         this.lastCs = null;
         this.lastSp = null;
+    }
 
-        // Custom status handler
-        this.config.customStatusHandler = (statusUpdate, controls, config) => {
-            // Get total rotations, current speed, set speed
-            this.lastCa = statusUpdate.ca !== undefined ? statusUpdate.ca : this.lastCa;
-            this.lastCs = statusUpdate.cs !== undefined ? statusUpdate.cs : this.lastCs;
-            this.lastSp = statusUpdate.sp !== undefined ? statusUpdate.sp : this.lastSp;
-
-            if (this.lastCa !== null && this.lastCs !== null && this.lastSp !== null) {
-                this.graphControl.addSample(this.lastCa, this.lastCs, this.lastSp);
+    statusValueTransform(value, key) {
+        if (key === 'svs') return Math.round(value * 100);
+        if (key === 'svp') {
+            let phaseDegrees = Math.round((value * 180) / Math.PI);
+            if (phaseDegrees > 180) {
+                phaseDegrees -= 360;
             }
-        };
+            return phaseDegrees;
+        }
+        return value;
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        // Get total rotations, current speed, set speed
+        this.lastCa = statusUpdate.ca !== undefined ? statusUpdate.ca : this.lastCa;
+        this.lastCs = statusUpdate.cs !== undefined ? statusUpdate.cs : this.lastCs;
+        this.lastSp = statusUpdate.sp !== undefined ? statusUpdate.sp : this.lastSp;
+
+        if (this.lastCa !== null && this.lastCs !== null && this.lastSp !== null) {
+            this.graphControl.addSample(this.lastCa, this.lastCs, this.lastSp);
+        }
     }
 }
 
@@ -537,10 +578,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
     constructor(voltageSelect, negotiateBtn, autoNegotiateBtn, pdStatusDisplay, pdPowerGoodDisplay, pdNegotiatedVoltageDisplay, pdCurrentVoltageDisplay) {
         super({
             commandType: null, // Multiple command types
-            statusKeys: ['pdns', 'pdpg', 'pdnv', 'pdcv'],
-            customStatusHandler: (statusUpdate, controls, config) => {
-                this.handlePowerDeliveryStatus(statusUpdate);
-            }
+            statusKeys: ['pdns', 'pdpg', 'pdnv', 'pdcv']
         });
 
         this.voltageSelect = voltageSelect;
@@ -568,6 +606,10 @@ class PowerDeliveryControlBinding extends ControlBinding {
             3: { text: 'Failed (No PD Adapter)', class: 'status-error' },
             4: { text: 'Auto-Negotiating...', class: 'status-warning' }
         };
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        this.handlePowerDeliveryStatus(statusUpdate);
     }
 
     async negotiateVoltage() {
@@ -696,8 +738,8 @@ class StallGuardControlBinding extends ControlBinding {
         this.addControl(resultDisplay);
 
         // If no customStatusHandler provided, use default
-        if (!this.config.customStatusHandler) {
-            this.config.customStatusHandler = (statusUpdate, controls, config) => {
+        if (!this.customStatusHandler) {
+            this.customStatusHandler = (statusUpdate, controls, self) => {
                 if (statusUpdate.sgr !== undefined) {
                     this.currentSgResult = statusUpdate.sgr;
                     this.updateStallGuardResult(statusUpdate.sgr);
