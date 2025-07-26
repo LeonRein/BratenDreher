@@ -537,7 +537,11 @@ class GraphControl extends BaseControl {
      * @param {number} setSpeed - set speed (float)
      */
     addSample(rot, speed, setSpeed) {
+        if (Math.abs(rot - this.samples[this.samples.length - 2]?.rot) < 0.01) {
+            this.samples.pop();
+        }
         this.samples.push({ rot, speed });
+        console.log(this.samples.length);
         // Only keep samples from current rotation
         const threshold = rot - 1;
         const firstIdx = this.samples.findIndex(s => s.rot > threshold);
@@ -584,8 +588,8 @@ class GraphControl extends BaseControl {
         if (this.samples.length < 2) return;
 
         // Y axis scaling
-        const minY = this.setSpeed / 2 * 0.75; // 80% of set speed
-        const maxY = this.setSpeed * 2 * 1.2; // 120% of set speed
+        const minY = this.setSpeed / 2 - this.setSpeed * 0.15; // 15% below set speed
+        const maxY = this.setSpeed * 2 + this.setSpeed * 0.15; // 15% above set speed
 
         // X axis: remainder of rotation (0..1)
         ctx.strokeStyle = this.lineColor;
