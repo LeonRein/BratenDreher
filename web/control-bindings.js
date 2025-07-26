@@ -713,83 +713,75 @@ class PowerDeliveryControlBinding extends ControlBinding {
 }
 
 // StallGuard control binding with load visualization
+/**
+ * StallGuardControlBinding
+ * Implements ControlBinding for StallGuard threshold (sgt) and result (sgr).
+ * - Uses new ControlBinding constructor: super(commandType, statusKeys)
+ * - Registers controls via addControl
+ * - Implements transformation functions as class methods
+ */
 class StallGuardControlBinding extends ControlBinding {
-    constructor(thresholdSlider, resultDisplay, config = {}) {
-        const defaults = {
-            commandType: 'st',
-            statusKeys: ['sgt', 'sgr'],
-            displayTransform: (value) => {
-                const percentage = (value / 255) * 100;
-                return `${percentage.toFixed(1)}%`;
-            },
-            inputValueTransform: (value) => {
-                // Invert slider value: right (255) sends 0, left (0) sends 255
-                return 255 - parseInt(value);
-            },
-            customStatusHandler: null
-        };
-        super({ ...defaults, ...config });
-
+    constructor(thresholdSlider, resultDisplay) {
+        super({ commandType: 'st', statusKeys: ['sgt', 'sgr'] });
         this.thresholdSlider = thresholdSlider;
         this.resultDisplay = resultDisplay;
-        this.currentSgResult = null;
-
         this.addControl(thresholdSlider);
         this.addControl(resultDisplay);
-
-        // If no customStatusHandler provided, use default
-        if (!this.customStatusHandler) {
-            this.customStatusHandler = (statusUpdate, controls, self) => {
-                if (statusUpdate.sgr !== undefined) {
-                    this.currentSgResult = statusUpdate.sgr;
-                    this.updateStallGuardResult(statusUpdate.sgr);
-                }
-
-                if (statusUpdate.sgt !== undefined) {
-                    // Backend sends 0-255, invert for slider display
-                    const invertedSliderValue = 255 - statusUpdate.sgt;
-                    this.thresholdSlider.setValue(invertedSliderValue);
-
-                    // Update visual if we have current result
-                    if (this.currentSgResult !== null) {
-                        this.updateStallGuardResult(this.currentSgResult);
-                    }
-                }
-            };
-        }
     }
 
-    updateStallGuardResult(sgResult) {
-        if (!this.thresholdSlider || !this.thresholdSlider.slider) return;
-
-        this.currentSgResult = sgResult;
-
-        // Convert SG_RESULT to load percentage (invert the scale)
-        const loadPercentage = ((510 - sgResult) / 510) * 100;
-
-        // Update fill width and opacity
-        if (this.thresholdSlider.fillElement) {
-            this.thresholdSlider.updateFillWidth(loadPercentage);
+    statusValueTransform(value, key) {
+        if (key === 'sgt') {
+            // Threshold as percentage
+            return ((value / 255) * 100).toFixed(1);
         }
+        if (key === 'sgr') {
+            // Load percentage
+            return (((510 - value) / 510) * 100).toFixed(1);
+        }
+        return value;
+    }
 
-        // Get current threshold and determine color
-        const sliderValue = parseInt(this.thresholdSlider.slider.value);
-        const actualThresholdValue = 255 - sliderValue;
-        const stallThreshold = actualThresholdValue * 2;
+    inputValueTransform(percent) {
+        // Convert percent (0-100) to backend value (0-255)
+        return Math.round(percent * 2.55);
+    }
 
-        // Color the fill based on proximity to stall threshold
-        if (this.thresholdSlider.fillElement) {
-            if (sgResult < stallThreshold) {
-                this.thresholdSlider.setFillColor('#ef4444'); // Red - stall detected
-            } else if (sgResult < (stallThreshold * 1.2)) {
-                this.thresholdSlider.setFillColor('#f59e0b'); // Orange - warning
-            } else {
-                this.thresholdSlider.setFillColor('#10b981'); // Green - normal
+    handleStatusUpdate(statusUpdate) {
+        // Use base class logic for relevant keys
+        const relevantKeys = this.statusKeys.filter(key => statusUpdate[key] !== undefined);
+        if (relevantKeys.length === 0) return;
+
+        // Update controls for each key
+        relevantKeys.forEach(key => {
+            const value = statusUpdate[key];
+            const transformedValue = this.statusValueTransform(value, key);
+
+            if (key === 'sgt') {
+                this.thresholdSlider.setValue(transformedValue);
             }
-        }
 
-        // Update result display
-        this.resultDisplay.updateValue(`${loadPercentage.toFixed(1)}%`);
+            if (key === 'sgr') {
+                // Update result display and fill
+                this.resultDisplay.updateValue(`${transformedValue}`);
+                if (this.thresholdSlider.fillElement) {
+                    this.thresholdSlider.updateFillWidth(parseFloat(transformedValue));
+                    this.thresholdSlider.fillElement.style.opacity = "1.0";
+                }
+                // Color fill based on stall threshold
+                const sliderValue = parseInt(this.thresholdSlider.slider.value);
+                const actualThresholdValue = 255 - sliderValue;
+                const stallThreshold = actualThresholdValue * 2;
+                if (this.thresholdSlider.fillElement) {
+                    if (statusUpdate.sgr < stallThreshold) {
+                        this.thresholdSlider.setFillColor('#ef4444');
+                    } else if (statusUpdate.sgr < (stallThreshold * 1.2)) {
+                        this.thresholdSlider.setFillColor('#f59e0b');
+                    } else {
+                        this.thresholdSlider.setFillColor('#10b981');
+                    }
+                }
+            }
+        });
     }
 
     hideFill() {
