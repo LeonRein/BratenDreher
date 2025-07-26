@@ -135,41 +135,45 @@ bool BLEManager::begin(const char* deviceName) {
 
 void BLEManager::handleCommand(const std::string& command) {
     dbg_printf("Processing command: %s (length: %d)\n", command.c_str(), command.length());
-    
-    // Prevent buffer overflow attacks  
+
+    // Prevent buffer overflow attacks
     if (command.length() > 256 || command.length() == 0) {
         dbg_printf("ERROR: Invalid command length: %d\n", command.length());
         return;
     }
-    
+
     // Use fixed-size JSON document to prevent heap issues (compatible with ArduinoJson v6)
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, command);
-    
+
     if (error) {
         dbg_printf("JSON parse error: %s\n", error.c_str());
         return;
     }
-    
+
     const char* type = doc["type"];
     if (!type) {
         dbg_println("Missing command type");
         return;
     }
-    
+
     // Validate that we have the required value field for most commands
     if (strcmp(type, "status_request") != 0 && doc["value"].isNull()) {
         dbg_println("ERROR: Command missing required 'value' field");
         return;
     }
-    
+
     dbg_printf("Processing command type: %s\n", type);
-    
+
     if (strcmp(type, "speed") == 0) {
         float speed = doc["value"];
         StepperCommandData cmd(StepperCommand::SET_SPEED, speed);
         systemCommand.sendCommand(cmd);
         dbg_printf("Speed command queued: %.2f RPM\n", speed);
+    }
+    else if (strcmp(type, "emergency_stop") == 0) {
+        systemCommand.sendCommand(StepperCommand::EMERGENCY_STOP);
+        dbg_printf("Emergency stop command queued\n");
     }
     else if (strcmp(type, "direction") == 0) {
         bool clockwise = doc["value"];
@@ -217,7 +221,7 @@ void BLEManager::handleCommand(const std::string& command) {
     else if (strcmp(type, "acceleration") == 0) {
         // Set acceleration directly in steps/s²
         uint32_t accelerationStepsPerSec2 = doc["value"];  // Acceleration in steps/s²
-        
+
         if (accelerationStepsPerSec2 >= 100 && accelerationStepsPerSec2 <= 100000) {
             StepperCommandData cmd(StepperCommand::SET_ACCELERATION, (int)accelerationStepsPerSec2);
             systemCommand.sendCommand(cmd);
@@ -271,7 +275,7 @@ void BLEManager::handleCommand(const std::string& command) {
         if (voltage >= 5 && voltage <= 20) {
             PowerDeliveryCommandData cmd(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
             systemCommand.sendPowerDeliveryCommand(cmd);
-            
+
             dbg_printf("Power delivery voltage set to %dV and negotiation started\n", voltage);
         } else {
             dbg_printf("Invalid voltage value: %d (must be 5-20V)\n", voltage);
@@ -281,7 +285,7 @@ void BLEManager::handleCommand(const std::string& command) {
         // Start auto-negotiation for highest available voltage
         PowerDeliveryCommandData cmd(PowerDeliveryCommand::AUTO_NEGOTIATE_HIGHEST);
         systemCommand.sendPowerDeliveryCommand(cmd);
-        
+
         dbg_printf("Power delivery auto-negotiation started\n");
     }
     else {

@@ -980,10 +980,17 @@ void StepperController::emergencyStopInternal()
         return;
     }
 
-    stepper->forceStopAndNewPosition(stepper->getCurrentPosition());
+    // Save current acceleration
+    uint32_t prevAcceleration = setpointAcceleration;
 
-    stepperDriver.disable();
-    motorEnabled = false;
+    // Set acceleration to 16000
+    applyStepperAcceleration(16000);
+
+    // Call disable
+    disableInternal();
+
+    // Restore previous acceleration
+    applyStepperAcceleration(prevAcceleration);
 
     dbg_println("EMERGENCY STOP executed");
 
