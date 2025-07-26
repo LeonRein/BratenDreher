@@ -290,28 +290,13 @@ class TimestampControlBinding extends ControlBinding {
 
 // Speed control binding with preset buttons and fill indicator
 class SpeedControlBinding extends ControlBinding {
-    constructor(speedSlider, speedDisplay, presetButtons, fillElement, config = {}) {
-        const defaults = {
+    constructor(speedSlider, speedDisplay, presetButtons, fillElement) {
+        super({
             commandType: 'ss',
             statusKeys: ['sp', 'cs'],
             displayTransform: (value) => value.toFixed(1),
             inputValueTransform: (value) => Math.max(0.1, Math.min(30.0, value)),
-            customStatusHandler: null
-        };
-        super({ ...defaults, ...config });
-
-        this.speedSlider = speedSlider;
-        this.speedDisplay = speedDisplay;
-        this.presetButtons = presetButtons;
-        this.fillElement = fillElement;
-
-        this.addControl(speedSlider);
-        this.addControl(speedDisplay);
-        this.addControl(presetButtons);
-
-        // If no customStatusHandler provided, use default
-        if (!this.config.customStatusHandler) {
-            this.config.customStatusHandler = (statusUpdate, controls, config) => {
+            customStatusHandler: (statusUpdate, controls, config) => {
                 if (statusUpdate.sp !== undefined) {
                     // Update setpoint speed
                     const speed = statusUpdate.sp;
@@ -326,8 +311,17 @@ class SpeedControlBinding extends ControlBinding {
                     // Update fill indicator to show current speed
                     this.speedSlider.updateFillPosition(statusUpdate.cs);
                 }
-            };
-        }
+            }
+        });
+
+        this.speedSlider = speedSlider;
+        this.speedDisplay = speedDisplay;
+        this.presetButtons = presetButtons;
+        this.fillElement = fillElement;
+
+        this.addControl(speedSlider);
+        this.addControl(speedDisplay);
+        this.addControl(presetButtons);
     }
 
     // Override handleValueChange to update preset buttons when slider moves
@@ -374,23 +368,11 @@ class SpeedControlBinding extends ControlBinding {
 
 // Direction control binding with button coordination
 class DirectionControlBinding extends ControlBinding {
-    constructor(directionButtons, directionDisplay, config = {}) {
-        const defaults = {
+    constructor(directionButtons, directionDisplay) {
+        super({
             commandType: 'sd',
             statusKeys: ['dir'],
-            customStatusHandler: null
-        };
-        super({ ...defaults, ...config });
-
-        this.directionButtons = directionButtons;
-        this.directionDisplay = directionDisplay;
-
-        this.addControl(directionButtons);
-        this.addControl(directionDisplay);
-
-        // If no customStatusHandler provided, use default
-        if (!this.config.customStatusHandler) {
-            this.config.customStatusHandler = (statusUpdate, controls, config) => {
+            customStatusHandler: (statusUpdate, controls, config) => {
                 if (statusUpdate.dir !== undefined) {
                     const clockwise = statusUpdate.dir === 'cw';
 
@@ -406,8 +388,14 @@ class DirectionControlBinding extends ControlBinding {
                         if (element) element.style.color = color;
                     });
                 }
-            };
-        }
+            }
+        });
+
+        this.directionButtons = directionButtons;
+        this.directionDisplay = directionDisplay;
+
+        this.addControl(directionButtons);
+        this.addControl(directionDisplay);
     }
 
     async setDirection(clockwise) {
@@ -858,5 +846,78 @@ class StallResetControlBinding extends ControlBinding {
             return success;
         }
         return false;
+    }
+}
+
+/**
+ * Motor control binding
+ */
+class MotorControlBinding extends ControlBinding {
+    constructor(motorToggle, motorStatusDisplay) {
+        super({
+            commandType: 'en',
+            statusKeys: ['en'],
+            debounceTime: 0
+        });
+        this.addControl(motorToggle);
+        this.addControl(motorStatusDisplay);
+    }
+}
+
+/**
+ * Current control binding
+ */
+class CurrentControlBinding extends ControlBinding {
+    constructor(currentSlider, currentDisplay) {
+        super({
+            commandType: 'sc',
+            statusKeys: ['cur'],
+            inputValueTransform: (value) => parseInt(value)
+        });
+        this.addControl(currentSlider);
+        this.addControl(currentDisplay);
+    }
+}
+
+/**
+ * Strength control binding
+ */
+class StrengthControlBinding extends ControlBinding {
+    constructor(strengthSlider) {
+        super({
+            commandType: 'sv',
+            statusKeys: ['svs'],
+            inputValueTransform: (value) => parseInt(value) / 100.0,
+            statusValueTransform: (value) => Math.round(value * 100)
+        });
+        this.addControl(strengthSlider);
+    }
+}
+
+/**
+ * Phase control binding
+ */
+class PhaseControlBinding extends ControlBinding {
+    constructor(phaseSlider) {
+        super({
+            commandType: 'svp',
+            statusKeys: ['svp'],
+            inputValueTransform: (value) => {
+                const phase = parseInt(value);
+                let phaseForRadians = phase;
+                if (phaseForRadians < 0) {
+                    phaseForRadians += 360;
+                }
+                return (phaseForRadians * Math.PI) / 180;
+            },
+            statusValueTransform: (value) => {
+                let phaseDegrees = Math.round((value * 180) / Math.PI);
+                if (phaseDegrees > 180) {
+                    phaseDegrees -= 360;
+                }
+                return phaseDegrees;
+            }
+        });
+        this.addControl(phaseSlider);
     }
 }

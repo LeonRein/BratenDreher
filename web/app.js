@@ -307,15 +307,13 @@ class BratenDreherApp {
             this.controls.get('speedSlider'),
             this.controls.get('setpointSpeedDisplay'),
             this.controls.get('presetButtons'),
-            this.speedSliderFill,
-            { commandType: 'ss' }
+            this.speedSliderFill
         ));
 
         // Direction control binding
         this.bindings.set('direction', new DirectionControlBinding(
             this.controls.get('directionButtons'),
-            this.controls.get('directionDisplay'),
-            { commandType: 'sd' }
+            this.controls.get('directionDisplay')
         ));
         // Emergency stop binding
         this.bindings.set('emergencyStop', new EmergencyStopControlBinding(
@@ -337,22 +335,16 @@ class BratenDreherApp {
         /* Removed redundant addControl for stallReset; handled in StallResetControlBinding */
 
         // Motor control binding
-        this.bindings.set('motor', new ControlBinding({
-            commandType: 'en',
-            statusKeys: ['en'],
-            debounceTime: 0
-        }));
-        this.bindings.get('motor').addControl(this.controls.get('motorToggle'));
-        this.bindings.get('motor').addControl(this.controls.get('motorStatusDisplay'));
+        this.bindings.set('motor', new MotorControlBinding(
+            this.controls.get('motorToggle'),
+            this.controls.get('motorStatusDisplay')
+        ));
 
         // Current control binding
-        this.bindings.set('current', new ControlBinding({
-            commandType: 'sc',
-            statusKeys: ['cur'],
-            inputValueTransform: (value) => parseInt(value)
-        }));
-        this.bindings.get('current').addControl(this.controls.get('currentSlider'));
-        this.bindings.get('current').addControl(this.controls.get('currentDisplay'));
+        this.bindings.set('current', new CurrentControlBinding(
+            this.controls.get('currentSlider'),
+            this.controls.get('currentDisplay')
+        ));
 
 this.bindings.set('acceleration', new AccelerationControlBinding(
     this.controls.get('accelerationSlider'),
@@ -384,35 +376,14 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
         ));
 
         // Strength binding
-        this.bindings.set('strength', new ControlBinding({
-            commandType: 'sv',
-            statusKeys: ['svs'],
-            inputValueTransform: (value) => parseInt(value) / 100.0,
-            statusValueTransform: (value) => Math.round(value * 100)
-        }));
-        this.bindings.get('strength').addControl(this.controls.get('strengthSlider'));
+        this.bindings.set('strength', new StrengthControlBinding(
+            this.controls.get('strengthSlider')
+        ));
 
         // Phase binding
-        this.bindings.set('phase', new ControlBinding({
-            commandType: 'svp',
-            statusKeys: ['svp'],
-            inputValueTransform: (value) => {
-                const phase = parseInt(value);
-                let phaseForRadians = phase;
-                if (phaseForRadians < 0) {
-                    phaseForRadians += 360;
-                }
-                return (phaseForRadians * Math.PI) / 180;
-            },
-            statusValueTransform: (value) => {
-                let phaseDegrees = Math.round((value * 180) / Math.PI);
-                if (phaseDegrees > 180) {
-                    phaseDegrees -= 360;
-                }
-                return phaseDegrees;
-            }
-        }));
-        this.bindings.get('phase').addControl(this.controls.get('phaseSlider'));
+        this.bindings.set('phase', new PhaseControlBinding(
+            this.controls.get('phaseSlider')
+        ));
 
         // StallGuard binding
         this.bindings.set('stallguard', new StallGuardControlBinding(
