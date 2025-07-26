@@ -532,20 +532,20 @@ class GraphControl extends BaseControl {
 
     /**
      * Add a sample and redraw the graph
-     * @param {number} rot - total rotations (float)
+     * @param {number} angle - current angle in radians (0-2*PI)
      * @param {number} speed - current speed (float)
      * @param {number} setSpeed - set speed (float)
      */
-    addSample(rot, speed, setSpeed) {
-        if (Math.abs(rot - this.samples[this.samples.length - 2]?.rot) < 0.01) {
+    addSample(angle, speed, setSpeed) {
+        if (Math.abs(angle - this.samples[this.samples.length - 2]?.angle) < 0.01) {
             this.samples.pop();
         }
-        this.samples.push({ rot, speed });
-        console.log(this.samples.length);
+        this.samples.push({ angle, speed });
         // Only keep samples from current rotation
-        const threshold = rot - 1;
-        const firstIdx = this.samples.findIndex(s => s.rot > threshold);
-        this.samples = firstIdx === -1 ? [] : this.samples.slice(firstIdx);
+        const firstIdx = this.samples.findIndex(s => s.angle > angle && s.angle < angle + Math.PI);
+        if (firstIdx >= 0) {
+            this.samples = this.samples.slice(firstIdx);
+        }
         this.setSpeed = setSpeed;
         this.drawGraph();
     }
@@ -598,11 +598,9 @@ class GraphControl extends BaseControl {
         let prevXFrac = null;
         for (let i = 0; i < this.samples.length; i++) {
             const s = this.samples[i];
-            const xFrac = s.rot - Math.floor(s.rot); // 0..1
+            const xFrac = s.angle / (2 * Math.PI); // Normalize angle to 0..1
             const x = xFrac * width;
-            // Clamp speed to minY/maxY
-            const yNorm = Math.max(minY, Math.min(maxY, s.speed));
-            const y = height - ((yNorm - minY) / (maxY - minY)) * height;
+            const y = height - ((s.speed - minY) / (maxY - minY)) * height;
             if (i === 0 || (prevXFrac !== null && xFrac < prevXFrac)) {
                 ctx.moveTo(x, y); // Start new line at rotation boundary
             } else {
@@ -615,10 +613,9 @@ class GraphControl extends BaseControl {
         // Draw only the last sample as a blue point
         if (this.samples.length > 0) {
             const s = this.samples[this.samples.length - 1];
-            const xFrac = s.rot - Math.floor(s.rot);
+            const xFrac = s.angle / (2 * Math.PI);
             const x = xFrac * width;
-            const yNorm = Math.max(minY, Math.min(maxY, s.speed));
-            const y = height - ((yNorm - minY) / (maxY - minY)) * height;
+            const y = height - ((s.speed - minY) / (maxY - minY)) * height;
             ctx.beginPath();
             ctx.arc(x, y, 6, 0, 2 * Math.PI);
             ctx.fillStyle = this.pointColor;

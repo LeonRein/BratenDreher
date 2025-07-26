@@ -36,10 +36,10 @@ class PowerDeliveryTask;
 #define MAX_SPEED_RPM 30.0f // Maximum speed (0.5 RPS after gear reduction)
 
 // Timing configuration
-#define FAST_UPDATE_INTERVAL 100       // Status update every 500ms
-#define STALL_UPDATE_INTERVAL 1000     // Status update every 500ms
-#define TMC_UPDATE_INTERVAL 2000       // Status update every 500ms
-#define MOTOR_SPEED_UPDATE_INTERVAL 10 // Speed update every 50ms for smooth variation
+#define FAST_UPDATE_INTERVAL 100
+#define STALL_UPDATE_INTERVAL 1000
+#define TMC_UPDATE_INTERVAL 2000
+#define MOTOR_SPEED_UPDATE_INTERVAL 100
 
 class StepperController : public Task
 {
@@ -63,6 +63,7 @@ private:
     bool clockwise;
     unsigned long startTime;
     unsigned long totalMicroSteps;
+    float currentAngle;
     bool isFirstStart;
     bool tmc2209Initialized; // Track TMC2209 driver initialization status
     bool powerDeliveryReady; // Track if power delivery negotiation is complete
@@ -121,8 +122,8 @@ private:
     void requestAllStatusInternal();
 
     // Speed variation helper methods
-    inline float calculateVariableSpeed() const; // Inline hint for frequent calls
-    inline float getPositionAngle() const;       // Inline hint for frequent calls
+    inline float calculateVariableSpeed(); // Inline hint for frequent calls
+    void getPositionAngle();       // Inline hint for frequent calls
     uint32_t calculateRequiredAccelerationForVariableSpeed() const;
     void updateAccelerationForVariableSpeed();
     void updateSpeedForVariableSpeed();         // Update base speed for variable speed constraints
@@ -144,6 +145,7 @@ private:
     void publishCurrentRPM();           // Update actual/measured RPM
     void publishTotalRevolutions();     // Update total revolutions based on current position
     void publishRuntime();
+    void publishCurrentAngle(); // Publish current angle in radians (0-2*PI)
 
     // Split status update helpers
     void publishFastStatusUpdates();  // Speed, runtime, revolutions (100ms)

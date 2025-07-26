@@ -31,6 +31,7 @@ enum class StatusUpdateType {
     // Periodic updates - now separate for each value
     SPEED_UPDATE,
     TOTAL_REVOLUTIONS_UPDATE,
+    CURRENT_ANGLE_UPDATE,
     RUNTIME_UPDATE,
     STALL_DETECTED_UPDATE,
     STALL_COUNT_UPDATE,

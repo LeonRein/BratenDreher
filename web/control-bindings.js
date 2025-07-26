@@ -491,7 +491,7 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
      */
     constructor(graphControl, config = {}) {
         const defaults = {
-            statusKeys: ['tr', 'cs', 'sp'],
+            statusKeys: ['ca', 'cs', 'sp'],
             customStatusHandler: null
         };
         super({ ...defaults, ...config });
@@ -501,19 +501,19 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
         this.addControl(graphControl);
 
         // Buffer for last sample values
-        this.lastTr = null;
+        this.lastCa = null;
         this.lastCs = null;
         this.lastSp = null;
 
         // Custom status handler
         this.config.customStatusHandler = (statusUpdate, controls, config) => {
             // Get total rotations, current speed, set speed
-            this.lastTr = statusUpdate.tr !== undefined ? statusUpdate.tr : this.lastTr;
+            this.lastCa = statusUpdate.ca !== undefined ? statusUpdate.ca : this.lastCa;
             this.lastCs = statusUpdate.cs !== undefined ? statusUpdate.cs : this.lastCs;
             this.lastSp = statusUpdate.sp !== undefined ? statusUpdate.sp : this.lastSp;
 
-            if (this.lastTr !== null && this.lastCs !== null && this.lastSp !== null) {
-                this.graphControl.addSample(this.lastTr, this.lastCs, this.lastSp);
+            if (this.lastCa !== null && this.lastCs !== null && this.lastSp !== null) {
+                this.graphControl.addSample(this.lastCa, this.lastCs, this.lastSp);
             }
         };
     }

@@ -301,6 +301,21 @@ void StepperController::publishCurrentRPM()
     systemStatus.publishStatusUpdate(StatusUpdateType::SPEED_UPDATE, rpm);
 }
 
+void StepperController::publishCurrentAngle()
+{
+    if (!stepper)
+    {
+        systemStatus.publishStatusUpdate(StatusUpdateType::CURRENT_ANGLE_UPDATE, 0.0f);
+        return;
+    }
+
+    // Calculate current angle based on position and speed variation
+    getPositionAngle();
+
+    // Publish the current angle
+    systemStatus.publishStatusUpdate(StatusUpdateType::CURRENT_ANGLE_UPDATE, currentAngle);
+}
+
 // Centralized stepper hardware control methods
 void StepperController::stepperSetSpeed(float rpm)
 {
@@ -333,7 +348,7 @@ StepperController::StepperController()
       isInitializing(true),             // Start in initialization mode
       stepper(nullptr), serialStream(Serial2), setpointRPM(1.0f),
       runCurrent(30), motorEnabled(false), clockwise(true),
-      startTime(0), totalMicroSteps(0), isFirstStart(true), tmc2209Initialized(false), powerDeliveryReady(false),
+      startTime(0), totalMicroSteps(0), currentAngle(0.0f), isFirstStart(true), tmc2209Initialized(false), powerDeliveryReady(false),
       stallDetected(false), stallCount(0),
       stallGuardThreshold(128), // Initialize StallGuard with default threshold (middle of 0-255 range)
       setpointAcceleration(0), // Will be set during initialization
@@ -405,6 +420,8 @@ bool StepperController::begin()
     stepper->setDelayToEnable(50);
     stepper->setDelayToDisable(1000);
 
+    stepper->attachToPulseCounter(STEP_PIN);
+    stepper->setForwardPlanningTimeInMs(100);
 
     stepperSetAcceleration(setpointAcceleration);
     stepperSetSpeed(setpointRPM);
@@ -552,10 +569,10 @@ void StepperController::run()
     // Initialize timing variables with cached millis() value
     StepperCommandData cmd;
     uint32_t currentTime = millis();
-    unsigned long nextMotorSpeedUpdate = currentTime + MOTOR_SPEED_UPDATE_INTERVAL; // 10ms
-    unsigned long nextFastStatusUpdate = currentTime + FAST_UPDATE_INTERVAL;        // 100ms
-    unsigned long nextStallUpdate = currentTime + 1000;                             // 1s
-    unsigned long nextTMCUpdate = currentTime + 2000;                               // 2s
+    unsigned long nextMotorSpeedUpdate = currentTime + MOTOR_SPEED_UPDATE_INTERVAL; 
+    unsigned long nextFastStatusUpdate = currentTime + FAST_UPDATE_INTERVAL;
+    unsigned long nextStallUpdate = currentTime + STALL_UPDATE_INTERVAL;
+    unsigned long nextTMCUpdate = currentTime + TMC_UPDATE_INTERVAL;
 
     while (true)
     {
@@ -689,6 +706,7 @@ void StepperController::publishFastStatusUpdates()
     publishTotalRevolutions();
     publishRuntime();
     publishStallGuardResult();
+    publishCurrentAngle();
 }
 
 void StepperController::publishStallStatusUpdates()
@@ -1282,7 +1300,7 @@ void StepperController::publishStallGuardResult()
 // - updateSpeedVariationParameters(): Update internal k and k0 parameters
 // Note: Both update methods only apply changes when actually needed for optimal performance
 
-float StepperController::calculateVariableSpeed() const
+float StepperController::calculateVariableSpeed()
 {
     if (!speedVariationEnabled || speedVariationStrength == 0.0f)
     {
@@ -1290,24 +1308,24 @@ float StepperController::calculateVariableSpeed() const
     }
 
     // Calculate current angle in the rotation cycle
-    const float angle = getPositionAngle() + speedVariationPhase;
-
-    // Normalize angle to 0-2π (optimized - single modulo operation)
-    const float normalizedAngle = fmodf(angle + (angle < 0.0f ? 6.28318530718f : 0.0f), 6.28318530718f);
+    getPositionAngle();
 
     // Use precomputed k and k0 values for efficiency
     // Apply the formula: w(a) = w0 * k0 * 1/(1 + k*cos(a))
-    const float denominator = 1.0f + speedVariationK * cosf(normalizedAngle);
+    const float denominator = 1.0f + speedVariationK * cosf(currentAngle + speedVariationPhase);
     const float variableSpeed = setpointRPM * speedVariationK0 / denominator;
 
     // Ensure we don't go below minimum or above maximum speed
     return constrain(variableSpeed, MIN_SPEED_RPM, MAX_SPEED_RPM);
 }
 
-float StepperController::getPositionAngle() const
+void StepperController::getPositionAngle()
 {
     if (!stepper)
-        return 0.0f;
+    {
+        currentAngle = 0.0f;
+        return;
+    }
 
     // Calculate position relative to where speed variation was enabled
     const int32_t relativePosition = stepper->getCurrentPosition() - speedVariationStartPosition;
@@ -1316,7 +1334,9 @@ float StepperController::getPositionAngle() const
     // (2π * relativePosition) / (STEPS_PER_REVOLUTION * MICRO_STEPS * GEAR_RATIO)
     float stepsPerOutputRev = static_cast<float>(STEPS_PER_REVOLUTION * MICRO_STEPS * GEAR_RATIO);
 
-    return (6.28318530718f * static_cast<float>(relativePosition)) / stepsPerOutputRev;
+    float signedAngle = fmodf((2 * PI * static_cast<float>(relativePosition)) / stepsPerOutputRev, 2 * PI);
+
+    currentAngle = signedAngle < 0.0f ? signedAngle + 2 * PI : signedAngle;
 }
 
 uint32_t StepperController::calculateRequiredAccelerationForVariableSpeed() const
