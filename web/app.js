@@ -11,26 +11,26 @@ class BratenDreherApp {
         this.GEAR_RATIO = 10;
         this.STEPS_PER_REVOLUTION = 200;
         this.MICROSTEPS = 16;
-        
+
         // Initialize command manager
         this.commandManager = new CommandManager();
-        
+
         // UI elements
         this.initializeUIElements();
-        
+
         // Controls and bindings
         this.controls = new Map();
         this.bindings = new Map();
-        
+
         // Initialize the application
         this.initializeControls();
         this.initializeBindings();
         this.bindEventListeners();
         this.setupCommandManagerCallbacks();
-        
+
         // Ensure all controls start in disabled state
         this.updateUI();
-        
+
         console.log('BratenDreher Application initialized with new architecture');
     }
 
@@ -40,7 +40,7 @@ class BratenDreherApp {
         const motorStepsPerSecond = (motorRPM * this.STEPS_PER_REVOLUTION * this.MICROSTEPS) / 60.0;
         return Math.floor(motorStepsPerSecond);
     }
-    
+
     accelerationToTime(accelerationStepsPerSec2) {
         if (accelerationStepsPerSec2 === 0) {
             return 5.0;
@@ -49,7 +49,7 @@ class BratenDreherApp {
         const timeSeconds = maxStepsPerSecond / accelerationStepsPerSec2;
         return Math.max(1.0, timeSeconds);
     }
-    
+
     timeToAcceleration(timeSeconds) {
         const maxStepsPerSecond = this.rpmToStepsPerSecond(this.MAX_SPEED_RPM);
         const acceleration = maxStepsPerSecond / timeSeconds;
@@ -64,7 +64,7 @@ class BratenDreherApp {
         this.connectBtn = document.getElementById('connectBtn');
         this.reconnectBtn = document.getElementById('reconnectBtn');
         this.disconnectBtn = document.getElementById('disconnectBtn');
-        
+
         // Control elements
         this.motorToggle = document.getElementById('motorToggle');
         this.speedSlider = document.getElementById('speedSlider');
@@ -80,7 +80,7 @@ class BratenDreherApp {
         this.accelerationTimeValue = document.getElementById('accelerationTimeValue');
         this.resetStatsBtn = document.getElementById('resetStatsBtn');
         this.resetStallBtn = document.getElementById('resetStallBtn');
-        
+
         // Variable speed elements
         this.variableSpeedToggle = document.getElementById('variableSpeedToggle');
         this.variableSpeedControls = document.getElementById('variableSpeedControls');
@@ -88,7 +88,7 @@ class BratenDreherApp {
         this.strengthValue = document.getElementById('strengthValue');
         this.phaseSlider = document.getElementById('phaseSlider');
         this.phaseValue = document.getElementById('phaseValue');
-        
+
         // Status elements
         this.motorStatus = document.getElementById('motorStatus');
         this.setpointSpeed = document.getElementById('setpointSpeed');
@@ -101,21 +101,21 @@ class BratenDreherApp {
         this.stallStatus = document.getElementById('stallStatus');
         this.stallCount = document.getElementById('stallCount');
         this.lastUpdate = document.getElementById('lastUpdate');
-        
+
         // StallGuard elements
         this.stallguardThresholdSlider = document.getElementById('stallguardThresholdSlider');
         this.stallguardThresholdValue = document.getElementById('stallguardThresholdValue');
         this.stallguardResultValue = document.getElementById('stallguardResultValue');
         this.stallguardSliderFill = document.getElementById('stallguardSliderFill');
-        
+
         // Variable speed status elements
         this.variableSpeedStatus = document.getElementById('variableSpeedStatus');
-        
+
         // Statistics elements
         this.totalRevolutions = document.getElementById('totalRevolutions');
         this.runTime = document.getElementById('runTime');
         this.avgSpeed = document.getElementById('avgSpeed');
-        
+
         // Power delivery elements
         this.voltageSelect = document.getElementById('voltageSelect');
         this.negotiateBtn = document.getElementById('negotiateBtn');
@@ -124,9 +124,9 @@ class BratenDreherApp {
         this.pdPowerGood = document.getElementById('pdPowerGood');
         this.pdNegotiatedVoltage = document.getElementById('pdNegotiatedVoltage');
         this.pdCurrentVoltage = document.getElementById('pdCurrentVoltage');
-        
-    // Preset buttons
-    this.presetBtns = document.querySelectorAll('.preset');
+
+        // Preset buttons
+        this.presetBtns = document.querySelectorAll('.preset');
     }
 
     initializeControls() {
@@ -493,7 +493,7 @@ class BratenDreherApp {
                     display.updateValue(statusUpdate.tmc2209Status ? 'OK' : 'Error');
                     display.updateClass(statusUpdate.tmc2209Status ? 'status-success' : 'status-error');
                 }
-                
+
                 if (statusUpdate.tmc2209Temperature !== undefined) {
                     const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
                     const tempIdx = Math.max(0, Math.min(4, statusUpdate.tmc2209Temperature));
@@ -502,7 +502,7 @@ class BratenDreherApp {
                     const className = tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error');
                     display.updateClass(className);
                 }
-                
+
                 if (statusUpdate.stallDetected !== undefined) {
                     const display = this.controls.get('stallStatusDisplay');
                     display.updateValue(statusUpdate.stallDetected ? 'STALL!' : 'OK');
@@ -514,7 +514,7 @@ class BratenDreherApp {
                         }
                     });
                 }
-                
+
                 if (statusUpdate.stallCount !== undefined) {
                     const display = this.controls.get('stallCountDisplay');
                     display.updateValue(statusUpdate.stallCount);
@@ -536,7 +536,7 @@ class BratenDreherApp {
             }
         }));
         this.bindings.get('currentSpeed').addControl(this.controls.get('currentSpeedDisplay'));
-        
+
         // Timestamp binding
         this.bindings.set('timestamp', new ControlBinding({
             statusKeys: [], // Always update on any status update
@@ -545,7 +545,7 @@ class BratenDreherApp {
             }
         }));
         this.bindings.get('timestamp').addControl(this.controls.get('lastUpdateDisplay'));
-        
+
 
         // Set command manager for all bindings
         this.bindings.forEach(binding => {
@@ -652,8 +652,8 @@ class BratenDreherApp {
 
         // Status updates from backend
         this.commandManager.onStatusUpdate = (statusUpdate) => {
-// Update last update time on every status message
-this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
+            // Update last update time on every status message
+            this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
             this.handleStatusUpdate(statusUpdate);
         };
 
@@ -673,7 +673,7 @@ this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString
     handleNotification(notification) {
         const level = notification.level;
         const message = notification.message || '';
-        
+
         if (level === 'warning') {
             this.commandManager.showWarning(message);
         } else if (level === 'error') {
@@ -686,7 +686,7 @@ this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString
         if (this.connectionInfo) {
             this.connectionInfo.textContent = info || this.getStatusInfo(status);
         }
-        
+
         if (status === 'Connected') {
             this.statusIndicator.classList.add('connected');
             this.connectBtn.disabled = true;
@@ -712,16 +712,16 @@ this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString
     getStatusInfo(status) {
         switch (status) {
             case 'Connected':
-                return this.commandManager.getDevice() ? 
-                    `Connected to ${this.commandManager.getDevice().name}` : 
+                return this.commandManager.getDevice() ?
+                    `Connected to ${this.commandManager.getDevice().name}` :
                     'Connected to BratenDreher';
             case 'Connecting...':
                 return 'Searching for BratenDreher device...';
             case 'Reconnecting...':
                 return 'Attempting to reconnect...';
             case 'Disconnected':
-                return this.commandManager.getDevice() ? 
-                    'Disconnected - Use Reconnect/Retry button' : 
+                return this.commandManager.getDevice() ?
+                    'Disconnected - Use Reconnect/Retry button' :
                     'Click Connect to start';
             default:
                 return '';
@@ -737,7 +737,7 @@ this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString
             // When connected, set to OUTDATED initially - status updates will set to VALID
             state = CONTROL_STATES.OUTDATED;
         }
-        
+
         // Update all controls
         this.controls.forEach(control => {
             control.setDisplayState(state, true);
@@ -749,11 +749,11 @@ this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString
             this.resetStatsBtn,
             this.resetStallBtn
         ];
-        
+
         const opacity = this.commandManager.isConnected() ? '1' : '0.4';
         const disabled = !this.commandManager.isConnected();
-    // emergencyStop, resetStatistics, and resetStallCount logic now handled by bindings.
-        
+        // emergencyStop, resetStatistics, and resetStallCount logic now handled by bindings.
+
         otherControls.forEach(control => {
             if (control) {
                 control.disabled = disabled;
@@ -776,13 +776,13 @@ this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString
     updateAverageSpeed() {
         const revolutionsElement = this.totalRevolutions;
         const runtimeElement = this.runTime;
-        
+
         if (!revolutionsElement || !runtimeElement) return;
-        
+
         const currentRevolutions = parseFloat(revolutionsElement.textContent) || 0;
         const currentRuntimeText = runtimeElement.textContent;
         let currentRuntimeSeconds = 0;
-        
+
         // Parse runtime from HH:MM:SS.mmm format
         if (currentRuntimeText && currentRuntimeText !== '00:00:00.000') {
             const [timePart, millisPart = '0'] = currentRuntimeText.split('.');
@@ -792,7 +792,7 @@ this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString
                 currentRuntimeSeconds += parseInt(millisPart) / 1000;
             }
         }
-        
+
         if (currentRuntimeSeconds > 0 && currentRevolutions > 0) {
             const avgSpeed = (currentRevolutions * 60) / currentRuntimeSeconds;
             this.controls.get('avgSpeedDisplay').updateValue(avgSpeed);

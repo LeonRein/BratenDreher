@@ -57,6 +57,8 @@ void StepperController::applyRunClockwise()
         systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, true);
     }
 
+
+    applyStepperAcceleration(setpointAcceleration); // Ensure acceleration is set before running
     stepper->runForward(); // In FastAccelStepper, backward means clockwise
     clockwise = true;
 
@@ -90,6 +92,7 @@ void StepperController::applyRunCounterClockwise()
         systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, true);
     }
 
+    applyStepperAcceleration(setpointAcceleration); // Ensure acceleration is set before running
     stepper->runBackward(); // In FastAccelStepper, backward means counter-clockwise
     clockwise = false;
 
@@ -984,13 +987,17 @@ void StepperController::emergencyStopInternal()
     uint32_t prevAcceleration = setpointAcceleration;
 
     // Set acceleration to 16000
-    applyStepperAcceleration(16000);
+    stepper->setAcceleration(16000);
+    stepper->applySpeedAcceleration();
 
     // Call disable
     disableInternal();
 
+    delay(100); // Allow time for disable to take effect
+
     // Restore previous acceleration
-    applyStepperAcceleration(prevAcceleration);
+    stepper->setAcceleration(prevAcceleration);
+
 
     dbg_println("EMERGENCY STOP executed");
 
