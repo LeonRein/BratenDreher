@@ -123,8 +123,8 @@ class BratenDreherApp {
         this.pdNegotiatedVoltage = document.getElementById('pdNegotiatedVoltage');
         this.pdCurrentVoltage = document.getElementById('pdCurrentVoltage');
         
-        // Preset buttons
-        this.presetBtns = document.querySelectorAll('.preset-btn');
+    // Preset buttons
+    this.presetBtns = document.querySelectorAll('.preset');
     }
 
     initializeControls() {
