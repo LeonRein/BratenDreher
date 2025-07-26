@@ -803,7 +803,3 @@ class StallResetControlBinding extends ControlBinding {
         return false;
     }
 }
-
-window.EmergencyStopControlBinding = EmergencyStopControlBinding;
-window.StatisticsResetControlBinding = StatisticsResetControlBinding;
-window.StallResetControlBinding = StallResetControlBinding;

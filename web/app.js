@@ -1,9 +1,3 @@
-/**
- * BratenDreher Application - New Architecture
- * Uses UI-type based controls with separated command management
- */
-/* ControlBinding classes are loaded via window object from control-bindings.js */
-
 class BratenDreherApp {
     constructor() {
         // Motor specifications for acceleration conversion
@@ -318,20 +312,20 @@ class BratenDreherApp {
             { commandType: 'sd' }
         ));
         // Emergency stop binding
-        this.bindings.set('emergencyStop', new window.EmergencyStopControlBinding(
+        this.bindings.set('emergencyStop', new EmergencyStopControlBinding(
             this.controls.get('emergencyStopBtn'),
             this.controls.get('speedSlider')
         ));
         /* Removed redundant addControl for emergencyStop; handled in EmergencyStopControlBinding */
 
         // Statistics reset binding
-        this.bindings.set('statisticsReset', new window.StatisticsResetControlBinding(
+        this.bindings.set('statisticsReset', new StatisticsResetControlBinding(
             this.controls.get('resetStatsBtn')
         ));
         /* Removed redundant addControl for statisticsReset; handled in StatisticsResetControlBinding */
 
         // Stall reset binding
-        this.bindings.set('stallReset', new window.StallResetControlBinding(
+        this.bindings.set('stallReset', new StallResetControlBinding(
             this.controls.get('resetStallBtn')
         ));
         /* Removed redundant addControl for stallReset; handled in StallResetControlBinding */
