@@ -739,8 +739,8 @@ class StallGuardControlBinding extends ControlBinding {
 
     statusValueTransform(value, key) {
         if (key === 'sgt') {
-            // Threshold as percentage (float)
-            return (value / 255) * 100;
+            // Invert threshold for UI (float)
+            return 100 - ((value / 255) * 100);
         }
         if (key === 'sgr') {
             // Load percentage (float)
@@ -757,8 +757,8 @@ class StallGuardControlBinding extends ControlBinding {
     }
 
     inputValueTransform(percent) {
-        // Convert percent (0-100) to backend value (0-255)
-        return Math.round(percent * 2.55);
+        // Invert percent for backend value (0-100 becomes 100-0)
+        return Math.round((100 - percent) * 2.55);
     }
 
     handleStatusUpdate(statusUpdate) {
@@ -783,7 +783,7 @@ class StallGuardControlBinding extends ControlBinding {
                 this.thresholdSlider.fillElement.style.opacity = "1.0";
             }
             // Color fill based on stall threshold
-            const sliderPercent = parseFloat(this.thresholdSlider.slider.value); // 0-100
+            const sliderPercent = parseFloat(this.thresholdSlider.slider.value); // invert slider
             if (this.thresholdSlider.fillElement) {
                 if (transformedValue < sliderPercent * 0.8) {
                     this.thresholdSlider.setFillColor('#10b981');
