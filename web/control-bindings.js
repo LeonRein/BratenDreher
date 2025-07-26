@@ -716,19 +716,20 @@ class StallGuardControlBinding extends ControlBinding {
  * Emergency stop control binding
  */
 class EmergencyStopControlBinding extends ControlBinding {
-    constructor(emergencyStopBtn, config = {}) {
+    constructor(emergencyStopBtn, speedSlider = null, config = {}) {
         super({
             commandType: 'es',
             ...config
         });
         this.emergencyStopBtn = emergencyStopBtn;
+        this.speedSlider = speedSlider;
         this.addControl(emergencyStopBtn);
     }
 
     async handleValueChange() {
         // Hide speed fill if available
-        if (window.app && window.app.controls && window.app.controls.get('speedSlider')) {
-            window.app.controls.get('speedSlider').hideFill();
+        if (this.speedSlider && typeof this.speedSlider.hideFill === 'function') {
+            this.speedSlider.hideFill();
         }
         // Optionally: send emergency stop command
         if (this.commandManager) {
