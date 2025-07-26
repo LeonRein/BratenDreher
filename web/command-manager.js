@@ -21,6 +21,7 @@ class CommandManager {
         // Timeout and retry handling
         this.pendingCommands = new Map(); // Track pending commands for timeout/retry
         this.commandTimeout = 5000; // 5 second timeout
+        this.maxCommandRetries = 1; // Number of retries (1 = 2 attempts total)
         
         // Event callbacks
         this.onConnectionChange = null;
@@ -285,26 +286,44 @@ class CommandManager {
     handleCommandTimeout(commandId) {
         const command = this.pendingCommands.get(commandId);
         if (!command) return; // Command was already processed
-        
-        if (command.retryCount === 0) {
-            // First timeout - attempt retry
-            console.log(`Retrying command ${command.type} (attempt 2/2)...`);
-            command.retryCount = 1;
-            
-            // Retry the command
+
+        if (command.retryCount < this.maxCommandRetries) {
+            // Retry attempt
+            const attemptNum = command.retryCount + 2; // 1st retry is attempt 2
+            console.log(`Retrying command ${command.type} (attempt ${attemptNum}/${this.maxCommandRetries + 1})...`);
+            command.retryCount += 1;
+
+            // Retry the command, but do not create a new pendingCommand entry
             setTimeout(() => {
-                this.sendCommand(command.type, command.value, command.additionalParams);
+                if (this.commandCharacteristic) {
+                    const commandObj = {
+                        type: command.type,
+                        value: command.value,
+                        ...command.additionalParams
+                    };
+                    const commandString = JSON.stringify(commandObj);
+                    this.commandCharacteristic.writeValue(new TextEncoder().encode(commandString))
+                        .then(() => {
+                            setTimeout(() => {
+                                this.handleCommandTimeout(commandId);
+                            }, this.commandTimeout);
+                        })
+                        .catch((error) => {
+                            console.error(`Failed to resend ${command.type} command:`, error);
+                            this.pendingCommands.delete(commandId);
+                        });
+                }
             }, 500);
         } else {
-            // Second timeout - give up
-            console.warn(`Command ${command.type} failed after retry - giving up`);
+            // Max retries reached - give up
+            console.warn(`Command ${command.type} failed after ${this.maxCommandRetries + 1} attempts - giving up`);
             this.pendingCommands.delete(commandId);
-            
+
             // Notify about communication failure
             if (this.onNotification) {
                 this.onNotification({
                     level: 'warning',
-                    message: `Command ${command.type} failed after retry. Check connection.`
+                    message: `Command ${command.type} failed after ${this.maxCommandRetries + 1} attempts. Check connection.`
                 });
             }
         }
@@ -358,7 +377,7 @@ class CommandManager {
             'speed': ['speed'],
             'currentSpeed': ['speed'],
             'direction': ['direction'],
-            'enabled': ['enable'],
+            'enabled': ['enable', 'emergency_stop'],
             'current': ['current'],
             'acceleration': ['acceleration'],
             'speedVariationEnabled': ['enable_speed_variation', 'disable_speed_variation'],
