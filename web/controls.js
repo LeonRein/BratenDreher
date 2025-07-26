@@ -145,7 +145,8 @@ class SliderControl extends BaseControl {
 
     setFillColor(color) {
         if (this.fillElement) {
-            this.fillElement.style.backgroundColor = color;
+            // Use background instead of backgroundColor to override gradient
+            this.fillElement.style.background = color;
         }
     }
 
