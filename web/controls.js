@@ -190,6 +190,13 @@ class SliderControl extends BaseControl {
         this.bindEvents();
     }
 
+    setDisplayState(state, force = false) {
+        if (state === CONTROL_STATES.DISABLED) {
+            this.hideFill();
+        }
+        super.setDisplayState(state, force);
+    }
+
     bindEvents() {
         if (!this.slider) return;
         

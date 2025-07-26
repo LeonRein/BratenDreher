@@ -661,11 +661,6 @@ this.bindings.set('timestamp', new TimestampControlBinding(
             }
         });
 
-        // Hide fill indicators when disconnected
-        if (!this.commandManager.isConnected()) {
-            this.controls.get('speedSlider').hideFill();
-            this.bindings.get('stallguard').hideFill();
-        }
     }
 
     updateAverageSpeed() {
