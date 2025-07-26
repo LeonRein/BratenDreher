@@ -115,28 +115,52 @@ class ControlBinding {
  */
 
 class AccelerationControlBinding extends ControlBinding {
-    constructor(accelerationSlider, accelerationDisplay, appContext, config = {}) {
+    constructor(accelerationSlider, accelerationDisplay, config = {}) {
+        const MAX_SPEED_RPM = 30.0;
+        const GEAR_RATIO = 10;
+        const STEPS_PER_REVOLUTION = 200;
+        const MICROSTEPS = 16;
+
+        function rpmToStepsPerSecond(rpm) {
+            const motorRPM = rpm * GEAR_RATIO;
+            const motorStepsPerSecond = (motorRPM * STEPS_PER_REVOLUTION * MICROSTEPS) / 60.0;
+            return Math.floor(motorStepsPerSecond);
+        }
+
+        function accelerationToTime(accelerationStepsPerSec2) {
+            if (accelerationStepsPerSec2 === 0) {
+                return 5.0;
+            }
+            const maxStepsPerSecond = rpmToStepsPerSecond(MAX_SPEED_RPM);
+            const timeSeconds = maxStepsPerSecond / accelerationStepsPerSec2;
+            return Math.max(1.0, timeSeconds);
+        }
+
+        function timeToAcceleration(timeSeconds) {
+            const maxStepsPerSecond = rpmToStepsPerSecond(MAX_SPEED_RPM);
+            const acceleration = maxStepsPerSecond / timeSeconds;
+            return Math.floor(acceleration);
+        }
+
         const defaults = {
             commandType: 'sa',
             statusKeys: ['acc'],
             valueTransform: (sliderValue) => {
                 const time = parseFloat(sliderValue);
-                const acceleration = appContext.timeToAcceleration(time);
+                const acceleration = timeToAcceleration(time);
                 const minAcceleration = 100;
                 if (acceleration < minAcceleration) {
-                    const minTime = appContext.accelerationToTime(minAcceleration).toFixed(1);
+                    const minTime = accelerationToTime(minAcceleration).toFixed(1);
                     if (accelerationSlider) {
                         accelerationSlider.setValue(minTime);
                     }
-                    if (appContext.commandManager) {
-                        appContext.commandManager.showWarning('Acceleration too low. Set to minimum allowed.');
-                    }
+                    // Optionally: show warning if needed (requires commandManager reference)
                     return minAcceleration;
                 }
                 return acceleration;
             },
             statusTransform: (accelerationValue) => {
-                const timeSeconds = appContext.accelerationToTime(accelerationValue);
+                const timeSeconds = accelerationToTime(accelerationValue);
                 return parseFloat(timeSeconds.toFixed(1));
             }
         };
@@ -151,7 +175,7 @@ class AccelerationControlBinding extends ControlBinding {
 }
 
 class StatisticsControlBinding extends ControlBinding {
-    constructor(totalRevolutionsDisplay, runTimeDisplay, avgSpeedDisplay, appContext, config = {}) {
+    constructor(totalRevolutionsDisplay, runTimeDisplay, avgSpeedDisplay, updateAverageSpeed, config = {}) {
         const defaults = {
             statusKeys: ['tr', 'rt'],
             customStatusHandler: (statusUpdate, controls, config) => {
@@ -160,7 +184,9 @@ class StatisticsControlBinding extends ControlBinding {
                 }
                 if (statusUpdate.rt !== undefined) {
                     runTimeDisplay.updateValue(statusUpdate.rt);
-                    appContext.updateAverageSpeed();
+                    if (typeof updateAverageSpeed === 'function') {
+                        updateAverageSpeed();
+                    }
                 }
             }
         };
@@ -173,7 +199,7 @@ class StatisticsControlBinding extends ControlBinding {
 }
 
 class TmcStatusControlBinding extends ControlBinding {
-    constructor(tmcStatusDisplay, tmcTempDisplay, stallStatusDisplay, stallCountDisplay, appContext, config = {}) {
+    constructor(tmcStatusDisplay, tmcTempDisplay, stallStatusDisplay, stallCountDisplay, config = {}) {
         const defaults = {
             statusKeys: ['tmcst', 'tmct', 'sd', 'sc'],
             customStatusHandler: (statusUpdate, controls, config) => {

@@ -34,27 +34,6 @@ class BratenDreherApp {
         console.log('BratenDreher Application initialized with new architecture');
     }
 
-    // Acceleration conversion methods (same as before)
-    rpmToStepsPerSecond(rpm) {
-        const motorRPM = rpm * this.GEAR_RATIO;
-        const motorStepsPerSecond = (motorRPM * this.STEPS_PER_REVOLUTION * this.MICROSTEPS) / 60.0;
-        return Math.floor(motorStepsPerSecond);
-    }
-
-    accelerationToTime(accelerationStepsPerSec2) {
-        if (accelerationStepsPerSec2 === 0) {
-            return 5.0;
-        }
-        const maxStepsPerSecond = this.rpmToStepsPerSecond(this.MAX_SPEED_RPM);
-        const timeSeconds = maxStepsPerSecond / accelerationStepsPerSec2;
-        return Math.max(1.0, timeSeconds);
-    }
-
-    timeToAcceleration(timeSeconds) {
-        const maxStepsPerSecond = this.rpmToStepsPerSecond(this.MAX_SPEED_RPM);
-        const acceleration = maxStepsPerSecond / timeSeconds;
-        return Math.floor(acceleration);
-    }
 
     initializeUIElements() {
         // Connection elements
@@ -379,8 +358,7 @@ class BratenDreherApp {
 
 this.bindings.set('acceleration', new AccelerationControlBinding(
     this.controls.get('accelerationSlider'),
-    this.controls.get('accelerationDisplay'),
-    this
+    this.controls.get('accelerationDisplay')
 ));
 
         // Variable speed binding
@@ -447,15 +425,14 @@ this.bindings.set('statistics', new StatisticsControlBinding(
     this.controls.get('totalRevolutionsDisplay'),
     this.controls.get('runTimeDisplay'),
     this.controls.get('avgSpeedDisplay'),
-    this
+    this.updateAverageSpeed.bind(this)
 ));
 
 this.bindings.set('tmcStatus', new TmcStatusControlBinding(
     this.controls.get('tmcStatusDisplay'),
     this.controls.get('tmcTempDisplay'),
     this.controls.get('stallStatusDisplay'),
-    this.controls.get('stallCountDisplay'),
-    this
+    this.controls.get('stallCountDisplay')
 ));
 
 this.bindings.set('currentSpeed', new CurrentSpeedControlBinding(
