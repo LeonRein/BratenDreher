@@ -217,12 +217,18 @@ class BratenDreherApp {
             debounceTime: 500
         });
 
+        // Variable speed graph control
+        this.variableSpeedGraphCanvas = document.getElementById('variableSpeedGraph');
+        const graphControl = new GraphControl(this.variableSpeedGraphCanvas);
+        this.controls.set('variableSpeedGraph', graphControl);
+
         // Create composite control for variable speed
         const variableSpeedComposite = new CompositeControl();
         variableSpeedComposite.addChildControl(variableSpeedToggle);
         variableSpeedComposite.addChildControl(variableSpeedStatusDisplay);
         variableSpeedComposite.addChildControl(strengthSlider);
         variableSpeedComposite.addChildControl(phaseSlider);
+        variableSpeedComposite.addChildControl(graphControl);
 
         this.controls.set('variableSpeedToggle', variableSpeedToggle);
         this.controls.set('variableSpeedStatusDisplay', variableSpeedStatusDisplay);
@@ -301,15 +307,13 @@ class BratenDreherApp {
             this.controls.get('speedSlider'),
             this.controls.get('setpointSpeedDisplay'),
             this.controls.get('presetButtons'),
-            this.speedSliderFill,
-            { commandType: 'ss' }
+            this.speedSliderFill
         ));
 
         // Direction control binding
         this.bindings.set('direction', new DirectionControlBinding(
             this.controls.get('directionButtons'),
-            this.controls.get('directionDisplay'),
-            { commandType: 'sd' }
+            this.controls.get('directionDisplay')
         ));
         // Emergency stop binding
         this.bindings.set('emergencyStop', new EmergencyStopControlBinding(
@@ -331,22 +335,16 @@ class BratenDreherApp {
         /* Removed redundant addControl for stallReset; handled in StallResetControlBinding */
 
         // Motor control binding
-        this.bindings.set('motor', new ControlBinding({
-            commandType: 'en',
-            statusKeys: ['en'],
-            debounceTime: 0
-        }));
-        this.bindings.get('motor').addControl(this.controls.get('motorToggle'));
-        this.bindings.get('motor').addControl(this.controls.get('motorStatusDisplay'));
+        this.bindings.set('motor', new MotorControlBinding(
+            this.controls.get('motorToggle'),
+            this.controls.get('motorStatusDisplay')
+        ));
 
         // Current control binding
-        this.bindings.set('current', new ControlBinding({
-            commandType: 'sc',
-            statusKeys: ['cur'],
-            valueTransform: (value) => parseInt(value)
-        }));
-        this.bindings.get('current').addControl(this.controls.get('currentSlider'));
-        this.bindings.get('current').addControl(this.controls.get('currentDisplay'));
+        this.bindings.set('current', new CurrentControlBinding(
+            this.controls.get('currentSlider'),
+            this.controls.get('currentDisplay')
+        ));
 
 this.bindings.set('acceleration', new AccelerationControlBinding(
     this.controls.get('accelerationSlider'),
@@ -362,36 +360,30 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
             this.variableSpeedControls
         ));
 
+        // Variable speed graph binding
+        this.bindings.set('variableSpeedGraph', new VariableSpeedGraphControlBinding(
+            this.controls.get('variableSpeedGraph'),
+            () => {
+                // Use setpoint speed from controls if available
+                const speedDisplay = this.controls.get('setpointSpeedDisplay');
+                if (speedDisplay && speedDisplay.displays && speedDisplay.displays[0]) {
+                    const text = speedDisplay.displays[0].textContent;
+                    const match = text.match(/([\d.]+)/);
+                    if (match) return parseFloat(match[1]);
+                }
+                return 1.0;
+            }
+        ));
+
         // Strength binding
-        this.bindings.set('strength', new ControlBinding({
-            commandType: 'sv',
-            statusKeys: ['svs'],
-            valueTransform: (value) => parseInt(value) / 100.0,
-            statusTransform: (value) => Math.round(value * 100)
-        }));
-        this.bindings.get('strength').addControl(this.controls.get('strengthSlider'));
+        this.bindings.set('strength', new StrengthControlBinding(
+            this.controls.get('strengthSlider')
+        ));
 
         // Phase binding
-        this.bindings.set('phase', new ControlBinding({
-            commandType: 'svp',
-            statusKeys: ['svp'],
-            valueTransform: (value) => {
-                const phase = parseInt(value);
-                let phaseForRadians = phase;
-                if (phaseForRadians < 0) {
-                    phaseForRadians += 360;
-                }
-                return (phaseForRadians * Math.PI) / 180;
-            },
-            statusTransform: (value) => {
-                let phaseDegrees = Math.round((value * 180) / Math.PI);
-                if (phaseDegrees > 180) {
-                    phaseDegrees -= 360;
-                }
-                return phaseDegrees;
-            }
-        }));
-        this.bindings.get('phase').addControl(this.controls.get('phaseSlider'));
+        this.bindings.set('phase', new PhaseControlBinding(
+            this.controls.get('phaseSlider')
+        ));
 
         // StallGuard binding
         this.bindings.set('stallguard', new StallGuardControlBinding(
@@ -454,81 +446,81 @@ this.bindings.set('timestamp', new TimestampControlBinding(
         // });
 
         // Speed slider event
-        this.controls.get('speedSlider').options.onValueChange = (value) => {
+        this.controls.get('speedSlider').onChange((value) => {
             this.bindings.get('speed').handleValueChange(value);
-        };
+        });
 
         // Preset button events
-        this.controls.get('presetButtons').options.onClick = (value, index, button) => {
+        this.controls.get('presetButtons').onChange((value, index, button) => {
             const speed = parseFloat(button.dataset.speed);
             this.controls.get('speedSlider').setValue(speed);
             this.bindings.get('speed').handleValueChange(speed);
-        };
+        });
 
         // Direction button events
-        this.controls.get('directionButtons').options.onClick = (value, index, button) => {
+        this.controls.get('directionButtons').onChange((value, index, button) => {
             const clockwise = index === 0; // First button is clockwise
             this.bindings.get('direction').setDirection(clockwise);
-        };
+        });
 
         // Motor toggle event
-        this.controls.get('motorToggle').options.onChange = (enabled) => {
+        this.controls.get('motorToggle').onChange((enabled) => {
             this.bindings.get('motor').handleValueChange(enabled);
-        };
+        });
 
         // Current slider event
-        this.controls.get('currentSlider').options.onValueChange = (value) => {
+        this.controls.get('currentSlider').onChange((value) => {
             this.bindings.get('current').handleValueChange(value);
-        };
+        });
 
         // Acceleration slider event
-        this.controls.get('accelerationSlider').options.onValueChange = (value) => {
+        this.controls.get('accelerationSlider').onChange((value) => {
             this.bindings.get('acceleration').handleValueChange(value);
-        };
+        });
 
         // Variable speed toggle event
-        this.controls.get('variableSpeedToggle').options.onChange = (enabled) => {
+        this.controls.get('variableSpeedToggle').onChange((enabled) => {
             this.bindings.get('variableSpeed').setVariableSpeedEnabled(enabled);
-        };
+        });
 
         // Strength slider event
-        this.controls.get('strengthSlider').options.onValueChange = (value) => {
+        this.controls.get('strengthSlider').onChange((value) => {
             this.bindings.get('strength').handleValueChange(value);
-        };
+        });
 
         // Phase slider event
-        this.controls.get('phaseSlider').options.onValueChange = (value) => {
+        this.controls.get('phaseSlider').onChange((value) => {
             this.bindings.get('phase').handleValueChange(value);
-        };
+        });
 
         // StallGuard slider event
-        this.controls.get('stallguardSlider').options.onValueChange = (value) => {
+        this.controls.get('stallguardSlider').onChange((value) => {
             this.bindings.get('stallguard').handleValueChange(value);
-        };
+        });
 
         // Power delivery events
-        this.controls.get('negotiateBtn').options.onClick = () => {
+        this.controls.get('negotiateBtn').onChange(() => {
             this.bindings.get('powerDelivery').negotiateVoltage();
-        };
+        });
 
-        this.controls.get('autoNegotiateBtn').options.onClick = () => {
+        this.controls.get('autoNegotiateBtn').onChange(() => {
             this.bindings.get('powerDelivery').autoNegotiate();
-        };
+        });
 
         // Emergency stop button event
-        this.controls.get('emergencyStopBtn').options.onClick = () => {
+        this.controls.get('emergencyStopBtn').onChange(() => {
             this.bindings.get('emergencyStop').handleValueChange(true);
-        };
+        });
 
         // Statistics reset button event
-        this.controls.get('resetStatsBtn').options.onClick = () => {
+        this.controls.get('resetStatsBtn').onChange(() => {
             this.bindings.get('statisticsReset').handleValueChange(true);
-        };
+        });
 
         // Stall reset button event
-        this.controls.get('resetStallBtn').options.onClick = () => {
+        this.controls.get('resetStallBtn').onChange(() => {
             this.bindings.get('stallReset').handleValueChange(true);
-        };
+        });
 
         // Emergency stop, statistics reset, and stall reset are now handled by bindings.
     }

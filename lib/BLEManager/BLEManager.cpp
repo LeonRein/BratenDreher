@@ -413,6 +413,9 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
         case StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE:
             doc["tr"] = statusUpdate.floatValue;
             break;
+        case StatusUpdateType::CURRENT_ANGLE_UPDATE:
+            doc["ca"] = statusUpdate.floatValue;
+            break;
         case StatusUpdateType::RUNTIME_UPDATE:
             doc["rt"] = statusUpdate.ulongValue;
             break;
