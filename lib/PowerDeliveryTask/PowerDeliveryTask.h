@@ -14,6 +14,7 @@
 #include <freertos/queue.h>
 #include "Task.h"
 #include "SystemStatus.h"
+#include <Preferences.h>
 #include "SystemCommand.h"
 #include "dbg_print.h"
 
@@ -56,6 +57,7 @@ private:
     // PD configuration and state
     int targetVoltage;
     int negotiatedVoltage;
+    Preferences preferences;
     bool powerGoodState;
     bool lastPowerGoodState;
     unsigned long powerGoodDebounceTime;
@@ -110,6 +112,8 @@ private:
     
     // Initialization and settings
     void initializeHardware();
+    void loadSettings();
+    void saveSettings();
 
 protected:
     void run() override;

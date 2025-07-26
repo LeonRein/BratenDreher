@@ -353,9 +353,6 @@ bool StepperController::begin()
 {
     dbg_println("Initializing FastAccelStepper with TMC2209...");
 
-    // Initialize preferences storage
-    initPreferences();
-
     // Configure pins
     pinMode(TMC_EN_PIN, OUTPUT);
     pinMode(MS1_PIN, OUTPUT);
@@ -419,33 +416,6 @@ bool StepperController::begin()
     isInitializing = false;
 
     return true;
-}
-
-bool StepperController::initPreferences()
-{
-    // Try to open the namespace with write permissions to ensure it exists
-    if (preferences.begin("stepper", false))
-    {
-        // Check if this is a fresh namespace by looking for a key
-        if (!preferences.isKey("speed"))
-        {
-            // Fresh namespace - write default values
-            dbg_println("Fresh preferences namespace, writing defaults");
-            preferences.putFloat("speed", setpointRPM);
-            preferences.putInt("microsteps", MICRO_STEPS);
-            preferences.putInt("current", runCurrent);
-            preferences.putInt("stallGuardThreshold", stallGuardThreshold);
-            preferences.putUInt("acceleration", setpointAcceleration);
-        }
-        preferences.end();
-        dbg_println("Preferences namespace initialized");
-        return true;
-    }
-    else
-    {
-        dbg_println("Failed to initialize preferences namespace");
-        return false;
-    }
 }
 
 void StepperController::configureDriver()
@@ -1134,6 +1104,7 @@ void StepperController::loadSettings()
         clockwise = preferences.getBool("clockwise", clockwise);
         runCurrent = preferences.getInt("current", runCurrent);
         setpointAcceleration = preferences.getUInt("acceleration", setpointAcceleration);
+        stallGuardThreshold = preferences.getUInt("stallGuardThreshold", stallGuardThreshold);
         preferences.end();
         dbg_printf("Settings loaded from flash: %.2f RPM, %s, %d microsteps, %d%% current, %u accel\n",
                    setpointRPM, clockwise ? "CW" : "CCW", MICRO_STEPS, runCurrent, setpointAcceleration);
