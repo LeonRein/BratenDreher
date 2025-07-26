@@ -148,7 +148,6 @@ select:disabled,
   display: flex;
   width: 100%;
   gap: calc(var(--spacing) * 1.25);
-  margin-bottom: calc(var(--spacing) * 1.25);
 }
 
 .preset-buttons .btn,

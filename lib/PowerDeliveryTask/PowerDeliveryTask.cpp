@@ -28,9 +28,9 @@ void PowerDeliveryTask::run() {
     dbg_println("PowerDeliveryTask: Starting...");
     
     // Initialize hardware and load settings
-    initializeHardware();
-
     loadSettings();
+    
+    initializeHardware();
     pdConfigureVoltage(targetVoltage);
 
     isInitialized = true;
@@ -65,6 +65,12 @@ void PowerDeliveryTask::run() {
 
 void PowerDeliveryTask::pdConfigureVoltage(int voltage) {
     dbg_printf("PowerDeliveryTask: Configuring CFG pins for %dV\n", voltage);
+
+    // Reset negotiation state and start fresh
+    negotiationState = PDNegotiationState::NEGOTIATING;
+    negotiationStartTime = millis();
+    targetVoltage = voltage;
+    negotiatedVoltage = 0; // Reset negotiated voltage until success
     
     // Configure CFG pins based on desired voltage
     // From PD_Stepper example:
@@ -164,12 +170,6 @@ void PowerDeliveryTask::applyNegotiationVoltage(int voltage) {
     
     dbg_printf("PowerDeliveryTask: Starting negotiation for %dV (previous state: %d)\n", 
                  voltage, static_cast<int>(negotiationState));
-    
-    // Reset negotiation state and start fresh
-    negotiationState = PDNegotiationState::NEGOTIATING;
-    negotiationStartTime = millis();
-    targetVoltage = voltage;
-    negotiatedVoltage = 0; // Reset negotiated voltage until success
     
     // Configure hardware for target voltage
     pdConfigureVoltage(voltage);

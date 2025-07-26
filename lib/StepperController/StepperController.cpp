@@ -1082,11 +1082,11 @@ void StepperController::saveSettings()
 {
     if (preferences.begin("stepper", false))
     {
-        preferences.putFloat("speed", setpointRPM);
-        preferences.putBool("clockwise", clockwise);
-        preferences.putInt("current", runCurrent);
-        preferences.putUInt("acceleration", setpointAcceleration);
-        preferences.putUInt("stallGuardThreshold", stallGuardThreshold);
+        preferences.putFloat("sp", setpointRPM);
+        preferences.putBool("cw", clockwise);
+        preferences.putInt("cur", runCurrent);
+        preferences.putUInt("acc", setpointAcceleration);
+        preferences.putUInt("sgt", stallGuardThreshold);
         preferences.end();
         dbg_println("Settings saved to flash");
     }
@@ -1100,11 +1100,11 @@ void StepperController::loadSettings()
 {
     if (preferences.begin("stepper", true))
     {
-        setpointRPM = preferences.getFloat("speed", setpointRPM);
-        clockwise = preferences.getBool("clockwise", clockwise);
-        runCurrent = preferences.getInt("current", runCurrent);
-        setpointAcceleration = preferences.getUInt("acceleration", setpointAcceleration);
-        stallGuardThreshold = preferences.getUInt("stallGuardThreshold", stallGuardThreshold);
+        setpointRPM = preferences.getFloat("sp", setpointRPM);
+        clockwise = preferences.getBool("cw", clockwise);
+        runCurrent = preferences.getInt("cur", runCurrent);
+        setpointAcceleration = preferences.getUInt("acc", setpointAcceleration);
+        stallGuardThreshold = preferences.getUInt("sgt", stallGuardThreshold);
         preferences.end();
         dbg_printf("Settings loaded from flash: %.2f RPM, %s, %d microsteps, %d%% current, %u accel\n",
                    setpointRPM, clockwise ? "CW" : "CCW", MICRO_STEPS, runCurrent, setpointAcceleration);

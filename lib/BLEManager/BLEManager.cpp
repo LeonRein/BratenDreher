@@ -384,67 +384,67 @@ void BLEManager::processStatusUpdates() {
 void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate) {
     switch (statusUpdate.type) {
         case StatusUpdateType::SPEED_UPDATE:
-            doc["currentSpeed"] = statusUpdate.floatValue;  // Actual speed for display
+            doc["cs"] = statusUpdate.floatValue;  // Actual speed for display
             break;
         case StatusUpdateType::SPEED_SETPOINT_CHANGED:
-            doc["speed"] = statusUpdate.floatValue;         // Setpoint for UI controls
+            doc["sp"] = statusUpdate.floatValue;  // Setpoint for UI controls
             break;
         case StatusUpdateType::DIRECTION_CHANGED:
-            doc["direction"] = statusUpdate.boolValue ? "cw" : "ccw";
+            doc["dir"] = statusUpdate.boolValue ? "cw" : "ccw";
             break;
         case StatusUpdateType::ENABLED_CHANGED:
-            doc["enabled"] = statusUpdate.boolValue;
+            doc["en"] = statusUpdate.boolValue;
             break;
         case StatusUpdateType::CURRENT_CHANGED:
-            doc["current"] = statusUpdate.intValue;
+            doc["cur"] = statusUpdate.intValue;
             break;
         case StatusUpdateType::ACCELERATION_CHANGED:
-            doc["acceleration"] = statusUpdate.uint32Value;
+            doc["acc"] = statusUpdate.uint32Value;
             break;
         case StatusUpdateType::SPEED_VARIATION_ENABLED_CHANGED:
-            doc["speedVariationEnabled"] = statusUpdate.boolValue;
+            doc["sve"] = statusUpdate.boolValue;
             break;
         case StatusUpdateType::SPEED_VARIATION_STRENGTH_CHANGED:
-            doc["speedVariationStrength"] = statusUpdate.floatValue;
+            doc["svs"] = statusUpdate.floatValue;
             break;
         case StatusUpdateType::SPEED_VARIATION_PHASE_CHANGED:
-            doc["speedVariationPhase"] = statusUpdate.floatValue;
+            doc["svp"] = statusUpdate.floatValue;
             break;
         case StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE:
-            doc["totalRevolutions"] = statusUpdate.floatValue;
+            doc["tr"] = statusUpdate.floatValue;
             break;
         case StatusUpdateType::RUNTIME_UPDATE:
-            doc["runtime"] = statusUpdate.ulongValue;
+            doc["rt"] = statusUpdate.ulongValue;
             break;
         case StatusUpdateType::STALL_DETECTED_UPDATE:
-            doc["stallDetected"] = statusUpdate.boolValue;
+            doc["sd"] = statusUpdate.boolValue;
             break;
         case StatusUpdateType::STALL_COUNT_UPDATE:
-            doc["stallCount"] = statusUpdate.intValue;
+            doc["sc"] = statusUpdate.intValue;
             break;
         case StatusUpdateType::TMC2209_STATUS_UPDATE:
-            doc["tmc2209Status"] = statusUpdate.boolValue;
+            doc["tmcst"] = statusUpdate.boolValue;
             break;
         case StatusUpdateType::TMC2209_TEMPERATURE_UPDATE:
-            doc["tmc2209Temperature"] = statusUpdate.intValue;
+            doc["tmct"] = statusUpdate.intValue;
             break;
         case StatusUpdateType::STALLGUARD_THRESHOLD_CHANGED:
-            doc["stallguardThreshold"] = statusUpdate.intValue;
+            doc["sgt"] = statusUpdate.intValue;
             break;
         case StatusUpdateType::STALLGUARD_RESULT_UPDATE:
-            doc["stallguardResult"] = statusUpdate.intValue;
+            doc["sgr"] = statusUpdate.intValue;
             break;
         case StatusUpdateType::PD_NEGOTIATION_STATUS:
-            doc["pdNegotiationStatus"] = statusUpdate.intValue;
+            doc["pdns"] = statusUpdate.intValue;
             break;
         case StatusUpdateType::PD_NEGOTIATED_VOLTAGE:
-            doc["pdNegotiatedVoltage"] = statusUpdate.floatValue;
+            doc["pdnv"] = statusUpdate.floatValue;
             break;
         case StatusUpdateType::PD_CURRENT_VOLTAGE:
-            doc["pdCurrentVoltage"] = statusUpdate.floatValue;
+            doc["pdcv"] = statusUpdate.floatValue;
             break;
         case StatusUpdateType::PD_POWER_GOOD_STATUS:
-            doc["pdPowerGood"] = statusUpdate.boolValue;
+            doc["pdpg"] = statusUpdate.boolValue;
             break;
     }
 }

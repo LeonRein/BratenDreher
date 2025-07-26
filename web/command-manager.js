@@ -375,20 +375,20 @@ class CommandManager {
     isStatusRelatedToCommand(statusUpdate, commandType) {
         // Map status update fields to command types
         const statusToCommandMap = {
-            'speed': ['ss'],
-            'currentSpeed': ['ss'],
-            'direction': ['sd'],
-            'enabled': ['en', 'es'],
-            'current': ['sc'],
-            'acceleration': ['sa'],
-            'speedVariationEnabled': ['esv', 'dsv'],
-            'speedVariationStrength': ['sv'],
-            'speedVariationPhase': ['svp'],
-            'stallguardThreshold': ['st'],
-            'pdNegotiationStatus': ['stv', 'anh'],
-            'totalRevolutions': ['rc'],
-            'runtime': ['rc'],
-            'stallCount': ['rs']
+            'sp': ['ss'],
+            'cs': ['ss'],
+            'dir': ['sd'],
+            'en': ['en', 'es'],
+            'cur': ['sc'],
+            'acc': ['sa'],
+            'sve': ['esv', 'dsv'],
+            'svs': ['sv'],
+            'svp': ['svp'],
+            'sgt': ['st'],
+            'pdns': ['stv', 'anh'],
+            'tr': ['rc'],
+            'rt': ['rc'],
+            'sc': ['rs']
         };
         
         for (const [statusKey, relatedCommands] of Object.entries(statusToCommandMap)) {

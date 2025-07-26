@@ -362,7 +362,7 @@ class BratenDreherApp {
         // Motor control binding
         this.bindings.set('motor', new ControlBinding({
             commandType: 'en',
-            statusKeys: ['enabled'],
+            statusKeys: ['en'],
             debounceTime: 0
         }));
         this.bindings.get('motor').addControl(this.controls.get('motorToggle'));
@@ -371,7 +371,7 @@ class BratenDreherApp {
         // Current control binding
         this.bindings.set('current', new ControlBinding({
             commandType: 'sc',
-            statusKeys: ['current'],
+            statusKeys: ['cur'],
             valueTransform: (value) => parseInt(value)
         }));
         this.bindings.get('current').addControl(this.controls.get('currentSlider'));
@@ -380,7 +380,7 @@ class BratenDreherApp {
         // Acceleration control binding
         this.bindings.set('acceleration', new ControlBinding({
             commandType: 'sa',
-            statusKeys: ['acceleration'],
+            statusKeys: ['acc'],
             valueTransform: (sliderValue) => {
                 // sliderValue is time in seconds from the UI
                 const time = parseFloat(sliderValue);
@@ -420,7 +420,7 @@ class BratenDreherApp {
         // Strength binding
         this.bindings.set('strength', new ControlBinding({
             commandType: 'sv',
-            statusKeys: ['speedVariationStrength'],
+            statusKeys: ['svs'],
             valueTransform: (value) => parseInt(value) / 100.0,
             statusTransform: (value) => Math.round(value * 100)
         }));
@@ -429,7 +429,7 @@ class BratenDreherApp {
         // Phase binding
         this.bindings.set('phase', new ControlBinding({
             commandType: 'svp',
-            statusKeys: ['speedVariationPhase'],
+            statusKeys: ['svp'],
             valueTransform: (value) => {
                 const phase = parseInt(value);
                 let phaseForRadians = phase;
@@ -470,13 +470,13 @@ class BratenDreherApp {
 
         // Statistics bindings
         this.bindings.set('statistics', new ControlBinding({
-            statusKeys: ['totalRevolutions', 'runtime'],
+            statusKeys: ['tr', 'rt'],
             customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.totalRevolutions !== undefined) {
-                    this.controls.get('totalRevolutionsDisplay').updateValue(statusUpdate.totalRevolutions);
+                if (statusUpdate.tr !== undefined) {
+                    this.controls.get('totalRevolutionsDisplay').updateValue(statusUpdate.tr);
                 }
-                if (statusUpdate.runtime !== undefined) {
-                    this.controls.get('runTimeDisplay').updateValue(statusUpdate.runtime);
+                if (statusUpdate.rt !== undefined) {
+                    this.controls.get('runTimeDisplay').updateValue(statusUpdate.rt);
                     // Calculate average speed
                     this.updateAverageSpeed();
                 }
@@ -488,39 +488,37 @@ class BratenDreherApp {
 
         // TMC status bindings
         this.bindings.set('tmcStatus', new ControlBinding({
-            statusKeys: ['tmc2209Status', 'tmc2209Temperature', 'stallDetected', 'stallCount'],
+            statusKeys: ['tmcst', 'tmct', 'sd', 'sc'],
             customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.tmc2209Status !== undefined) {
+                if (statusUpdate.tmcst !== undefined) {
                     const display = this.controls.get('tmcStatusDisplay');
-                    display.updateValue(statusUpdate.tmc2209Status ? 'OK' : 'Error');
-                    display.updateClass(statusUpdate.tmc2209Status ? 'status-success' : 'status-error');
+                    display.updateValue(statusUpdate.tmcst ? 'OK' : 'Error');
+                    display.updateClass(statusUpdate.tmcst ? 'status-success' : 'status-error');
                 }
 
-                if (statusUpdate.tmc2209Temperature !== undefined) {
+                if (statusUpdate.tmct !== undefined) {
                     const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
-                    const tempIdx = Math.max(0, Math.min(4, statusUpdate.tmc2209Temperature));
+                    const tempIdx = Math.max(0, Math.min(4, statusUpdate.tmct));
                     const display = this.controls.get('tmcTempDisplay');
                     display.updateValue(tempLabels[tempIdx]);
                     const className = tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error');
                     display.updateClass(className);
                 }
 
-                if (statusUpdate.stallDetected !== undefined) {
+                if (statusUpdate.sd !== undefined) {
                     const display = this.controls.get('stallStatusDisplay');
-                    display.updateValue(statusUpdate.stallDetected ? 'STALL!' : 'OK');
-                    const color = statusUpdate.stallDetected ? '#e74c3c' : '#10b981';
+                    display.updateValue(statusUpdate.sd ? 'STALL!' : 'OK');
+                    const color = statusUpdate.sd ? '#e74c3c' : '#10b981';
                     display.displays.forEach(element => {
-                        if (element) {
-                            element.style.color = color;
-                            element.style.fontWeight = statusUpdate.stallDetected ? 'bold' : 'normal';
-                        }
+                        if (element) element.style.color = color;
+                        element.style.fontWeight = statusUpdate.sd ? 'bold' : 'normal';
                     });
                 }
 
-                if (statusUpdate.stallCount !== undefined) {
+                if (statusUpdate.sc !== undefined) {
                     const display = this.controls.get('stallCountDisplay');
-                    display.updateValue(statusUpdate.stallCount);
-                    const color = statusUpdate.stallCount > 0 ? '#e74c3c' : '#10b981';
+                    display.updateValue(statusUpdate.sc);
+                    const color = statusUpdate.sc > 0 ? '#e74c3c' : '#10b981';
                     display.displays.forEach(element => {
                         if (element) element.style.color = color;
                     });
@@ -530,10 +528,10 @@ class BratenDreherApp {
 
         // Current speed display binding
         this.bindings.set('currentSpeed', new ControlBinding({
-            statusKeys: ['currentSpeed'],
+            statusKeys: ['cs'],
             customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.currentSpeed !== undefined) {
-                    controls[0].updateValue(statusUpdate.currentSpeed);
+                if (statusUpdate.cs !== undefined) {
+                    controls[0].updateValue(statusUpdate.cs);
                 }
             }
         }));
@@ -655,7 +653,6 @@ class BratenDreherApp {
         // Status updates from backend
         this.commandManager.onStatusUpdate = (statusUpdate) => {
             // Update last update time on every status message
-            console.log('Status update received:', statusUpdate);
             this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
             this.handleStatusUpdate(statusUpdate);
         };

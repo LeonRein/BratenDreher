@@ -119,7 +119,7 @@ class SpeedControlBinding extends ControlBinding {
     constructor(speedSlider, speedDisplay, presetButtons, fillElement, config = {}) {
         super({
             commandType: 'ss',
-            statusKeys: ['speed', 'currentSpeed'],
+            statusKeys: ['sp', 'cs'],
             displayTransform: (value) => value.toFixed(1),
             valueTransform: (value) => Math.max(0.1, Math.min(30.0, value)),
             ...config
@@ -136,19 +136,19 @@ class SpeedControlBinding extends ControlBinding {
 
         // Custom status handler for speed control
         this.config.customStatusHandler = (statusUpdate, controls, config) => {
-            if (statusUpdate.speed !== undefined) {
+            if (statusUpdate.sp !== undefined) {
                 // Update setpoint speed
-                const speed = statusUpdate.speed;
+                const speed = statusUpdate.sp;
                 this.speedSlider.setValue(speed);
                 this.speedDisplay.updateValue(speed);
-                
+
                 // Update preset button active state
                 this.updatePresetButtonState(speed);
             }
 
-            if (statusUpdate.currentSpeed !== undefined) {
+            if (statusUpdate.cs !== undefined) {
                 // Update fill indicator to show current speed
-                this.speedSlider.updateFillPosition(statusUpdate.currentSpeed);
+                this.speedSlider.updateFillPosition(statusUpdate.cs);
             }
         };
     }
@@ -200,7 +200,7 @@ class DirectionControlBinding extends ControlBinding {
     constructor(directionButtons, directionDisplay, config = {}) {
         super({
             commandType: 'sd',
-            statusKeys: ['direction'],
+            statusKeys: ['dir'],
             ...config
         });
 
@@ -212,15 +212,15 @@ class DirectionControlBinding extends ControlBinding {
 
         // Custom status handler for direction control
         this.config.customStatusHandler = (statusUpdate, controls, config) => {
-            if (statusUpdate.direction !== undefined) {
-                const clockwise = statusUpdate.direction === 'cw';
-                
+            if (statusUpdate.dir !== undefined) {
+                const clockwise = statusUpdate.dir === 'cw';
+
                 // Update button states - index 0 is clockwise, index 1 is counterclockwise
                 this.directionButtons.setActiveButton(clockwise ? 0 : 1);
-                
+
                 // Update direction display
                 this.directionDisplay.updateValue(clockwise ? 'Clockwise' : 'Counter-clockwise');
-                
+
                 // Apply color coding
                 const color = clockwise ? '#3b82f6' : '#8b5cf6';
                 this.directionDisplay.displays.forEach(element => {
@@ -240,7 +240,7 @@ class VariableSpeedControlBinding extends ControlBinding {
     constructor(toggle, strengthSlider, phaseSlider, statusDisplay, controlsContainer, config = {}) {
         super({
             commandType: null, // Multiple command types
-            statusKeys: ['speedVariationEnabled', 'speedVariationStrength', 'speedVariationPhase'],
+            statusKeys: ['sve', 'svs', 'svp'],
             ...config
         });
 
@@ -257,12 +257,12 @@ class VariableSpeedControlBinding extends ControlBinding {
 
         // Custom status handler for variable speed
         this.config.customStatusHandler = (statusUpdate, controls, config) => {
-            if (statusUpdate.speedVariationEnabled !== undefined) {
-                const enabled = statusUpdate.speedVariationEnabled;
+            if (statusUpdate.sve !== undefined) {
+                const enabled = statusUpdate.sve;
                 this.toggle.setValue(enabled);
                 this.updateVariableSpeedUI(enabled);
                 this.statusDisplay.updateValue(enabled ? 'ON' : 'OFF');
-                
+
                 // Color coding
                 const color = enabled ? '#10b981' : '#1f2937';
                 this.statusDisplay.displays.forEach(element => {
@@ -270,14 +270,14 @@ class VariableSpeedControlBinding extends ControlBinding {
                 });
             }
 
-            if (statusUpdate.speedVariationStrength !== undefined) {
-                const strength = Math.round(statusUpdate.speedVariationStrength * 100);
+            if (statusUpdate.svs !== undefined) {
+                const strength = Math.round(statusUpdate.svs * 100);
                 this.strengthSlider.setValue(strength);
             }
 
-            if (statusUpdate.speedVariationPhase !== undefined) {
+            if (statusUpdate.svp !== undefined) {
                 // Convert from radians to degrees and then to -180 to 180 range
-                let phaseDegrees = Math.round((statusUpdate.speedVariationPhase * 180) / Math.PI);
+                let phaseDegrees = Math.round((statusUpdate.svp * 180) / Math.PI);
                 if (phaseDegrees > 180) {
                     phaseDegrees -= 360;
                 }
@@ -317,7 +317,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
     constructor(voltageSelect, negotiateBtn, autoNegotiateBtn, statusElements, config = {}) {
         super({
             commandType: null, // Multiple command types
-            statusKeys: ['pdNegotiationStatus', 'pdPowerGood', 'pdNegotiatedVoltage', 'pdCurrentVoltage'],
+            statusKeys: ['pdns', 'pdpg', 'pdnv', 'pdcv'],
             ...config
         });
 
@@ -403,10 +403,10 @@ class PowerDeliveryControlBinding extends ControlBinding {
     }
 
     handlePowerDeliveryStatus(statusUpdate) {
-        if (statusUpdate.pdNegotiationStatus !== undefined) {
-            const statusValue = Math.round(statusUpdate.pdNegotiationStatus);
-            const status = this.negotiationStates[statusValue] || 
-                          { text: `Unknown (${statusUpdate.pdNegotiationStatus})`, class: 'status-error' };
+        if (statusUpdate.pdns !== undefined) {
+            const statusValue = Math.round(statusUpdate.pdns);
+            const status = this.negotiationStates[statusValue] ||
+                          { text: `Unknown (${statusUpdate.pdns})`, class: 'status-error' };
 
             if (this.statusElements.status) {
                 this.statusElements.status.textContent = status.text;
@@ -423,31 +423,31 @@ class PowerDeliveryControlBinding extends ControlBinding {
             }
 
             // Update voltage selector on success
-            if (statusValue === 2 && statusUpdate.pdNegotiatedVoltage > 0) {
-                this.voltageSelect.setValue(statusUpdate.pdNegotiatedVoltage);
+            if (statusValue === 2 && statusUpdate.pdnv > 0) {
+                this.voltageSelect.setValue(statusUpdate.pdnv);
             }
         }
 
-        if (statusUpdate.pdPowerGood !== undefined) {
+        if (statusUpdate.pdpg !== undefined) {
             if (this.statusElements.powerGood) {
-                this.statusElements.powerGood.textContent = statusUpdate.pdPowerGood ? 'Good' : 'Bad';
-                this.statusElements.powerGood.className = statusUpdate.pdPowerGood ? 
+                this.statusElements.powerGood.textContent = statusUpdate.pdpg ? 'Good' : 'Bad';
+                this.statusElements.powerGood.className = statusUpdate.pdpg ?
                     'power-value status-success' : 'power-value status-error';
                 this.statusElements.powerGood.style.opacity = '1.0';
             }
         }
 
-        if (statusUpdate.pdNegotiatedVoltage !== undefined) {
+        if (statusUpdate.pdnv !== undefined) {
             if (this.statusElements.negotiatedVoltage) {
-                this.statusElements.negotiatedVoltage.textContent = statusUpdate.pdNegotiatedVoltage > 0 ? 
-                    `${statusUpdate.pdNegotiatedVoltage}V` : '- V';
+                this.statusElements.negotiatedVoltage.textContent = statusUpdate.pdnv > 0 ?
+                    `${statusUpdate.pdnv}V` : '- V';
                 this.statusElements.negotiatedVoltage.style.opacity = '1.0';
             }
         }
 
-        if (statusUpdate.pdCurrentVoltage !== undefined) {
+        if (statusUpdate.pdcv !== undefined) {
             if (this.statusElements.currentVoltage) {
-                this.statusElements.currentVoltage.textContent = `${statusUpdate.pdCurrentVoltage.toFixed(1)}V`;
+                this.statusElements.currentVoltage.textContent = `${statusUpdate.pdcv.toFixed(1)}V`;
                 this.statusElements.currentVoltage.style.opacity = '1.0';
             }
         }
@@ -459,7 +459,7 @@ class StallGuardControlBinding extends ControlBinding {
     constructor(thresholdSlider, resultDisplay, fillElement, config = {}) {
         super({
             commandType: 'st',
-            statusKeys: ['stallguardThreshold', 'stallguardResult'],
+            statusKeys: ['sgt', 'sgr'],
             displayTransform: (value) => {
                 const percentage = (value / 255) * 100;
                 return `${percentage.toFixed(1)}%`;
@@ -481,16 +481,16 @@ class StallGuardControlBinding extends ControlBinding {
 
         // Custom status handler
         this.config.customStatusHandler = (statusUpdate, controls, config) => {
-            if (statusUpdate.stallguardResult !== undefined) {
-                this.currentSgResult = statusUpdate.stallguardResult;
-                this.updateStallGuardResult(statusUpdate.stallguardResult);
+            if (statusUpdate.sgr !== undefined) {
+                this.currentSgResult = statusUpdate.sgr;
+                this.updateStallGuardResult(statusUpdate.sgr);
             }
 
-            if (statusUpdate.stallguardThreshold !== undefined) {
+            if (statusUpdate.sgt !== undefined) {
                 // Backend sends 0-255, invert for slider display
-                const invertedSliderValue = 255 - statusUpdate.stallguardThreshold;
+                const invertedSliderValue = 255 - statusUpdate.sgt;
                 this.thresholdSlider.setValue(invertedSliderValue);
-                
+
                 // Update visual if we have current result
                 if (this.currentSgResult !== null) {
                     this.updateStallGuardResult(this.currentSgResult);
