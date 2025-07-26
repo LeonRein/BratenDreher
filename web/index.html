@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="de">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BratenDreher Control</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE2IDJMMjQgMTZMMTYgMzBMOCAxNkwxNiAyWiIgZmlsbD0iIzMzNzNkYyIvPgo8L3N2Zz4K">
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE2IDJMMjQgMTZMMTYgMzBMOCAxNkwxNiAyWiIgZmlsbD0iIzMzNzNkYyIvPgo8L3N2Zz4K">
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div class="container">
         <header class="header">
@@ -36,7 +39,7 @@
         <!-- Motor Control -->
         <div class="card accent-green">
             <h2>Motor Control</h2>
-            
+
             <!-- Enable/Disable -->
             <div class="control-group">
                 <label class="label">Motor Status</label>
@@ -60,13 +63,7 @@
                 <div class="slider-container">
                     <div class="slider-wrapper">
                         <div class="slider-fill" id="speedSliderFill"></div>
-                        <input type="range" 
-                               id="speedSlider" 
-                               class="slider"
-                               min="0.1" 
-                               max="30" 
-                               step="0.1" 
-                               value="1.0">
+                        <input type="range" id="speedSlider" class="slider" min="0.1" max="30" step="0.1" value="1.0">
                     </div>
                 </div>
                 <div class="preset-buttons">
@@ -103,9 +100,10 @@
             <div class="control-group variable-speed-settings">
                 <h3>Variable Speed</h3>
                 <p class="info">
-                    🔄 For uneven cooking compensation - create a slow zone to give pale areas more time to brown while maintaining the same average cooking time
+                    🔄 For uneven cooking compensation - create a slow zone to give pale areas more time to brown while
+                    maintaining the same average cooking time
                 </p>
-                
+
                 <div class="toggle-switch">
                     <input type="checkbox" id="variableSpeedToggle" class="toggle-input">
                     <label for="variableSpeedToggle" class="toggle-label">
@@ -114,19 +112,15 @@
                         <span class="toggle-text-on">ON</span>
                     </label>
                 </div>
-                
+
                 <div class="group-box variable-speed-controls" id="variableSpeedControls">
                     <div class="setting-item">
-                        <label for="strengthSlider" class="label">Variation Strength: <span id="strengthValue">20</span>%</label>
+                        <label for="strengthSlider" class="label">Variation Strength: <span
+                                id="strengthValue">20</span>%</label>
                         <div class="slider-container">
                             <div class="slider-wrapper">
                                 <div class="slider-fill"></div>
-                                <input type="range" 
-                                    id="strengthSlider" 
-                                    class="slider"
-                                    min="0" 
-                                    max="100" 
-                                    step="5" 
+                                <input type="range" id="strengthSlider" class="slider" min="0" max="100" step="5"
                                     value="20">
                             </div>
                         </div>
@@ -139,19 +133,16 @@
                         <div class="slider-container">
                             <div class="slider-wrapper">
                                 <div class="slider-fill"></div>
-                                <input type="range" 
-                                    id="phaseSlider" 
-                                    class="slider"
-                                    min="-180" 
-                                    max="180" 
-                                    step="15" 
+                                <input type="range" id="phaseSlider" class="slider" min="-180" max="180" step="15"
                                     value="0">
                             </div>
                         </div>
                     </div>
                     <div class="variable-speed-info hint-box">
-                        <small>💡 Position your rotisserie so the pale side is at the current position, then enable variable speed. This position will become the slowest point in the rotation cycle.</small>
+                        <small>💡 Position your rotisserie so the pale side is at the current position, then enable
+                            variable speed. This position will become the slowest point in the rotation cycle.</small>
                     </div>
+                    <canvas class="variable-speed-graph" id="variableSpeedGraph"></canvas>
                 </div>
             </div>
 
@@ -166,12 +157,7 @@
                         <div class="slider-container">
                             <div class="slider-wrapper">
                                 <div class="slider-fill"></div>
-                                <input type="range" 
-                                    id="currentSlider" 
-                                    class="slider"
-                                    min="10" 
-                                    max="100" 
-                                    step="5" 
+                                <input type="range" id="currentSlider" class="slider" min="10" max="100" step="5"
                                     value="30">
                             </div>
                         </div>
@@ -180,16 +166,12 @@
                         </div>
                     </div>
                     <div class="setting-item">
-                        <label for="accelerationTimeSlider" class="label">Acceleration Time: <span id="accelerationTimeValue">5</span>s</label>
+                        <label for="accelerationTimeSlider" class="label">Acceleration Time: <span
+                                id="accelerationTimeValue">5</span>s</label>
                         <div class="slider-container">
                             <div class="slider-wrapper">
                                 <div class="slider-fill"></div>
-                                <input type="range" 
-                                    id="accelerationTimeSlider" 
-                                    class="slider"
-                                    min="1" 
-                                    max="30" 
-                                    step="1" 
+                                <input type="range" id="accelerationTimeSlider" class="slider" min="1" max="30" step="1"
                                     value="5">
                             </div>
                         </div>
@@ -283,17 +265,13 @@
                         <div class="slider-container">
                             <div class="slider-wrapper">
                                 <div class="slider-fill" id="stallguardSliderFill"></div>
-                                <input type="range" 
-                                       id="stallguardThresholdSlider" 
-                                       class="slider"
-                                       min="0" 
-                                       max="255" 
-                                       step="1" 
-                                       value="128">
+                                <input type="range" id="stallguardThresholdSlider" class="slider" min="0" max="255"
+                                    step="1" value="128">
                             </div>
                         </div>
                         <div class="hint-box">
-                            <small>Green fill shows current motor load percentage (0-100%). Adjust slider to set stall sensitivity.</small>
+                            <small>Green fill shows current motor load percentage (0-100%). Adjust slider to set stall
+                                sensitivity.</small>
                         </div>
                     </div>
                 </div>
@@ -316,7 +294,8 @@
                 </div>
 
                 <div class="hint-box" style="margin-top:16px;">
-                    <small><em>💡 If stalls occur frequently, try reducing speed, increasing threshold, or checking for mechanical obstructions.</em></small>
+                    <small><em>💡 If stalls occur frequently, try reducing speed, increasing threshold, or checking for
+                            mechanical obstructions.</em></small>
                 </div>
             </div>
         </div>
@@ -395,7 +374,7 @@
     <script src="command-manager.js"></script>
     <script src="control-bindings.js"></script>
     <script src="app.js"></script>
-    
+
     <!-- Initialize the application -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -404,4 +383,5 @@
         });
     </script>
 </body>
+
 </html>

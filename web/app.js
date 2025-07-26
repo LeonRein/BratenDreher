@@ -217,12 +217,18 @@ class BratenDreherApp {
             debounceTime: 500
         });
 
+        // Variable speed graph control
+        this.variableSpeedGraphCanvas = document.getElementById('variableSpeedGraph');
+        const graphControl = new GraphControl(this.variableSpeedGraphCanvas);
+        this.controls.set('variableSpeedGraph', graphControl);
+
         // Create composite control for variable speed
         const variableSpeedComposite = new CompositeControl();
         variableSpeedComposite.addChildControl(variableSpeedToggle);
         variableSpeedComposite.addChildControl(variableSpeedStatusDisplay);
         variableSpeedComposite.addChildControl(strengthSlider);
         variableSpeedComposite.addChildControl(phaseSlider);
+        variableSpeedComposite.addChildControl(graphControl);
 
         this.controls.set('variableSpeedToggle', variableSpeedToggle);
         this.controls.set('variableSpeedStatusDisplay', variableSpeedStatusDisplay);
@@ -360,6 +366,21 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
             this.controls.get('phaseSlider'),
             this.controls.get('variableSpeedStatusDisplay'),
             this.variableSpeedControls
+        ));
+
+        // Variable speed graph binding
+        this.bindings.set('variableSpeedGraph', new VariableSpeedGraphControlBinding(
+            this.controls.get('variableSpeedGraph'),
+            () => {
+                // Use setpoint speed from controls if available
+                const speedDisplay = this.controls.get('setpointSpeedDisplay');
+                if (speedDisplay && speedDisplay.displays && speedDisplay.displays[0]) {
+                    const text = speedDisplay.displays[0].textContent;
+                    const match = text.match(/([\d.]+)/);
+                    if (match) return parseFloat(match[1]);
+                }
+                return 1.0;
+            }
         ));
 
         // Strength binding

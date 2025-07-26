@@ -482,6 +482,43 @@ class VariableSpeedControlBinding extends ControlBinding {
     }
 }
 
+/**
+ * VariableSpeedGraphControlBinding for plotting speed vs. rotation remainder
+ */
+class VariableSpeedGraphControlBinding extends ControlBinding {
+    /**
+     * @param {GraphControl} graphControl
+     */
+    constructor(graphControl, config = {}) {
+        const defaults = {
+            statusKeys: ['tr', 'cs', 'sp'],
+            customStatusHandler: null
+        };
+        super({ ...defaults, ...config });
+
+        this.graphControl = graphControl;
+
+        this.addControl(graphControl);
+
+        // Buffer for last sample values
+        this.lastTr = null;
+        this.lastCs = null;
+        this.lastSp = null;
+
+        // Custom status handler
+        this.config.customStatusHandler = (statusUpdate, controls, config) => {
+            // Get total rotations, current speed, set speed
+            this.lastTr = statusUpdate.tr !== undefined ? statusUpdate.tr : this.lastTr;
+            this.lastCs = statusUpdate.cs !== undefined ? statusUpdate.cs : this.lastCs;
+            this.lastSp = statusUpdate.sp !== undefined ? statusUpdate.sp : this.lastSp;
+
+            if (this.lastTr !== null && this.lastCs !== null && this.lastSp !== null) {
+                this.graphControl.addSample(this.lastTr, this.lastCs, this.lastSp);
+            }
+        };
+    }
+}
+
 // Power delivery control binding with complex state management
 class PowerDeliveryControlBinding extends ControlBinding {
     constructor(voltageSelect, negotiateBtn, autoNegotiateBtn, statusElements, config = {}) {

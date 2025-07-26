@@ -507,3 +507,116 @@ class CompositeControl extends BaseControl {
         });
     }
 }
+
+/**
+ * GraphControl for plotting speed vs. rotation remainder
+ */
+class GraphControl extends BaseControl {
+    /**
+     * @param {HTMLCanvasElement} canvasElement
+     * @param {Object} options
+     */
+    constructor(canvasElement, options = {}) {
+        super(canvasElement, options);
+        this.canvas = canvasElement;
+        this.samples = []; // {rot: float, speed: float}
+        this.setSpeed = 1.0; // cached set speed for y axis scaling
+        this.bgColor = '#3b82f60d'; // matches hint background
+        this.lineColor = '#10b981'; // accent-green
+        this.gridColor = '#e5e7eb';
+        this.pointColor = '#3b82f6'; // accent-blue
+        this.canvas.style.background = this.bgColor;
+        this.canvas.style.borderRadius = '8px';
+
+    }
+
+    /**
+     * Add a sample and redraw the graph
+     * @param {number} rot - total rotations (float)
+     * @param {number} speed - current speed (float)
+     * @param {number} setSpeed - set speed (float)
+     */
+    addSample(rot, speed, setSpeed) {
+        this.samples.push({ rot, speed });
+        // Only keep samples from current rotation
+        this.samples = this.samples.filter(s => s.rot  > rot - 1);
+        this.setSpeed = setSpeed;
+        this.drawGraph();
+    }
+
+    /**
+     * Draw the graph for the last full rotation
+     */
+    drawGraph() {
+        // Responsive: set canvas size to match CSS pixel size before drawing
+        const rect = this.canvas.getBoundingClientRect();
+        this.canvas.width = Math.round(rect.width);
+        this.canvas.height = Math.round(rect.height);
+        const width = this.canvas.width;
+        const height = this.canvas.height;
+
+        const ctx = this.canvas.getContext('2d');
+
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw grid lines (optional, subtle)
+        ctx.strokeStyle = this.gridColor;
+        ctx.lineWidth = 1;
+        for (let i = 1; i < 4; i++) {
+            // vertical grid (quarters)
+            const x = (i / 4) * width;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+        }
+        for (let i = 1; i < 4; i++) {
+            // horizontal grid (quarters)
+            const y = (i / 4) * height;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+
+        if (this.samples.length < 2) return;
+
+        // Y axis scaling
+        const minY = this.setSpeed / 2 * 0.75; // 80% of set speed
+        const maxY = this.setSpeed * 2 * 1.2; // 120% of set speed
+
+        // X axis: remainder of rotation (0..1)
+        ctx.strokeStyle = this.lineColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let prevXFrac = null;
+        for (let i = 0; i < this.samples.length; i++) {
+            const s = this.samples[i];
+            const xFrac = s.rot - Math.floor(s.rot); // 0..1
+            const x = xFrac * width;
+            // Clamp speed to minY/maxY
+            const yNorm = Math.max(minY, Math.min(maxY, s.speed));
+            const y = height - ((yNorm - minY) / (maxY - minY)) * height;
+            if (i === 0 || (prevXFrac !== null && xFrac < prevXFrac)) {
+                ctx.moveTo(x, y); // Start new line at rotation boundary
+            } else {
+                ctx.lineTo(x, y);
+            }
+            prevXFrac = xFrac;
+        }
+        ctx.stroke();
+
+        // Draw only the last sample as a blue point
+        if (this.samples.length > 0) {
+            const s = this.samples[this.samples.length - 1];
+            const xFrac = s.rot - Math.floor(s.rot);
+            const x = xFrac * width;
+            const yNorm = Math.max(minY, Math.min(maxY, s.speed));
+            const y = height - ((yNorm - minY) / (maxY - minY)) * height;
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = this.pointColor;
+            ctx.fill();
+        }
+    }
+}
