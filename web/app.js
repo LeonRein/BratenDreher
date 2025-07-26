@@ -2,6 +2,8 @@
  * BratenDreher Application - New Architecture
  * Uses UI-type based controls with separated command management
  */
+/* ControlBinding classes are loaded via window object from control-bindings.js */
+
 class BratenDreherApp {
     constructor() {
         // Motor specifications for acceleration conversion
@@ -163,6 +165,21 @@ class BratenDreherApp {
             activeClass: 'active'
         }));
 
+        // Emergency stop button
+        this.controls.set('emergencyStopBtn', new ButtonControl(this.emergencyStopBtn, {
+            type: 'single'
+        }));
+
+        // Statistics reset button
+        this.controls.set('resetStatsBtn', new ButtonControl(this.resetStatsBtn, {
+            type: 'single'
+        }));
+
+        // Stall reset button
+        this.controls.set('resetStallBtn', new ButtonControl(this.resetStallBtn, {
+            type: 'single'
+        }));
+
         // Direction buttons - create as radio group
         this.controls.set('directionButtons', new ButtonControl([this.clockwiseBtn, this.counterclockwiseBtn], {
             type: 'radio-group',
@@ -319,6 +336,26 @@ class BratenDreherApp {
             this.controls.get('directionButtons'),
             this.controls.get('directionDisplay')
         ));
+        // Emergency stop binding
+        this.bindings.set('emergencyStop', new window.EmergencyStopControlBinding(
+            this.controls.get('emergencyStopBtn'),
+            this
+        ));
+        this.bindings.get('emergencyStop').addControl(this.controls.get('emergencyStopBtn'));
+
+        // Statistics reset binding
+        this.bindings.set('statisticsReset', new window.StatisticsResetControlBinding(
+            this.controls.get('resetStatsBtn'),
+            this
+        ));
+        this.bindings.get('statisticsReset').addControl(this.controls.get('resetStatsBtn'));
+
+        // Stall reset binding
+        this.bindings.set('stallReset', new window.StallResetControlBinding(
+            this.controls.get('resetStallBtn'),
+            this
+        ));
+        this.bindings.get('stallReset').addControl(this.controls.get('resetStallBtn'));
 
         // Motor control binding
         this.bindings.set('motor', new ControlBinding({
@@ -589,19 +626,22 @@ class BratenDreherApp {
             this.bindings.get('powerDelivery').autoNegotiate();
         };
 
-        // Emergency stop
-        this.emergencyStopBtn.addEventListener('click', () => {
-            this.emergencyStop();
-        });
+        // Emergency stop button event
+        this.controls.get('emergencyStopBtn').options.onClick = () => {
+            this.bindings.get('emergencyStop').handleValueChange(true);
+        };
 
-        // Reset buttons
-        this.resetStatsBtn.addEventListener('click', () => {
-            this.resetStatistics();
-        });
+        // Statistics reset button event
+        this.controls.get('resetStatsBtn').options.onClick = () => {
+            this.bindings.get('statisticsReset').handleValueChange(true);
+        };
 
-        this.resetStallBtn.addEventListener('click', () => {
-            this.resetStallCount();
-        });
+        // Stall reset button event
+        this.controls.get('resetStallBtn').options.onClick = () => {
+            this.bindings.get('stallReset').handleValueChange(true);
+        };
+
+        // Emergency stop, statistics reset, and stall reset are now handled by bindings.
     }
 
     setupCommandManagerCallbacks() {
@@ -712,6 +752,7 @@ this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString
         
         const opacity = this.commandManager.isConnected() ? '1' : '0.4';
         const disabled = !this.commandManager.isConnected();
+    // emergencyStop, resetStatistics, and resetStallCount logic now handled by bindings.
         
         otherControls.forEach(control => {
             if (control) {
@@ -730,47 +771,6 @@ this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString
             this.controls.get('speedSlider').hideFill();
             this.bindings.get('stallguard').hideFill();
         }
-    }
-
-    async emergencyStop() {
-        console.log('Emergency stop triggered');
-        
-        // Hide speed fill during emergency stop
-        this.controls.get('speedSlider').hideFill();
-
-        await this.bindings.get('acceleration').handleValueChange(1);
-        await this.bindings.get('motor').handleValueChange(false);
-        
-        // Visual feedback
-        this.emergencyStopBtn.style.background = '#dc2626';
-        this.emergencyStopBtn.textContent = '🛑 STOPPED';
-        
-        setTimeout(() => {
-            this.emergencyStopBtn.style.background = '#ef4444';
-            this.emergencyStopBtn.textContent = '🛑 Emergency Stop';
-        }, 2000);
-    }
-
-    async resetStatistics() {
-        const success = await this.commandManager.sendCommand('reset', true);
-        if (success) {
-            this.resetStatsBtn.textContent = '📊 Reset Successful';
-            setTimeout(() => {
-                this.resetStatsBtn.textContent = '📊 Reset Statistics';
-            }, 2000);
-        }
-        return success;
-    }
-
-    async resetStallCount() {
-        const success = await this.commandManager.sendCommand('reset_stall', true);
-        if (success) {
-            this.resetStallBtn.textContent = '⚠️ Reset Successful';
-            setTimeout(() => {
-                this.resetStallBtn.textContent = '⚠️ Reset Stall Count';
-            }, 2000);
-        }
-        return success;
     }
 
     updateAverageSpeed() {

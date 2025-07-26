@@ -535,3 +535,98 @@ class StallGuardControlBinding extends ControlBinding {
         }
     }
 }
+ 
+/**
+ * Emergency stop control binding
+ */
+class EmergencyStopControlBinding extends ControlBinding {
+    constructor(emergencyStopBtn, config = {}) {
+        super({
+            commandType: 'emergency_stop',
+            ...config
+        });
+        this.emergencyStopBtn = emergencyStopBtn;
+        this.addControl(emergencyStopBtn);
+    }
+
+    async handleValueChange() {
+        // Hide speed fill if available
+        if (window.app && window.app.controls && window.app.controls.get('speedSlider')) {
+            window.app.controls.get('speedSlider').hideFill();
+        }
+        // Optionally: send emergency stop command
+        if (this.commandManager) {
+            await this.commandManager.sendCommand('emergency_stop', true);
+        }
+        // Visual feedback
+        if (this.emergencyStopBtn && this.emergencyStopBtn.elements && this.emergencyStopBtn.elements[0]) {
+            this.emergencyStopBtn.elements[0].textContent = '🛑 STOPPED';
+            this.emergencyStopBtn.elements[0].style.background = '#dc2626';
+            setTimeout(() => {
+                this.emergencyStopBtn.elements[0].textContent = '🛑 Emergency Stop';
+                this.emergencyStopBtn.elements[0].style.background = '#ef4444';
+            }, 2000);
+        }
+        return true;
+    }
+}
+
+/**
+ * Statistics reset control binding
+ */
+class StatisticsResetControlBinding extends ControlBinding {
+    constructor(resetStatsBtn, config = {}) {
+        super({
+            commandType: 'reset',
+            ...config
+        });
+        this.resetStatsBtn = resetStatsBtn;
+        this.addControl(resetStatsBtn);
+    }
+
+    async handleValueChange() {
+        if (this.commandManager) {
+            const success = await this.commandManager.sendCommand('reset', true);
+            if (success && this.resetStatsBtn && this.resetStatsBtn.elements && this.resetStatsBtn.elements[0]) {
+                this.resetStatsBtn.elements[0].textContent = '📊 Reset Successful';
+                setTimeout(() => {
+                    this.resetStatsBtn.elements[0].textContent = '📊 Reset Statistics';
+                }, 2000);
+            }
+            return success;
+        }
+        return false;
+    }
+}
+
+/**
+ * Stall reset control binding
+ */
+class StallResetControlBinding extends ControlBinding {
+    constructor(resetStallBtn, config = {}) {
+        super({
+            commandType: 'reset_stall',
+            ...config
+        });
+        this.resetStallBtn = resetStallBtn;
+        this.addControl(resetStallBtn);
+    }
+
+    async handleValueChange() {
+        if (this.commandManager) {
+            const success = await this.commandManager.sendCommand('reset_stall', true);
+            if (success && this.resetStallBtn && this.resetStallBtn.elements && this.resetStallBtn.elements[0]) {
+                this.resetStallBtn.elements[0].textContent = '⚠️ Reset Successful';
+                setTimeout(() => {
+                    this.resetStallBtn.elements[0].textContent = '⚠️ Reset Stall Count';
+                }, 2000);
+            }
+            return success;
+        }
+        return false;
+    }
+}
+
+window.EmergencyStopControlBinding = EmergencyStopControlBinding;
+window.StatisticsResetControlBinding = StatisticsResetControlBinding;
+window.StallResetControlBinding = StallResetControlBinding;
