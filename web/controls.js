@@ -136,18 +136,23 @@ class SliderControl extends BaseControl {
         return this.slider ? parseFloat(this.slider.value) : undefined;
     }
 
-    updateFillPosition(currentValue) {
-        if (!this.fillElement || !this.slider) return;
-        const min = parseFloat(this.slider.min);
-        const max = parseFloat(this.slider.max);
-        const clampedValue = Math.max(min, Math.min(max, currentValue));
-        const percentage = (clampedValue - min) / (max - min);
-        this.fillElement.style.width = `${percentage * 100}%`;
-        this.fillElement.style.opacity = '1';
+    updateFillWidth(percentage) {
+        if (this.fillElement) {
+            this.fillElement.style.width = `${percentage}%`;
+            this.fillElement.style.opacity = '1';
+        }
+    }
+
+    setFillColor(color) {
+        if (this.fillElement) {
+            this.fillElement.style.backgroundColor = color;
+        }
     }
 
     hideFill() {
-        if (this.fillElement) this.fillElement.style.opacity = '0';
+        if (this.fillElement) {
+            this.fillElement.style.opacity = '0';
+        }
     }
 }
 

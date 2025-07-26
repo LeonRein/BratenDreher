@@ -290,7 +290,7 @@ class TimestampControlBinding extends ControlBinding {
 
 // Speed control binding with preset buttons and fill indicator
 class SpeedControlBinding extends ControlBinding {
-    constructor(speedSlider, speedDisplay, presetButtons, fillElement) {
+    constructor(speedSlider, speedDisplay, presetButtons) {
         super({
             commandType: 'ss',
             statusKeys: ['sp', 'cs'],
@@ -309,7 +309,13 @@ class SpeedControlBinding extends ControlBinding {
 
                 if (statusUpdate.cs !== undefined) {
                     // Update fill indicator to show current speed
-                    this.speedSlider.updateFillPosition(statusUpdate.cs);
+                    if (this.speedSlider && this.speedSlider.slider) {
+                        const min = parseFloat(this.speedSlider.slider.min);
+                        const max = parseFloat(this.speedSlider.slider.max);
+                        const clampedValue = Math.max(min, Math.min(max, statusUpdate.cs));
+                        const percentage = ((clampedValue - min) / (max - min)) * 100;
+                        this.speedSlider.updateFillWidth(percentage);
+                    }
                 }
             }
         });
@@ -317,7 +323,6 @@ class SpeedControlBinding extends ControlBinding {
         this.speedSlider = speedSlider;
         this.speedDisplay = speedDisplay;
         this.presetButtons = presetButtons;
-        this.fillElement = fillElement;
 
         this.addControl(speedSlider);
         this.addControl(speedDisplay);
@@ -529,31 +534,31 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
 
 // Power delivery control binding with complex state management
 class PowerDeliveryControlBinding extends ControlBinding {
-    constructor(voltageSelect, negotiateBtn, autoNegotiateBtn, statusElements, config = {}) {
-        const defaults = {
+    constructor(voltageSelect, negotiateBtn, autoNegotiateBtn, pdStatusDisplay, pdPowerGoodDisplay, pdNegotiatedVoltageDisplay, pdCurrentVoltageDisplay) {
+        super({
             commandType: null, // Multiple command types
             statusKeys: ['pdns', 'pdpg', 'pdnv', 'pdcv'],
-            customStatusHandler: null
-        };
-        super({ ...defaults, ...config });
+            customStatusHandler: (statusUpdate, controls, config) => {
+                this.handlePowerDeliveryStatus(statusUpdate);
+            }
+        });
 
         this.voltageSelect = voltageSelect;
         this.negotiateBtn = negotiateBtn;
         this.autoNegotiateBtn = autoNegotiateBtn;
-        this.statusElements = statusElements; // Object with status display elements
+        this.pdStatusDisplay = pdStatusDisplay;
+        this.pdPowerGoodDisplay = pdPowerGoodDisplay;
+        this.pdNegotiatedVoltageDisplay = pdNegotiatedVoltageDisplay;
+        this.pdCurrentVoltageDisplay = pdCurrentVoltageDisplay;
         this.negotiationTimeout = null;
 
         this.addControl(voltageSelect);
         this.addControl(negotiateBtn);
         this.addControl(autoNegotiateBtn);
-
-        // Add status displays
-        Object.values(statusElements).forEach(element => {
-            if (element) {
-                const display = new DisplayControl(element);
-                this.addControl(display);
-            }
-        });
+        this.addControl(pdStatusDisplay);
+        this.addControl(pdPowerGoodDisplay);
+        this.addControl(pdNegotiatedVoltageDisplay);
+        this.addControl(pdCurrentVoltageDisplay);
 
         // State mapping for negotiation status
         this.negotiationStates = {
@@ -563,13 +568,6 @@ class PowerDeliveryControlBinding extends ControlBinding {
             3: { text: 'Failed (No PD Adapter)', class: 'status-error' },
             4: { text: 'Auto-Negotiating...', class: 'status-warning' }
         };
-
-        // If no customStatusHandler provided, use default
-        if (!this.config.customStatusHandler) {
-            this.config.customStatusHandler = (statusUpdate, controls, config) => {
-                this.handlePowerDeliveryStatus(statusUpdate);
-            };
-        }
     }
 
     async negotiateVoltage() {
@@ -591,10 +589,10 @@ class PowerDeliveryControlBinding extends ControlBinding {
 
     showNegotiationStarted(isAutoNegotiation = false) {
         // Update status display
-        if (this.statusElements.status) {
-            this.statusElements.status.textContent = isAutoNegotiation ? 'Auto-Negotiating...' : 'Negotiating...';
-            this.statusElements.status.className = 'power-value status-warning negotiating';
-            this.statusElements.status.style.opacity = '1.0';
+        if (this.pdStatusDisplay && this.pdStatusDisplay.displays && this.pdStatusDisplay.displays[0]) {
+            this.pdStatusDisplay.displays[0].textContent = isAutoNegotiation ? 'Auto-Negotiating...' : 'Negotiating...';
+            this.pdStatusDisplay.displays[0].className = 'power-value status-warning negotiating';
+            this.pdStatusDisplay.displays[0].style.opacity = '1.0';
         }
 
         // Disable buttons temporarily
@@ -626,13 +624,13 @@ class PowerDeliveryControlBinding extends ControlBinding {
             const status = this.negotiationStates[statusValue] ||
                           { text: `Unknown (${statusUpdate.pdns})`, class: 'status-error' };
 
-            if (this.statusElements.status) {
-                this.statusElements.status.textContent = status.text;
-                this.statusElements.status.className = `power-value ${status.class}`;
+            if (this.pdStatusDisplay && this.pdStatusDisplay.displays && this.pdStatusDisplay.displays[0]) {
+                this.pdStatusDisplay.displays[0].textContent = status.text;
+                this.pdStatusDisplay.displays[0].className = `power-value ${status.class}`;
                 if (statusValue === 1 || statusValue === 4) {
-                    this.statusElements.status.classList.add('negotiating');
+                    this.pdStatusDisplay.displays[0].classList.add('negotiating');
                 }
-                this.statusElements.status.style.opacity = '1.0';
+                this.pdStatusDisplay.displays[0].style.opacity = '1.0';
             }
 
             // Reset buttons when negotiation is complete
@@ -647,26 +645,26 @@ class PowerDeliveryControlBinding extends ControlBinding {
         }
 
         if (statusUpdate.pdpg !== undefined) {
-            if (this.statusElements.powerGood) {
-                this.statusElements.powerGood.textContent = statusUpdate.pdpg ? 'Good' : 'Bad';
-                this.statusElements.powerGood.className = statusUpdate.pdpg ?
+            if (this.pdPowerGoodDisplay && this.pdPowerGoodDisplay.displays && this.pdPowerGoodDisplay.displays[0]) {
+                this.pdPowerGoodDisplay.displays[0].textContent = statusUpdate.pdpg ? 'Good' : 'Bad';
+                this.pdPowerGoodDisplay.displays[0].className = statusUpdate.pdpg ?
                     'power-value status-success' : 'power-value status-error';
-                this.statusElements.powerGood.style.opacity = '1.0';
+                this.pdPowerGoodDisplay.displays[0].style.opacity = '1.0';
             }
         }
 
         if (statusUpdate.pdnv !== undefined) {
-            if (this.statusElements.negotiatedVoltage) {
-                this.statusElements.negotiatedVoltage.textContent = statusUpdate.pdnv > 0 ?
+            if (this.pdNegotiatedVoltageDisplay && this.pdNegotiatedVoltageDisplay.displays && this.pdNegotiatedVoltageDisplay.displays[0]) {
+                this.pdNegotiatedVoltageDisplay.displays[0].textContent = statusUpdate.pdnv > 0 ?
                     `${statusUpdate.pdnv}V` : '- V';
-                this.statusElements.negotiatedVoltage.style.opacity = '1.0';
+                this.pdNegotiatedVoltageDisplay.displays[0].style.opacity = '1.0';
             }
         }
 
         if (statusUpdate.pdcv !== undefined) {
-            if (this.statusElements.currentVoltage) {
-                this.statusElements.currentVoltage.textContent = `${statusUpdate.pdcv.toFixed(1)}V`;
-                this.statusElements.currentVoltage.style.opacity = '1.0';
+            if (this.pdCurrentVoltageDisplay && this.pdCurrentVoltageDisplay.displays && this.pdCurrentVoltageDisplay.displays[0]) {
+                this.pdCurrentVoltageDisplay.displays[0].textContent = `${statusUpdate.pdcv.toFixed(1)}V`;
+                this.pdCurrentVoltageDisplay.displays[0].style.opacity = '1.0';
             }
         }
     }
@@ -674,7 +672,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
 
 // StallGuard control binding with load visualization
 class StallGuardControlBinding extends ControlBinding {
-    constructor(thresholdSlider, resultDisplay, fillElement, config = {}) {
+    constructor(thresholdSlider, resultDisplay, config = {}) {
         const defaults = {
             commandType: 'st',
             statusKeys: ['sgt', 'sgr'],
@@ -692,7 +690,6 @@ class StallGuardControlBinding extends ControlBinding {
 
         this.thresholdSlider = thresholdSlider;
         this.resultDisplay = resultDisplay;
-        this.fillElement = fillElement;
         this.currentSgResult = null;
 
         this.addControl(thresholdSlider);
@@ -721,7 +718,7 @@ class StallGuardControlBinding extends ControlBinding {
     }
 
     updateStallGuardResult(sgResult) {
-        if (!this.fillElement || !this.thresholdSlider.slider) return;
+        if (!this.thresholdSlider || !this.thresholdSlider.slider) return;
 
         this.currentSgResult = sgResult;
 
@@ -729,8 +726,9 @@ class StallGuardControlBinding extends ControlBinding {
         const loadPercentage = ((510 - sgResult) / 510) * 100;
 
         // Update fill width and opacity
-        this.fillElement.style.width = `${loadPercentage}%`;
-        this.fillElement.style.opacity = '1';
+        if (this.thresholdSlider.fillElement) {
+            this.thresholdSlider.updateFillWidth(loadPercentage);
+        }
 
         // Get current threshold and determine color
         const sliderValue = parseInt(this.thresholdSlider.slider.value);
@@ -738,12 +736,14 @@ class StallGuardControlBinding extends ControlBinding {
         const stallThreshold = actualThresholdValue * 2;
 
         // Color the fill based on proximity to stall threshold
-        if (sgResult < stallThreshold) {
-            this.fillElement.style.backgroundColor = '#ef4444'; // Red - stall detected
-        } else if (sgResult < (stallThreshold * 1.2)) {
-            this.fillElement.style.backgroundColor = '#f59e0b'; // Orange - warning
-        } else {
-            this.fillElement.style.backgroundColor = '#10b981'; // Green - normal
+        if (this.thresholdSlider.fillElement) {
+            if (sgResult < stallThreshold) {
+                this.thresholdSlider.setFillColor('#ef4444'); // Red - stall detected
+            } else if (sgResult < (stallThreshold * 1.2)) {
+                this.thresholdSlider.setFillColor('#f59e0b'); // Orange - warning
+            } else {
+                this.thresholdSlider.setFillColor('#10b981'); // Green - normal
+            }
         }
 
         // Update result display
@@ -751,8 +751,8 @@ class StallGuardControlBinding extends ControlBinding {
     }
 
     hideFill() {
-        if (this.fillElement) {
-            this.fillElement.style.opacity = '0';
+        if (this.thresholdSlider && this.thresholdSlider.fillElement) {
+            this.thresholdSlider.hideFill();
         }
     }
 }

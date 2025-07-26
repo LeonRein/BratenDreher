@@ -272,6 +272,10 @@ class BratenDreherApp {
         this.controls.set('voltageSelect', new SelectControl(this.voltageSelect));
         this.controls.set('negotiateBtn', new ButtonControl(this.negotiateBtn));
         this.controls.set('autoNegotiateBtn', new ButtonControl(this.autoNegotiateBtn));
+        this.controls.set('pdStatusDisplay', new DisplayControl(this.pdStatus));
+        this.controls.set('pdPowerGoodDisplay', new DisplayControl(this.pdPowerGood));
+        this.controls.set('pdNegotiatedVoltageDisplay', new DisplayControl(this.pdNegotiatedVoltage));
+        this.controls.set('pdCurrentVoltageDisplay', new DisplayControl(this.pdCurrentVoltage));
 
         // Statistics displays - using CompositeControl for coordinated management
         const totalRevolutionsDisplay = new DisplayControl(this.totalRevolutions, {
@@ -306,8 +310,7 @@ class BratenDreherApp {
         this.bindings.set('speed', new SpeedControlBinding(
             this.controls.get('speedSlider'),
             this.controls.get('setpointSpeedDisplay'),
-            this.controls.get('presetButtons'),
-            this.speedSliderFill
+            this.controls.get('presetButtons')
         ));
 
         // Direction control binding
@@ -346,10 +349,10 @@ class BratenDreherApp {
             this.controls.get('currentDisplay')
         ));
 
-this.bindings.set('acceleration', new AccelerationControlBinding(
-    this.controls.get('accelerationSlider'),
-    this.controls.get('accelerationDisplay')
-));
+        this.bindings.set('acceleration', new AccelerationControlBinding(
+            this.controls.get('accelerationSlider'),
+            this.controls.get('accelerationDisplay')
+        ));
 
         // Variable speed binding
         this.bindings.set('variableSpeed', new VariableSpeedControlBinding(
@@ -362,17 +365,7 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
 
         // Variable speed graph binding
         this.bindings.set('variableSpeedGraph', new VariableSpeedGraphControlBinding(
-            this.controls.get('variableSpeedGraph'),
-            () => {
-                // Use setpoint speed from controls if available
-                const speedDisplay = this.controls.get('setpointSpeedDisplay');
-                if (speedDisplay && speedDisplay.displays && speedDisplay.displays[0]) {
-                    const text = speedDisplay.displays[0].textContent;
-                    const match = text.match(/([\d.]+)/);
-                    if (match) return parseFloat(match[1]);
-                }
-                return 1.0;
-            }
+            this.controls.get('variableSpeedGraph')
         ));
 
         // Strength binding
@@ -388,8 +381,7 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
         // StallGuard binding
         this.bindings.set('stallguard', new StallGuardControlBinding(
             this.controls.get('stallguardSlider'),
-            this.controls.get('stallguardResultDisplay'),
-            this.stallguardSliderFill
+            this.controls.get('stallguardResultDisplay')
         ));
 
         // Power delivery binding
@@ -397,35 +389,33 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
             this.controls.get('voltageSelect'),
             this.controls.get('negotiateBtn'),
             this.controls.get('autoNegotiateBtn'),
-            {
-                status: this.pdStatus,
-                powerGood: this.pdPowerGood,
-                negotiatedVoltage: this.pdNegotiatedVoltage,
-                currentVoltage: this.pdCurrentVoltage
-            }
+            this.controls.get('pdStatusDisplay'),
+            this.controls.get('pdPowerGoodDisplay'),
+            this.controls.get('pdNegotiatedVoltageDisplay'),
+            this.controls.get('pdCurrentVoltageDisplay')
         ));
 
-this.bindings.set('statistics', new StatisticsControlBinding(
-    this.controls.get('totalRevolutionsDisplay'),
-    this.controls.get('runTimeDisplay'),
-    this.controls.get('avgSpeedDisplay'),
-    this.updateAverageSpeed.bind(this)
-));
+        this.bindings.set('statistics', new StatisticsControlBinding(
+            this.controls.get('totalRevolutionsDisplay'),
+            this.controls.get('runTimeDisplay'),
+            this.controls.get('avgSpeedDisplay'),
+            this.updateAverageSpeed.bind(this)
+        ));
 
-this.bindings.set('tmcStatus', new TmcStatusControlBinding(
-    this.controls.get('tmcStatusDisplay'),
-    this.controls.get('tmcTempDisplay'),
-    this.controls.get('stallStatusDisplay'),
-    this.controls.get('stallCountDisplay')
-));
+        this.bindings.set('tmcStatus', new TmcStatusControlBinding(
+            this.controls.get('tmcStatusDisplay'),
+            this.controls.get('tmcTempDisplay'),
+            this.controls.get('stallStatusDisplay'),
+            this.controls.get('stallCountDisplay')
+        ));
 
-this.bindings.set('currentSpeed', new CurrentSpeedControlBinding(
-    this.controls.get('currentSpeedDisplay')
-));
+        this.bindings.set('currentSpeed', new CurrentSpeedControlBinding(
+            this.controls.get('currentSpeedDisplay')
+        ));
 
-this.bindings.set('timestamp', new TimestampControlBinding(
-    this.controls.get('lastUpdateDisplay')
-));
+        this.bindings.set('timestamp', new TimestampControlBinding(
+            this.controls.get('lastUpdateDisplay')
+        ));
 
 
         // Set command manager for all bindings
