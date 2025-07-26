@@ -377,36 +377,11 @@ class BratenDreherApp {
         this.bindings.get('current').addControl(this.controls.get('currentSlider'));
         this.bindings.get('current').addControl(this.controls.get('currentDisplay'));
 
-        // Acceleration control binding
-        this.bindings.set('acceleration', new ControlBinding({
-            commandType: 'sa',
-            statusKeys: ['acc'],
-            valueTransform: (sliderValue) => {
-                // sliderValue is time in seconds from the UI
-                const time = parseFloat(sliderValue);
-                const acceleration = this.timeToAcceleration(time);
-                const minAcceleration = 100;
-                if (acceleration < minAcceleration) {
-                    const minTime = this.accelerationToTime(minAcceleration).toFixed(1);
-                    const control = this.controls.get('accelerationSlider');
-                    if (control) {
-                        control.setValue(minTime);
-                    }
-                    if (this.commandManager) {
-                        this.commandManager.showWarning('Acceleration too low. Set to minimum allowed.');
-                    }
-                    return minAcceleration;
-                }
-                return acceleration;
-            },
-            statusTransform: (accelerationValue) => {
-                // Convert from microsteps/s² (backend) to time seconds (UI slider)
-                const timeSeconds = this.accelerationToTime(accelerationValue);
-                return parseFloat(timeSeconds.toFixed(1));
-            }
-        }));
-        this.bindings.get('acceleration').addControl(this.controls.get('accelerationSlider'));
-        this.bindings.get('acceleration').addControl(this.controls.get('accelerationDisplay'));
+this.bindings.set('acceleration', new AccelerationControlBinding(
+    this.controls.get('accelerationSlider'),
+    this.controls.get('accelerationDisplay'),
+    this
+));
 
         // Variable speed binding
         this.bindings.set('variableSpeed', new VariableSpeedControlBinding(
@@ -468,83 +443,28 @@ class BratenDreherApp {
             }
         ));
 
-        // Statistics bindings
-        this.bindings.set('statistics', new ControlBinding({
-            statusKeys: ['tr', 'rt'],
-            customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.tr !== undefined) {
-                    this.controls.get('totalRevolutionsDisplay').updateValue(statusUpdate.tr);
-                }
-                if (statusUpdate.rt !== undefined) {
-                    this.controls.get('runTimeDisplay').updateValue(statusUpdate.rt);
-                    // Calculate average speed
-                    this.updateAverageSpeed();
-                }
-            }
-        }));
-        this.bindings.get('statistics').addControl(this.controls.get('totalRevolutionsDisplay'));
-        this.bindings.get('statistics').addControl(this.controls.get('runTimeDisplay'));
-        this.bindings.get('statistics').addControl(this.controls.get('avgSpeedDisplay'));
+this.bindings.set('statistics', new StatisticsControlBinding(
+    this.controls.get('totalRevolutionsDisplay'),
+    this.controls.get('runTimeDisplay'),
+    this.controls.get('avgSpeedDisplay'),
+    this
+));
 
-        // TMC status bindings
-        this.bindings.set('tmcStatus', new ControlBinding({
-            statusKeys: ['tmcst', 'tmct', 'sd', 'sc'],
-            customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.tmcst !== undefined) {
-                    const display = this.controls.get('tmcStatusDisplay');
-                    display.updateValue(statusUpdate.tmcst ? 'OK' : 'Error');
-                    display.updateClass(statusUpdate.tmcst ? 'status-success' : 'status-error');
-                }
+this.bindings.set('tmcStatus', new TmcStatusControlBinding(
+    this.controls.get('tmcStatusDisplay'),
+    this.controls.get('tmcTempDisplay'),
+    this.controls.get('stallStatusDisplay'),
+    this.controls.get('stallCountDisplay'),
+    this
+));
 
-                if (statusUpdate.tmct !== undefined) {
-                    const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
-                    const tempIdx = Math.max(0, Math.min(4, statusUpdate.tmct));
-                    const display = this.controls.get('tmcTempDisplay');
-                    display.updateValue(tempLabels[tempIdx]);
-                    const className = tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error');
-                    display.updateClass(className);
-                }
+this.bindings.set('currentSpeed', new CurrentSpeedControlBinding(
+    this.controls.get('currentSpeedDisplay')
+));
 
-                if (statusUpdate.sd !== undefined) {
-                    const display = this.controls.get('stallStatusDisplay');
-                    display.updateValue(statusUpdate.sd ? 'STALL!' : 'OK');
-                    const color = statusUpdate.sd ? '#e74c3c' : '#10b981';
-                    display.displays.forEach(element => {
-                        if (element) element.style.color = color;
-                        element.style.fontWeight = statusUpdate.sd ? 'bold' : 'normal';
-                    });
-                }
-
-                if (statusUpdate.sc !== undefined) {
-                    const display = this.controls.get('stallCountDisplay');
-                    display.updateValue(statusUpdate.sc);
-                    const color = statusUpdate.sc > 0 ? '#e74c3c' : '#10b981';
-                    display.displays.forEach(element => {
-                        if (element) element.style.color = color;
-                    });
-                }
-            }
-        }));
-
-        // Current speed display binding
-        this.bindings.set('currentSpeed', new ControlBinding({
-            statusKeys: ['cs'],
-            customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.cs !== undefined) {
-                    controls[0].updateValue(statusUpdate.cs);
-                }
-            }
-        }));
-        this.bindings.get('currentSpeed').addControl(this.controls.get('currentSpeedDisplay'));
-
-        // Timestamp binding
-        this.bindings.set('timestamp', new ControlBinding({
-            statusKeys: [], // Always update on any status update
-            customStatusHandler: () => {
-                this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
-            }
-        }));
-        this.bindings.get('timestamp').addControl(this.controls.get('lastUpdateDisplay'));
+this.bindings.set('timestamp', new TimestampControlBinding(
+    this.controls.get('lastUpdateDisplay')
+));
 
 
         // Set command manager for all bindings
