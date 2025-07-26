@@ -107,7 +107,6 @@ class BratenDreherApp {
         this.controls.set('speedSlider', new SliderControl(this.speedSlider, {
             valueElement: this.speedValue,
             fillElement: this.speedSliderFill,
-            displayTransform: (value) => value.toFixed(1),
             debounceTime: 500
         }));
 
@@ -172,7 +171,6 @@ class BratenDreherApp {
         // Current control
         this.controls.set('currentSlider', new SliderControl(this.currentSlider, {
             valueElement: this.currentValue,
-            displayTransform: (value) => value.toString(),
             debounceTime: 500
         }));
 
@@ -189,7 +187,6 @@ class BratenDreherApp {
         // Acceleration control
         this.controls.set('accelerationSlider', new SliderControl(this.accelerationTimeSlider, {
             valueElement: this.accelerationTimeValue,
-            displayTransform: (value) => Number(value).toFixed(1),
             debounceTime: 500
         }));
 
@@ -208,12 +205,10 @@ class BratenDreherApp {
         const variableSpeedStatusDisplay = new DisplayControl(this.variableSpeedStatus);
         const strengthSlider = new SliderControl(this.strengthSlider, {
             valueElement: this.strengthValue,
-            displayTransform: (value) => value.toString(),
             debounceTime: 500
         });
         const phaseSlider = new SliderControl(this.phaseSlider, {
             valueElement: this.phaseValue,
-            displayTransform: (value) => value.toString(),
             debounceTime: 500
         });
 
@@ -240,10 +235,6 @@ class BratenDreherApp {
         this.controls.set('stallguardSlider', new SliderControl(this.stallguardThresholdSlider, {
             valueElement: this.stallguardThresholdValue,
             fillElement: this.stallguardSliderFill,
-            displayTransform: (value) => {
-                const percentage = (value / 255) * 100;
-                return `${percentage.toFixed(1)}%`;
-            },
             debounceTime: 300
         }));
 

@@ -112,7 +112,7 @@ class ControlBinding {
         } else if (control instanceof SelectControl) {
             control.setValue(value);
         } else if (control instanceof DisplayControl) {
-            control.updateValue(value);
+            control.updateValue(this.displayTransform(value, statusKey));
         } else if (control instanceof ButtonControl) {
             // Handle button states based on value
             if (typeof value === 'boolean') {
@@ -210,10 +210,10 @@ class StatisticsControlBinding extends ControlBinding {
 
     customStatusHandler(statusUpdate, controls) {
         if (statusUpdate.tr !== undefined) {
-            this.totalRevolutionsDisplay.updateValue(this.statusValueTransform(statusUpdate.tr));
+            this.totalRevolutionsDisplay.updateValue(this.displayTransform(this.statusValueTransform(statusUpdate.tr), 'tr'));
         }
         if (statusUpdate.rt !== undefined) {
-            this.runTimeDisplay.updateValue(this.statusValueTransform(statusUpdate.rt));
+            this.runTimeDisplay.updateValue(this.displayTransform(this.statusValueTransform(statusUpdate.rt), 'rt'));
             if (typeof this.updateAverageSpeed === 'function') {
                 this.updateAverageSpeed();
             }
@@ -239,6 +239,10 @@ class TmcStatusControlBinding extends ControlBinding {
     }
 
     statusValueTransform(value, key) {
+        return value;
+    }
+
+    displayTransform(value, key) {
         if (key === 'tmcst') return value ? 'OK' : 'Error';
         if (key === 'tmct') {
             const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
@@ -246,26 +250,29 @@ class TmcStatusControlBinding extends ControlBinding {
             return { label: tempLabels[tempIdx], className: tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error') };
         }
         if (key === 'sd') return value ? 'STALL!' : 'OK';
-        if (key === 'sc') return value;
-        return value;
+        if (key === 'sc') return value.toString();
+        return value.toString();
     }
 
     customStatusHandler(statusUpdate, controls) {
         if (statusUpdate.tmcst !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.tmcst, 'tmcst');
-            this.tmcStatusDisplay.updateValue(transformed);
-            this.tmcStatusDisplay.updateClass(transformed === 'OK' ? 'status-success' : 'status-error');
+            const display = this.displayTransform(transformed, 'tmcst');
+            this.tmcStatusDisplay.updateValue(display);
+            this.tmcStatusDisplay.updateClass(display === 'OK' ? 'status-success' : 'status-error');
         }
 
         if (statusUpdate.tmct !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.tmct, 'tmct');
-            this.tmcTempDisplay.updateValue(transformed.label);
-            this.tmcTempDisplay.updateClass(transformed.className);
+            const display = this.displayTransform(transformed, 'tmct');
+            this.tmcTempDisplay.updateValue(display.label);
+            this.tmcTempDisplay.updateClass(display.className);
         }
 
         if (statusUpdate.sd !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.sd, 'sd');
-            this.stallStatusDisplay.updateValue(transformed);
+            const display = this.displayTransform(transformed, 'sd');
+            this.stallStatusDisplay.updateValue(display);
             const color = statusUpdate.sd ? '#e74c3c' : '#10b981';
             this.stallStatusDisplay.displays.forEach(element => {
                 if (element) element.style.color = color;
@@ -275,7 +282,8 @@ class TmcStatusControlBinding extends ControlBinding {
 
         if (statusUpdate.sc !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.sc, 'sc');
-            this.stallCountDisplay.updateValue(transformed);
+            const display = this.displayTransform(transformed, 'sc');
+            this.stallCountDisplay.updateValue(display);
             const color = statusUpdate.sc > 0 ? '#e74c3c' : '#10b981';
             this.stallCountDisplay.displays.forEach(element => {
                 if (element) element.style.color = color;
@@ -731,14 +739,21 @@ class StallGuardControlBinding extends ControlBinding {
 
     statusValueTransform(value, key) {
         if (key === 'sgt') {
-            // Threshold as percentage
-            return ((value / 255) * 100).toFixed(1);
+            // Threshold as percentage (float)
+            return (value / 255) * 100;
         }
         if (key === 'sgr') {
-            // Load percentage
-            return (((510 - value) / 510) * 100).toFixed(1);
+            // Load percentage (float)
+            return ((510 - value) / 510) * 100;
         }
         return value;
+    }
+
+    displayTransform(value, key) {
+        if (key === 'sgt' || key === 'sgr') {
+            return value.toFixed(1);
+        }
+        return value.toString();
     }
 
     inputValueTransform(percent) {
@@ -756,31 +771,29 @@ class StallGuardControlBinding extends ControlBinding {
             const value = statusUpdate[key];
             const transformedValue = this.statusValueTransform(value, key);
 
-            if (key === 'sgt') {
-                this.thresholdSlider.setValue(transformedValue);
-            }
+        if (key === 'sgt') {
+            this.thresholdSlider.setValue(transformedValue);
+        }
 
-            if (key === 'sgr') {
-                // Update result display and fill
-                this.resultDisplay.updateValue(`${transformedValue}`);
-                if (this.thresholdSlider.fillElement) {
-                    this.thresholdSlider.updateFillWidth(parseFloat(transformedValue));
-                    this.thresholdSlider.fillElement.style.opacity = "1.0";
-                }
-                // Color fill based on stall threshold
-                const sliderValue = parseInt(this.thresholdSlider.slider.value);
-                const actualThresholdValue = 255 - sliderValue;
-                const stallThreshold = actualThresholdValue * 2;
-                if (this.thresholdSlider.fillElement) {
-                    if (statusUpdate.sgr < stallThreshold) {
-                        this.thresholdSlider.setFillColor('#ef4444');
-                    } else if (statusUpdate.sgr < (stallThreshold * 1.2)) {
-                        this.thresholdSlider.setFillColor('#f59e0b');
-                    } else {
-                        this.thresholdSlider.setFillColor('#10b981');
-                    }
+        if (key === 'sgr') {
+            // Update result display and fill
+            this.resultDisplay.updateValue(this.displayTransform(transformedValue, 'sgr'));
+            if (this.thresholdSlider.fillElement) {
+                this.thresholdSlider.updateFillWidth(transformedValue);
+                this.thresholdSlider.fillElement.style.opacity = "1.0";
+            }
+            // Color fill based on stall threshold
+            const sliderPercent = parseFloat(this.thresholdSlider.slider.value); // 0-100
+            if (this.thresholdSlider.fillElement) {
+                if (transformedValue < sliderPercent * 0.8) {
+                    this.thresholdSlider.setFillColor('#10b981');
+                } else if (transformedValue < sliderPercent) {
+                    this.thresholdSlider.setFillColor('#f59e0b');
+                } else {
+                    this.thresholdSlider.setFillColor('#ef4444');
                 }
             }
+        }
         });
     }
 

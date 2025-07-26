@@ -296,7 +296,6 @@ class DisplayControl extends BaseControl {
         super(displayElements, options);
         this.displays = this.elements;
         this.options = {
-            formatter: (value) => value.toString(),
             colorizer: null,
             ...options
         };
@@ -312,10 +311,9 @@ class DisplayControl extends BaseControl {
     }
 
     updateValue(value) {
-        const formattedValue = this.options.formatter(value);
         this.displays.forEach(element => {
             if (element) {
-                element.textContent = formattedValue;
+                element.textContent = value;
                 element.style.opacity = '1.0';
                 if (this.options.colorizer) {
                     const color = this.options.colorizer(value);
