@@ -343,21 +343,21 @@ class BratenDreherApp {
             this.controls.get('emergencyStopBtn'),
             this
         ));
-        this.bindings.get('emergencyStop').addControl(this.controls.get('emergencyStopBtn'));
+        /* Removed redundant addControl for emergencyStop; handled in EmergencyStopControlBinding */
 
         // Statistics reset binding
         this.bindings.set('statisticsReset', new window.StatisticsResetControlBinding(
             this.controls.get('resetStatsBtn'),
             this
         ));
-        this.bindings.get('statisticsReset').addControl(this.controls.get('resetStatsBtn'));
+        /* Removed redundant addControl for statisticsReset; handled in StatisticsResetControlBinding */
 
         // Stall reset binding
         this.bindings.set('stallReset', new window.StallResetControlBinding(
             this.controls.get('resetStallBtn'),
             this
         ));
-        this.bindings.get('stallReset').addControl(this.controls.get('resetStallBtn'));
+        /* Removed redundant addControl for stallReset; handled in StallResetControlBinding */
 
         // Motor control binding
         this.bindings.set('motor', new ControlBinding({
