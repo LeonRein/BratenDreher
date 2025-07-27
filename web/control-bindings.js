@@ -24,10 +24,6 @@ class ControlBinding {
         return value;
     }
 
-    displayTransform(value) {
-        return value.toString();
-    }
-
     customStatusHandler(transformedValue, key) {
         // Default: update all controls with transformed value
         this.controls.forEach(control => {
@@ -1061,9 +1057,7 @@ class StrengthControlBinding extends ControlBinding {
     constructor(strengthSlider, strengthValueDisplay) {
         super({
             commandType: 'sv',
-            statusKeys: ['svs'],
-            inputValueTransform: (value) => parseInt(value) / 100.0,
-            statusValueTransform: (value) => Math.round(value * 100)
+            statusKeys: ['svs']
         });
 
         // Set displayTransform for strength value display
@@ -1081,6 +1075,14 @@ class StrengthControlBinding extends ControlBinding {
             this.handleValueChange(value);
             this.strengthValueDisplay.setValue(value);
         });
+    }
+
+    inputValueTransform(value) {
+        return parseInt(value) / 100.0;
+    }
+
+    statusValueTransform(value, key) {
+        return Math.round(value * 100);
     }
 
     customStatusHandler(transformedValue, key) {
