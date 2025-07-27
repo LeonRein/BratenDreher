@@ -1,7 +1,7 @@
 // Control state constants
 const CONTROL_STATES = {
     DISABLED: 'DISABLED',
-    OUTDATED: 'OUTDATED', 
+    OUTDATED: 'OUTDATED',
     RETRY: 'RETRY',
     TIMEOUT: 'TIMEOUT',
     VALID: 'VALID'
@@ -75,11 +75,11 @@ class BaseControl {
         if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     }
 
-    bindEvents() {}
+    bindEvents() { }
 
-    handleStatusUpdate(statusUpdate) {}
+    handleStatusUpdate(statusUpdate) { }
 
-    setValue(value) {}
+    setValue(value) { }
 
     getValue() { return undefined; }
 
@@ -93,12 +93,12 @@ class SliderControl extends BaseControl {
     constructor(sliderElement, options = {}) {
         super(sliderElement, options);
         this.slider = this.elements[0];
-                this.fillElement = options.fillElement;
+        this.fillElement = options.fillElement;
         this.options = {
             debounceTime: 500,
             ...options
         };
-                if (this.fillElement) this.addAdditionalElement(this.fillElement, { applyOpacity: false, applyDisabled: false, applyColors: false, applyClasses: false });
+        if (this.fillElement) this.addAdditionalElement(this.fillElement, { applyOpacity: false, applyDisabled: false, applyColors: false, applyClasses: false });
         this.bindEvents();
     }
 
@@ -114,8 +114,8 @@ class SliderControl extends BaseControl {
 
     handleInput(event) {
         const rawValue = parseFloat(event.target.value);
-const displayValue = rawValue.toString();
-this.setDisplayState(CONTROL_STATES.OUTDATED);
+        const displayValue = rawValue.toString();
+        this.setDisplayState(CONTROL_STATES.OUTDATED);
         if (this.timer) clearTimeout(this.timer);
         this.timer = setTimeout(() => {
             if (this._onChange) this._onChange(rawValue);
@@ -123,9 +123,9 @@ this.setDisplayState(CONTROL_STATES.OUTDATED);
     }
 
     setValue(value) {
-if (this.slider) {
-    this.slider.value = value;
-}
+        if (this.slider) {
+            this.slider.value = value;
+        }
     }
 
     getValue() {
@@ -187,7 +187,7 @@ class ButtonControl extends BaseControl {
         }
         if (this._onChange) {
             const value = this.options.clickValue !== undefined ? this.options.clickValue : (button.dataset.value || buttonIndex);
-            this._onChange(value, buttonIndex, button);
+            this._onChange(value);
         }
     }
 

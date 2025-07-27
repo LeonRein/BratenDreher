@@ -298,12 +298,12 @@ class BratenDreherApp {
 
     initializeBindings() {
         // Speed control binding
-this.bindings.set('speed', new SpeedControlBinding(
-    this.controls.get('speedSlider'),
-    this.controls.get('setpointSpeedDisplay'),
-    this.controls.get('presetButtons'),
-    this.controls.get('speedValueDisplay')
-));
+        this.bindings.set('speed', new SpeedControlBinding(
+            this.controls.get('speedSlider'),
+            this.controls.get('setpointSpeedDisplay'),
+            this.controls.get('presetButtons'),
+            this.controls.get('speedValueDisplay')
+        ));
 
         // Direction control binding
         this.bindings.set('direction', new DirectionControlBinding(
@@ -336,17 +336,17 @@ this.bindings.set('speed', new SpeedControlBinding(
         ));
 
         // Current control binding
-this.bindings.set('current', new CurrentControlBinding(
-    this.controls.get('currentSlider'),
-    this.controls.get('currentDisplay'),
-    this.controls.get('currentValueDisplay')
-));
+        this.bindings.set('current', new CurrentControlBinding(
+            this.controls.get('currentSlider'),
+            this.controls.get('currentDisplay'),
+            this.controls.get('currentValueDisplay')
+        ));
 
-this.bindings.set('acceleration', new AccelerationControlBinding(
-    this.controls.get('accelerationSlider'),
-    this.controls.get('accelerationDisplay'),
-    this.controls.get('accelerationTimeValueDisplay')
-));
+        this.bindings.set('acceleration', new AccelerationControlBinding(
+            this.controls.get('accelerationSlider'),
+            this.controls.get('accelerationDisplay'),
+            this.controls.get('accelerationTimeValueDisplay')
+        ));
 
         // Variable speed binding
         this.bindings.set('variableSpeed', new VariableSpeedControlBinding(
@@ -363,23 +363,23 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
         ));
 
         // Strength binding
-this.bindings.set('strength', new StrengthControlBinding(
-    this.controls.get('strengthSlider'),
-    this.controls.get('strengthValueDisplay')
-));
+        this.bindings.set('strength', new StrengthControlBinding(
+            this.controls.get('strengthSlider'),
+            this.controls.get('strengthValueDisplay')
+        ));
 
         // Phase binding
-this.bindings.set('phase', new PhaseControlBinding(
-    this.controls.get('phaseSlider'),
-    this.controls.get('phaseValueDisplay')
-));
+        this.bindings.set('phase', new PhaseControlBinding(
+            this.controls.get('phaseSlider'),
+            this.controls.get('phaseValueDisplay')
+        ));
 
         // StallGuard binding
-this.bindings.set('stallguard', new StallGuardControlBinding(
-    this.controls.get('stallguardSlider'),
-    this.controls.get('stallguardResultDisplay'),
-    this.controls.get('stallguardThresholdValueDisplay')
-));
+        this.bindings.set('stallguard', new StallGuardControlBinding(
+            this.controls.get('stallguardSlider'),
+            this.controls.get('stallguardResultDisplay'),
+            this.controls.get('stallguardThresholdValueDisplay')
+        ));
 
         // Power delivery binding
         this.bindings.set('powerDelivery', new PowerDeliveryControlBinding(

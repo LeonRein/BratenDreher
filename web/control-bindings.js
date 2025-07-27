@@ -55,8 +55,8 @@ class ControlBinding {
         // Transform value and send command
         const transformedValue = this.inputValueTransform(value);
         const success = await this.commandManager.sendCommand(
-            this.commandType, 
-            transformedValue, 
+            this.commandType,
+            transformedValue,
             this.additionalParams || {}
         );
 
@@ -73,7 +73,7 @@ class ControlBinding {
     // Handle status updates from the backend
     handleStatusUpdate(statusUpdate) {
         // Check if this status update is relevant to this binding
-        const relevantKeys = this.statusKeys.filter(key => 
+        const relevantKeys = this.statusKeys.filter(key =>
             statusUpdate[key] !== undefined
         );
 
@@ -96,7 +96,7 @@ class ControlBinding {
         relevantKeys.forEach(key => {
             const value = statusUpdate[key];
             const transformedValue = this.statusValueTransform(value, key);
-            
+
             // Update controls based on their type
             this.controls.forEach(control => {
                 this.updateControlFromStatus(control, key, transformedValue);
@@ -363,8 +363,8 @@ class SpeedControlBinding extends ControlBinding {
             this.speedValueDisplay.updateValue(value.toFixed(1));
         });
 
-        this.presetButtons.onChange((value, index, button) => {
-            const speed = parseFloat(button.dataset.speed);
+        this.presetButtons.onChange((value) => {
+            const speed = parseFloat(value);
             this.speedSlider.setValue(speed);
             this.handleValueChange(speed);
         });
@@ -406,7 +406,7 @@ class SpeedControlBinding extends ControlBinding {
     async handleValueChange(value) {
         // Update preset buttons immediately when slider moves
         this.updatePresetButtonState(value);
-        
+
         // Call parent implementation
         return await super.handleValueChange(value);
     }
@@ -414,23 +414,23 @@ class SpeedControlBinding extends ControlBinding {
     // Update preset button active state based on current speed
     updatePresetButtonState(currentSpeed) {
         if (!this.presetButtons || !this.presetButtons.buttons) return;
-        
+
         // Find the closest preset button to the current speed
         let closestButton = null;
         let closestDifference = Infinity;
-        
+
         this.presetButtons.buttons.forEach(button => {
             if (button && button.dataset.speed) {
                 const presetSpeed = parseFloat(button.dataset.speed);
                 const difference = Math.abs(presetSpeed - currentSpeed);
-                
+
                 if (difference < closestDifference && difference < 0.1) { // Within 0.1 RPM tolerance
                     closestDifference = difference;
                     closestButton = button;
                 }
             }
         });
-        
+
         // Update button states
         this.presetButtons.buttons.forEach(button => {
             if (button) {
@@ -459,8 +459,14 @@ class DirectionControlBinding extends ControlBinding {
         this.addControl(directionDisplay);
 
         // Wire up event handler
-        this.directionButtons.onChange((value, index, button) => {
-            const clockwise = index === 0; // First button is clockwise
+        this.directionButtons.onChange((value) => {
+            // Assume value is either 'cw' or 'ccw' or a boolean
+            let clockwise;
+            if (typeof value === 'string') {
+                clockwise = value === 'cw';
+            } else {
+                clockwise = !!value;
+            }
             this.setDirection(clockwise);
         });
     }
@@ -560,11 +566,11 @@ class VariableSpeedControlBinding extends ControlBinding {
 
     async setVariableSpeedEnabled(enabled) {
         const commandType = enabled ? 'esv' : 'dsv';
-        
+
         // Update UI immediately
         this.toggle.setValue(enabled);
         this.updateVariableSpeedUI(enabled);
-        
+
         // Set controls to outdated state
         this.controls.forEach(control => {
             control.setDisplayState(CONTROL_STATES.OUTDATED);
@@ -730,7 +736,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
         if (statusUpdate.pdns !== undefined) {
             const statusValue = Math.round(statusUpdate.pdns);
             const status = this.negotiationStates[statusValue] ||
-                          { text: `Unknown (${statusUpdate.pdns})`, class: 'status-error' };
+                { text: `Unknown (${statusUpdate.pdns})`, class: 'status-error' };
 
             if (this.pdStatusDisplay && this.pdStatusDisplay.displays && this.pdStatusDisplay.displays[0]) {
                 this.pdStatusDisplay.displays[0].textContent = status.text;
@@ -887,7 +893,7 @@ class StallGuardControlBinding extends ControlBinding {
         }
     }
 }
- 
+
 /**
  * Emergency stop control binding
  */
