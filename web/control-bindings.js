@@ -205,6 +205,12 @@ class StatisticsControlBinding extends ControlBinding {
             statusKeys: ['tr', 'rt']
         });
 
+        // Pass displayTransform to DisplayControl instances
+        const displayTransform = (value, key) => value.toString();
+        if (totalRevolutionsDisplay) totalRevolutionsDisplay.displayTransform = (value) => displayTransform(value, 'tr');
+        if (runTimeDisplay) runTimeDisplay.displayTransform = (value) => displayTransform(value, 'rt');
+        if (avgSpeedDisplay) avgSpeedDisplay.displayTransform = (value) => displayTransform(value, 'avg');
+
         this.totalRevolutionsDisplay = totalRevolutionsDisplay;
         this.runTimeDisplay = runTimeDisplay;
         this.avgSpeedDisplay = avgSpeedDisplay;
@@ -221,10 +227,10 @@ class StatisticsControlBinding extends ControlBinding {
 
     customStatusHandler(statusUpdate, controls) {
         if (statusUpdate.tr !== undefined) {
-            this.totalRevolutionsDisplay.setValue(this.displayTransform(this.statusValueTransform(statusUpdate.tr), 'tr'));
+            this.totalRevolutionsDisplay.setValue(this.statusValueTransform(statusUpdate.tr));
         }
         if (statusUpdate.rt !== undefined) {
-            this.runTimeDisplay.setValue(this.displayTransform(this.statusValueTransform(statusUpdate.rt), 'rt'));
+            this.runTimeDisplay.setValue(this.statusValueTransform(statusUpdate.rt));
             if (typeof this.updateAverageSpeed === 'function') {
                 this.updateAverageSpeed();
             }
@@ -237,6 +243,24 @@ class TmcStatusControlBinding extends ControlBinding {
         super({
             statusKeys: ['tmcst', 'tmct', 'sd', 'sc']
         });
+
+        // Set displayTransform for each DisplayControl
+        if (tmcStatusDisplay) {
+            tmcStatusDisplay.displayTransform = (value) => value ? 'OK' : 'Error';
+        }
+        if (tmcTempDisplay) {
+            tmcTempDisplay.displayTransform = (value) => {
+                const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
+                const tempIdx = Math.max(0, Math.min(4, value));
+                return tempLabels[tempIdx];
+            };
+        }
+        if (stallStatusDisplay) {
+            stallStatusDisplay.displayTransform = (value) => value ? 'STALL!' : 'OK';
+        }
+        if (stallCountDisplay) {
+            stallCountDisplay.displayTransform = (value) => value.toString();
+        }
 
         this.tmcStatusDisplay = tmcStatusDisplay;
         this.tmcTempDisplay = tmcTempDisplay;
@@ -253,37 +277,25 @@ class TmcStatusControlBinding extends ControlBinding {
         return value;
     }
 
-    displayTransform(value, key) {
-        if (key === 'tmcst') return value ? 'OK' : 'Error';
-        if (key === 'tmct') {
-            const tempLabels = ['Normal', 'Warm (>120°C)', 'Elevated (>143°C)', 'High (>150°C)', 'Critical (>157°C)'];
-            const tempIdx = Math.max(0, Math.min(4, value));
-            return { label: tempLabels[tempIdx], className: tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error') };
-        }
-        if (key === 'sd') return value ? 'STALL!' : 'OK';
-        if (key === 'sc') return value.toString();
-        return value.toString();
-    }
-
     customStatusHandler(statusUpdate, controls) {
         if (statusUpdate.tmcst !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.tmcst, 'tmcst');
-            const display = this.displayTransform(transformed, 'tmcst');
-            this.tmcStatusDisplay.setValue(display);
-            this.tmcStatusDisplay.updateClass(display === 'OK' ? 'status-success' : 'status-error');
+            this.tmcStatusDisplay.setValue(transformed);
+            this.tmcStatusDisplay.updateClass(transformed ? 'status-success' : 'status-error');
         }
 
         if (statusUpdate.tmct !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.tmct, 'tmct');
-            const display = this.displayTransform(transformed, 'tmct');
-            this.tmcTempDisplay.setValue(display.label);
-            this.tmcTempDisplay.updateClass(display.className);
+            this.tmcTempDisplay.setValue(transformed);
+            // Class logic preserved
+            const tempIdx = Math.max(0, Math.min(4, transformed));
+            const className = tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error');
+            this.tmcTempDisplay.updateClass(className);
         }
 
         if (statusUpdate.sd !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.sd, 'sd');
-            const display = this.displayTransform(transformed, 'sd');
-            this.stallStatusDisplay.setValue(display);
+            this.stallStatusDisplay.setValue(transformed);
             const color = statusUpdate.sd ? '#e74c3c' : '#10b981';
             this.stallStatusDisplay.displays.forEach(element => {
                 if (element) element.style.color = color;
@@ -293,8 +305,7 @@ class TmcStatusControlBinding extends ControlBinding {
 
         if (statusUpdate.sc !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.sc, 'sc');
-            const display = this.displayTransform(transformed, 'sc');
-            this.stallCountDisplay.setValue(display);
+            this.stallCountDisplay.setValue(transformed);
             const color = statusUpdate.sc > 0 ? '#e74c3c' : '#10b981';
             this.stallCountDisplay.displays.forEach(element => {
                 if (element) element.style.color = color;

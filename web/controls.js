@@ -310,6 +310,7 @@ class DisplayControl extends BaseControl {
     constructor(displayElements, options = {}) {
         super(displayElements, options);
         this.displays = this.elements;
+        this.displayTransform = options.displayTransform || ((x) => x);
         this.options = {
             colorizer: null,
             ...options
@@ -318,12 +319,13 @@ class DisplayControl extends BaseControl {
     }
 
     setValue(value) {
+        const transformed = this.displayTransform(value);
         this.displays.forEach(element => {
             if (element) {
-                element.textContent = value;
+                element.textContent = transformed;
                 element.style.opacity = '1.0';
                 if (this.options.colorizer) {
-                    const color = this.options.colorizer(value);
+                    const color = this.options.colorizer(transformed);
                     if (color) element.style.color = color;
                 }
             }
