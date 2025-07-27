@@ -112,15 +112,10 @@ class ControlBinding {
         } else if (control instanceof SelectControl) {
             control.setValue(value);
         } else if (control instanceof DisplayControl) {
-            control.updateValue(this.displayTransform(value, statusKey));
-        } else if (control instanceof ButtonControl) {
-            // Handle button states based on value
-            if (typeof value === 'boolean') {
-                control.setActiveButton(value ? 0 : 1);
-            } else {
-                control.setActiveByValue(value);
-            }
-        }
+            control.setValue(this.displayTransform(value, statusKey));
+} else if (control instanceof ButtonControl) {
+    control.setValue(value);
+}
     }
 }
 
@@ -145,7 +140,7 @@ class AccelerationControlBinding extends ControlBinding {
         // Wire up event handler
         this.accelerationSlider.onChange((value) => {
             this.handleValueChange(value);
-            this.accelerationTimeValueDisplay.updateValue(value.toFixed(1));
+            this.accelerationTimeValueDisplay.setValue(value.toFixed(1));
         });
     }
 
@@ -481,7 +476,7 @@ class DirectionControlBinding extends ControlBinding {
             const clockwise = statusUpdate.dir === 'cw';
 
             // Update button states - index 0 is clockwise, index 1 is counterclockwise
-            this.directionButtons.setActiveButton(clockwise ? 0 : 1);
+            this.directionButtons.setValue(clockwise ? "cw" : "ccw");
 
             // Update direction display
             this.directionDisplay.setValue(clockwise ? 'Clockwise' : 'Counter-clockwise');
@@ -1059,15 +1054,15 @@ class CurrentControlBinding extends ControlBinding {
         // Wire up event handler
         this.currentSlider.onChange((value) => {
             this.handleValueChange(value);
-            this.currentValueDisplay.updateValue(value.toFixed(1));
+            this.currentValueDisplay.setValue(value.toFixed(1));
         });
     }
 
     customStatusHandler(statusUpdate, controls) {
         if (statusUpdate.cur !== undefined) {
             this.currentSlider.setValue(statusUpdate.cur);
-            this.currentDisplay.updateValue(statusUpdate.cur);
-            if (this.currentValueDisplay) this.currentValueDisplay.updateValue(statusUpdate.cur.toFixed(1));
+            this.currentDisplay.setValue(statusUpdate.cur);
+            if (this.currentValueDisplay) this.currentValueDisplay.setValue(statusUpdate.cur.toFixed(1));
         }
     }
 }
@@ -1099,7 +1094,7 @@ class StrengthControlBinding extends ControlBinding {
         if (statusUpdate.svs !== undefined) {
             const strength = this.statusValueTransform(statusUpdate.svs, 'svs');
             this.strengthSlider.setValue(strength);
-            if (this.strengthValueDisplay) this.strengthValueDisplay.updateValue(strength.toFixed(1));
+            if (this.strengthValueDisplay) this.strengthValueDisplay.setValue(strength.toFixed(1));
         }
     }
 }

@@ -213,7 +213,13 @@ class RadioGroupControl extends BaseControl {
     }
 
     setValue(value) {
-        this.setActiveByValue(value);
+        this.buttons.forEach(btn => {
+            let btnValue = btn.dataset.value !== undefined ? btn.dataset.value : undefined;
+            if (btnValue !== undefined) {
+                const isActive = btnValue == value;
+                btn.classList.toggle(this.activeClass, isActive);
+            }
+        });
     }
 
     getValue() {
@@ -226,11 +232,7 @@ class RadioGroupControl extends BaseControl {
         return undefined;
     }
 
-    setActiveButton(index) {
-        this.buttons.forEach((btn, i) => {
-            if (btn) btn.classList.toggle(this.activeClass, i === index);
-        });
-    }
+    /* setActiveButton removed: use setValue(value) instead, which calls setActiveByValue */
 
     setActiveByValue(value) {
         this.buttons.forEach(btn => {
