@@ -28,8 +28,11 @@ class ControlBinding {
         return value.toString();
     }
 
-    customStatusHandler(statusUpdate, controls) {
-        // Default: no custom handling
+    customStatusHandler(transformedValue, key) {
+        // Default: update all controls with transformed value
+        this.controls.forEach(control => {
+            control.setValue(transformedValue);
+        });
     }
 
     setCommandManager(commandManager) {
@@ -72,35 +75,22 @@ class ControlBinding {
 
     // Handle status updates from the backend
     handleStatusUpdate(statusUpdate) {
-        // Check if this status update is relevant to this binding
         const relevantKeys = this.statusKeys.filter(key =>
             statusUpdate[key] !== undefined
         );
 
         if (relevantKeys.length === 0) {
-            return; // No relevant status updates
+            return;
         }
 
-        // Set all controls to valid state since we received data
         this.controls.forEach(control => {
             control.setDisplayState(CONTROL_STATES.VALID);
         });
 
-        // Use custom handler if overridden
-        if (this.customStatusHandler !== ControlBinding.prototype.customStatusHandler) {
-            this.customStatusHandler(statusUpdate, this.controls);
-            return;
-        }
-
-        // Default handling for simple cases
         relevantKeys.forEach(key => {
             const value = statusUpdate[key];
             const transformedValue = this.statusValueTransform(value, key);
-
-            // Update controls based on their type
-            this.controls.forEach(control => {        
-                control.setValue(transformedValue);
-            });
+            this.customStatusHandler(transformedValue, key);
         });
     }
 }
@@ -183,12 +173,11 @@ class AccelerationControlBinding extends ControlBinding {
         return parseFloat(timeSeconds.toFixed(1));
     }
 
-    customStatusHandler(statusUpdate, controls) {
-        if (statusUpdate.acc !== undefined) {
-            const timeSeconds = this.statusValueTransform(statusUpdate.acc);
-            this.accelerationSlider.setValue(timeSeconds);
-            this.accelerationDisplay.setValue(timeSeconds);
-            if (this.accelerationTimeValueDisplay) this.accelerationTimeValueDisplay.setValue(timeSeconds.toFixed(1));
+    customStatusHandler(transformedValue, key) {
+        if (key === 'acc') {
+            this.accelerationSlider.setValue(transformedValue);
+            this.accelerationDisplay.setValue(transformedValue);
+            if (this.accelerationTimeValueDisplay) this.accelerationTimeValueDisplay.setValue(transformedValue.toFixed(1));
         }
     }
 }
@@ -231,12 +220,12 @@ class StatisticsControlBinding extends ControlBinding {
         return value;
     }
 
-    customStatusHandler(statusUpdate, controls) {
-        if (statusUpdate.tr !== undefined) {
-            this.totalRevolutionsDisplay.setValue(this.statusValueTransform(statusUpdate.tr));
+    customStatusHandler(transformedValue, key) {
+        if (key === 'tr') {
+            this.totalRevolutionsDisplay.setValue(transformedValue);
         }
-        if (statusUpdate.rt !== undefined) {
-            this.runTimeDisplay.setValue(this.statusValueTransform(statusUpdate.rt));
+        if (key === 'rt') {
+            this.runTimeDisplay.setValue(transformedValue);
             if (typeof this.updateAverageSpeed === 'function') {
                 this.updateAverageSpeed();
             }
@@ -283,36 +272,28 @@ class TmcStatusControlBinding extends ControlBinding {
         return value;
     }
 
-    customStatusHandler(statusUpdate, controls) {
-        if (statusUpdate.tmcst !== undefined) {
-            const transformed = this.statusValueTransform(statusUpdate.tmcst, 'tmcst');
-            this.tmcStatusDisplay.setValue(transformed);
-            this.tmcStatusDisplay.updateClass(transformed ? 'status-success' : 'status-error');
+    customStatusHandler(transformedValue, key) {
+        if (key === 'tmcst') {
+            this.tmcStatusDisplay.setValue(transformedValue);
+            this.tmcStatusDisplay.updateClass(transformedValue ? 'status-success' : 'status-error');
         }
-
-        if (statusUpdate.tmct !== undefined) {
-            const transformed = this.statusValueTransform(statusUpdate.tmct, 'tmct');
-            this.tmcTempDisplay.setValue(transformed);
-            // Class logic preserved
-            const tempIdx = Math.max(0, Math.min(4, transformed));
+        if (key === 'tmct') {
+            this.tmcTempDisplay.setValue(transformedValue);
+            const tempIdx = Math.max(0, Math.min(4, transformedValue));
             const className = tempIdx === 0 ? 'status-success' : (tempIdx < 3 ? 'status-warning' : 'status-error');
             this.tmcTempDisplay.updateClass(className);
         }
-
-        if (statusUpdate.sd !== undefined) {
-            const transformed = this.statusValueTransform(statusUpdate.sd, 'sd');
-            this.stallStatusDisplay.setValue(transformed);
-            const color = statusUpdate.sd ? '#e74c3c' : '#10b981';
+        if (key === 'sd') {
+            this.stallStatusDisplay.setValue(transformedValue);
+            const color = transformedValue ? '#e74c3c' : '#10b981';
             this.stallStatusDisplay.displays.forEach(element => {
                 if (element) element.style.color = color;
-                element.style.fontWeight = statusUpdate.sd ? 'bold' : 'normal';
+                element.style.fontWeight = transformedValue ? 'bold' : 'normal';
             });
         }
-
-        if (statusUpdate.sc !== undefined) {
-            const transformed = this.statusValueTransform(statusUpdate.sc, 'sc');
-            this.stallCountDisplay.setValue(transformed);
-            const color = statusUpdate.sc > 0 ? '#e74c3c' : '#10b981';
+        if (key === 'sc') {
+            this.stallCountDisplay.setValue(transformedValue);
+            const color = transformedValue > 0 ? '#e74c3c' : '#10b981';
             this.stallCountDisplay.displays.forEach(element => {
                 if (element) element.style.color = color;
             });
@@ -404,24 +385,18 @@ class SpeedControlBinding extends ControlBinding {
         return Math.max(0.1, Math.min(30.0, value));
     }
 
-    customStatusHandler(statusUpdate, controls) {
-        if (statusUpdate.sp !== undefined) {
-            // Update setpoint speed
-            const speed = statusUpdate.sp;
-            this.speedSlider.setValue(speed);
-            this.speedDisplay.setValue(speed);
-            this.speedValueDisplay.setValue(speed);
-
-            // Update preset button active state
-            this.updatePresetButtonState(speed);
+    customStatusHandler(transformedValue, key) {
+        if (key === 'sp') {
+            this.speedSlider.setValue(transformedValue);
+            this.speedDisplay.setValue(transformedValue);
+            this.speedValueDisplay.setValue(transformedValue);
+            this.updatePresetButtonState(transformedValue);
         }
-
-        if (statusUpdate.cs !== undefined) {
-            // Update fill indicator to show current speed
+        if (key === 'cs') {
             if (this.speedSlider && this.speedSlider.slider) {
                 const min = parseFloat(this.speedSlider.slider.min);
                 const max = parseFloat(this.speedSlider.slider.max);
-                const clampedValue = Math.max(min, Math.min(max, statusUpdate.cs));
+                const clampedValue = Math.max(min, Math.min(max, transformedValue));
                 const percentage = ((clampedValue - min) / (max - min)) * 100;
                 this.speedSlider.updateFillWidth(percentage);
             }
@@ -489,17 +464,11 @@ class DirectionControlBinding extends ControlBinding {
         });
     }
 
-    customStatusHandler(statusUpdate, controls) {
-        if (statusUpdate.dir !== undefined) {
-            const clockwise = statusUpdate.dir === 'cw';
-
-            // Update button states - index 0 is clockwise, index 1 is counterclockwise
+    customStatusHandler(transformedValue, key) {
+        if (key === 'dir') {
+            const clockwise = transformedValue === 'cw';
             this.directionButtons.setValue(clockwise ? "cw" : "ccw");
-
-            // Update direction display
             this.directionDisplay.setValue(clockwise ? 'Clockwise' : 'Counter-clockwise');
-
-            // Apply color coding
             const color = clockwise ? '#3b82f6' : '#8b5cf6';
             this.directionDisplay.displays.forEach(element => {
                 if (element) element.style.color = color;
@@ -545,28 +514,22 @@ class VariableSpeedControlBinding extends ControlBinding {
         });
     }
 
-    customStatusHandler(statusUpdate, controls) {
-        if (statusUpdate.sve !== undefined) {
-            const enabled = statusUpdate.sve;
+    customStatusHandler(transformedValue, key) {
+        if (key === 'sve') {
+            const enabled = transformedValue;
             this.toggle.setValue(enabled);
             this.updateVariableSpeedUI(enabled);
             this.statusDisplay.setValue(enabled ? 'ON' : 'OFF');
-
-            // Color coding
             const color = enabled ? '#10b981' : '#1f2937';
             this.statusDisplay.displays.forEach(element => {
                 if (element) element.style.color = color;
             });
         }
-
-        if (statusUpdate.svs !== undefined) {
-            const strength = this.statusValueTransform(statusUpdate.svs, 'svs');
-            this.strengthSlider.setValue(strength);
+        if (key === 'svs') {
+            this.strengthSlider.setValue(transformedValue);
         }
-
-        if (statusUpdate.svp !== undefined) {
-            const phaseDegrees = this.statusValueTransform(statusUpdate.svp, 'svp');
-            this.phaseSlider.setValue(phaseDegrees);
+        if (key === 'svp') {
+            this.phaseSlider.setValue(transformedValue);
         }
     }
 
@@ -827,25 +790,22 @@ class StallGuardControlBinding extends ControlBinding {
         });
     }
 
-    customStatusHandler(statusUpdate, controls) {
-        if (statusUpdate.sgt !== undefined) {
-            const threshold = this.statusValueTransform(statusUpdate.sgt, 'sgt');
-            this.thresholdSlider.setValue(threshold);
-            if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(threshold.toFixed(1));
+    customStatusHandler(transformedValue, key) {
+        if (key === 'sgt') {
+            this.thresholdSlider.setValue(transformedValue);
+            if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(transformedValue.toFixed(1));
         }
-        if (statusUpdate.sgr !== undefined) {
-            const result = this.statusValueTransform(statusUpdate.sgr, 'sgr');
-            this.resultDisplay.setValue(this.displayTransform(result, 'sgr'));
+        if (key === 'sgr') {
+            this.resultDisplay.setValue(this.displayTransform(transformedValue, 'sgr'));
             if (this.thresholdSlider.fillElement) {
-                this.thresholdSlider.updateFillWidth(result);
+                this.thresholdSlider.updateFillWidth(transformedValue);
                 this.thresholdSlider.fillElement.style.opacity = "1.0";
             }
-            // Color fill based on stall threshold
-            const sliderPercent = parseFloat(this.thresholdSlider.slider.value); // invert slider
+            const sliderPercent = parseFloat(this.thresholdSlider.slider.value);
             if (this.thresholdSlider.fillElement) {
-                if (result < sliderPercent * 0.8) {
+                if (transformedValue < sliderPercent * 0.8) {
                     this.thresholdSlider.setFillColor('#10b981');
-                } else if (result < sliderPercent) {
+                } else if (transformedValue < sliderPercent) {
                     this.thresholdSlider.setFillColor('#f59e0b');
                 } else {
                     this.thresholdSlider.setFillColor('#ef4444');
@@ -1123,11 +1083,10 @@ class StrengthControlBinding extends ControlBinding {
         });
     }
 
-    customStatusHandler(statusUpdate, controls) {
-        if (statusUpdate.svs !== undefined) {
-            const strength = this.statusValueTransform(statusUpdate.svs, 'svs');
-            this.strengthSlider.setValue(strength);
-            if (this.strengthValueDisplay) this.strengthValueDisplay.setValue(strength.toFixed(1));
+    customStatusHandler(transformedValue, key) {
+        if (key === 'svs') {
+            this.strengthSlider.setValue(transformedValue);
+            if (this.strengthValueDisplay) this.strengthValueDisplay.setValue(transformedValue.toFixed(1));
         }
     }
 }
@@ -1174,11 +1133,10 @@ class PhaseControlBinding extends ControlBinding {
         });
     }
 
-    customStatusHandler(statusUpdate, controls) {
-        if (statusUpdate.svp !== undefined) {
-            const phaseDegrees = this.statusValueTransform(statusUpdate.svp, 'svp');
-            this.phaseSlider.setValue(phaseDegrees);
-            this.phaseValueDisplay.setValue(phaseDegrees.toFixed(1));
+    customStatusHandler(transformedValue, key) {
+        if (key === 'svp') {
+            this.phaseSlider.setValue(transformedValue);
+            this.phaseValueDisplay.setValue(transformedValue.toFixed(1));
         }
     }
 }
