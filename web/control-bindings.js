@@ -130,6 +130,14 @@ class AccelerationControlBinding extends ControlBinding {
             statusKeys: ['acc']
         });
 
+        // Set displayTransform for acceleration displays
+        if (accelerationDisplay) {
+            accelerationDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}s to max`;
+        }
+if (accelerationTimeValueDisplay) {
+    accelerationTimeValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}s`;
+}
+
         this.accelerationSlider = accelerationSlider;
         this.accelerationDisplay = accelerationDisplay;
         this.accelerationTimeValueDisplay = accelerationTimeValueDisplay;
@@ -140,7 +148,7 @@ class AccelerationControlBinding extends ControlBinding {
         // Wire up event handler
         this.accelerationSlider.onChange((value) => {
             this.handleValueChange(value);
-            this.accelerationTimeValueDisplay.setValue(value.toFixed(1));
+            this.accelerationTimeValueDisplay.setValue(value);
         });
     }
 
@@ -205,11 +213,23 @@ class StatisticsControlBinding extends ControlBinding {
             statusKeys: ['tr', 'rt']
         });
 
-        // Pass displayTransform to DisplayControl instances
-        const displayTransform = (value, key) => value.toString();
-        if (totalRevolutionsDisplay) totalRevolutionsDisplay.displayTransform = (value) => displayTransform(value, 'tr');
-        if (runTimeDisplay) runTimeDisplay.displayTransform = (value) => displayTransform(value, 'rt');
-        if (avgSpeedDisplay) avgSpeedDisplay.displayTransform = (value) => displayTransform(value, 'avg');
+        // Set displayTransform for formatting
+        if (totalRevolutionsDisplay) {
+            totalRevolutionsDisplay.displayTransform = (value) => Number(value).toFixed(3);
+        }
+        if (runTimeDisplay) {
+            // Use global formatTime if available, otherwise fallback
+            runTimeDisplay.displayTransform = (milliseconds) => {
+                if (typeof window !== "undefined" && window.app && typeof window.app.formatTime === "function") {
+                    return window.app.formatTime(milliseconds);
+                }
+                // fallback: show milliseconds
+                return `${milliseconds} ms`;
+            };
+        }
+        if (avgSpeedDisplay) {
+            avgSpeedDisplay.displayTransform = (value) => Number(value).toFixed(1);
+        }
 
         this.totalRevolutionsDisplay = totalRevolutionsDisplay;
         this.runTimeDisplay = runTimeDisplay;
@@ -360,6 +380,14 @@ class SpeedControlBinding extends ControlBinding {
             statusKeys: ['sp', 'cs']
         });
 
+        // Set displayTransform for speed displays
+        if (speedDisplay) {
+            speedDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} RPM`;
+        }
+if (speedValueDisplay) {
+    speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} RPM`;
+}
+
         this.speedSlider = speedSlider;
         this.speedDisplay = speedDisplay;
         this.presetButtons = presetButtons;
@@ -372,7 +400,7 @@ class SpeedControlBinding extends ControlBinding {
         // Wire up event handlers
         this.speedSlider.onChange((value) => {
             this.handleValueChange(value);
-            this.speedValueDisplay.setValue(value.toFixed(1));
+            this.speedValueDisplay.setValue(value);
         });
 
         this.presetButtons.onChange((value) => {
@@ -383,7 +411,7 @@ class SpeedControlBinding extends ControlBinding {
     }
 
     displayTransform(value) {
-        return value.toFixed(1);
+        return Number(value).toFixed(1);
     }
 
     inputValueTransform(value) {
@@ -396,7 +424,7 @@ class SpeedControlBinding extends ControlBinding {
             const speed = statusUpdate.sp;
             this.speedSlider.setValue(speed);
             this.speedDisplay.setValue(speed);
-            this.speedValueDisplay.setValue(speed.toFixed(1));
+            this.speedValueDisplay.setValue(speed);
 
             // Update preset button active state
             this.updatePresetButtonState(speed);
@@ -772,18 +800,18 @@ class PowerDeliveryControlBinding extends ControlBinding {
         }
 
         if (statusUpdate.pdnv !== undefined) {
-            if (this.pdNegotiatedVoltageDisplay && this.pdNegotiatedVoltageDisplay.displays && this.pdNegotiatedVoltageDisplay.displays[0]) {
-                this.pdNegotiatedVoltageDisplay.displays[0].textContent = statusUpdate.pdnv > 0 ?
-                    `${statusUpdate.pdnv}V` : '- V';
-                this.pdNegotiatedVoltageDisplay.displays[0].style.opacity = '1.0';
-            }
+if (this.pdNegotiatedVoltageDisplay && this.pdNegotiatedVoltageDisplay.displays && this.pdNegotiatedVoltageDisplay.displays[0]) {
+    this.pdNegotiatedVoltageDisplay.displays[0].textContent = statusUpdate.pdnv > 0 ?
+        `${statusUpdate.pdnv} V` : '-';
+    this.pdNegotiatedVoltageDisplay.displays[0].style.opacity = '1.0';
+}
         }
 
         if (statusUpdate.pdcv !== undefined) {
-            if (this.pdCurrentVoltageDisplay && this.pdCurrentVoltageDisplay.displays && this.pdCurrentVoltageDisplay.displays[0]) {
-                this.pdCurrentVoltageDisplay.displays[0].textContent = `${statusUpdate.pdcv.toFixed(1)}V`;
-                this.pdCurrentVoltageDisplay.displays[0].style.opacity = '1.0';
-            }
+if (this.pdCurrentVoltageDisplay && this.pdCurrentVoltageDisplay.displays && this.pdCurrentVoltageDisplay.displays[0]) {
+    this.pdCurrentVoltageDisplay.displays[0].textContent = `${statusUpdate.pdcv.toFixed(1)} V`;
+    this.pdCurrentVoltageDisplay.displays[0].style.opacity = '1.0';
+}
         }
     }
 }
@@ -852,12 +880,12 @@ class StallGuardControlBinding extends ControlBinding {
         return value;
     }
 
-    displayTransform(value, key) {
-        if (key === 'sgt' || key === 'sgr') {
-            return value.toFixed(1);
-        }
-        return value.toString();
+displayTransform(value, key) {
+    if (key === 'sgt' || key === 'sgr') {
+        return `${value.toFixed(1)}%`;
     }
+    return value.toString();
+}
 
     inputValueTransform(percent) {
         // Invert percent for backend value (0-100 becomes 100-0)
@@ -1048,6 +1076,15 @@ class CurrentControlBinding extends ControlBinding {
             statusKeys: ['cur'],
             inputValueTransform: (value) => parseInt(value)
         });
+
+        // Set displayTransform for current displays
+        if (currentDisplay) {
+            currentDisplay.displayTransform = (value) => `${Number(value)}%`;
+        }
+if (currentValueDisplay) {
+    currentValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}%`;
+}
+
         this.currentSlider = currentSlider;
         this.currentDisplay = currentDisplay;
         this.currentValueDisplay = currentValueDisplay;
@@ -1058,7 +1095,7 @@ class CurrentControlBinding extends ControlBinding {
         // Wire up event handler
         this.currentSlider.onChange((value) => {
             this.handleValueChange(value);
-            this.currentValueDisplay.setValue(value.toFixed(1));
+            this.currentValueDisplay.setValue(value);
         });
     }
 
@@ -1066,7 +1103,7 @@ class CurrentControlBinding extends ControlBinding {
         if (statusUpdate.cur !== undefined) {
             this.currentSlider.setValue(statusUpdate.cur);
             this.currentDisplay.setValue(statusUpdate.cur);
-            if (this.currentValueDisplay) this.currentValueDisplay.setValue(statusUpdate.cur.toFixed(1));
+            if (this.currentValueDisplay) this.currentValueDisplay.setValue(statusUpdate.cur);
         }
     }
 }
@@ -1082,6 +1119,12 @@ class StrengthControlBinding extends ControlBinding {
             inputValueTransform: (value) => parseInt(value) / 100.0,
             statusValueTransform: (value) => Math.round(value * 100)
         });
+
+        // Set displayTransform for strength value display
+if (strengthValueDisplay) {
+    strengthValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}%`;
+}
+
         this.strengthSlider = strengthSlider;
         this.strengthValueDisplay = strengthValueDisplay;
         this.addControl(strengthSlider);
@@ -1090,7 +1133,7 @@ class StrengthControlBinding extends ControlBinding {
         // Wire up event handler
         this.strengthSlider.onChange((value) => {
             this.handleValueChange(value);
-            this.strengthValueDisplay.setValue(value.toFixed(1));
+            this.strengthValueDisplay.setValue(value);
         });
     }
 
@@ -1127,6 +1170,12 @@ class PhaseControlBinding extends ControlBinding {
                 return phaseDegrees;
             }
         });
+
+        // Set displayTransform for phase value display
+if (phaseValueDisplay) {
+    phaseValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}°`;
+}
+
         this.phaseSlider = phaseSlider;
         this.phaseValueDisplay = phaseValueDisplay;
         this.addControl(phaseSlider);
@@ -1135,7 +1184,7 @@ class PhaseControlBinding extends ControlBinding {
         // Wire up event handler
         this.phaseSlider.onChange((value) => {
             this.handleValueChange(value);
-            this.phaseValueDisplay.setValue(value.toFixed(1));
+            this.phaseValueDisplay.setValue(value);
         });
     }
 
