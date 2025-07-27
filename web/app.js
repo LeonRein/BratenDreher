@@ -431,7 +431,7 @@ class BratenDreherApp {
         // Status updates from backend
         this.commandManager.onStatusUpdate = (statusUpdate) => {
             // Update last update time on every status message
-            this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
+            this.controls.get('lastUpdateDisplay').setValue(new Date().toLocaleTimeString());
             this.handleStatusUpdate(statusUpdate);
         };
 
@@ -568,9 +568,9 @@ class BratenDreherApp {
 
         if (currentRuntimeSeconds > 0 && currentRevolutions > 0) {
             const avgSpeed = (currentRevolutions * 60) / currentRuntimeSeconds;
-            this.controls.get('avgSpeedDisplay').updateValue(avgSpeed);
+            this.controls.get('avgSpeedDisplay').setValue(avgSpeed);
         } else {
-            this.controls.get('avgSpeedDisplay').updateValue(0.0);
+            this.controls.get('avgSpeedDisplay').setValue(0.0);
         }
     }
 
