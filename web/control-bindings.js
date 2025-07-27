@@ -342,6 +342,12 @@ class TimestampControlBinding extends ControlBinding {
 
 // Speed control binding with preset buttons and fill indicator
 class SpeedControlBinding extends ControlBinding {
+    /**
+     * @param {SliderControl} speedSlider
+     * @param {DisplayControl} speedDisplay
+     * @param {RadioGroupControl} presetButtons
+     * @param {DisplayControl} speedValueDisplay
+     */
     constructor(speedSlider, speedDisplay, presetButtons, speedValueDisplay) {
         super({
             commandType: 'ss',
@@ -446,6 +452,10 @@ class SpeedControlBinding extends ControlBinding {
 
 // Direction control binding with button coordination
 class DirectionControlBinding extends ControlBinding {
+    /**
+     * @param {RadioGroupControl} directionButtons
+     * @param {DisplayControl} directionDisplay
+     */
     constructor(directionButtons, directionDisplay) {
         super({
             commandType: 'sd',
@@ -460,13 +470,8 @@ class DirectionControlBinding extends ControlBinding {
 
         // Wire up event handler
         this.directionButtons.onChange((value) => {
-            // Assume value is either 'cw' or 'ccw' or a boolean
-            let clockwise;
-            if (typeof value === 'string') {
-                clockwise = value === 'cw';
-            } else {
-                clockwise = !!value;
-            }
+            // value is either "cw" or "ccw"
+            const clockwise = value === "cw";
             this.setDirection(clockwise);
         });
     }
@@ -898,6 +903,11 @@ class StallGuardControlBinding extends ControlBinding {
  * Emergency stop control binding
  */
 class EmergencyStopControlBinding extends ControlBinding {
+    /**
+     * @param {SingleButtonControl} emergencyStopBtn
+     * @param {SliderControl} speedSlider
+     * @param {Object} config
+     */
     constructor(emergencyStopBtn, speedSlider = null, config = {}) {
         super({
             commandType: 'es',
@@ -939,6 +949,10 @@ class EmergencyStopControlBinding extends ControlBinding {
  * Statistics reset control binding
  */
 class StatisticsResetControlBinding extends ControlBinding {
+    /**
+     * @param {SingleButtonControl} resetStatsBtn
+     * @param {Object} config
+     */
     constructor(resetStatsBtn, config = {}) {
         super({
             commandType: 'rc',
@@ -972,6 +986,10 @@ class StatisticsResetControlBinding extends ControlBinding {
  * Stall reset control binding
  */
 class StallResetControlBinding extends ControlBinding {
+    /**
+     * @param {SingleButtonControl} resetStallBtn
+     * @param {Object} config
+     */
     constructor(resetStallBtn, config = {}) {
         super({
             commandType: 'rs',

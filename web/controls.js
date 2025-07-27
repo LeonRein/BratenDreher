@@ -154,18 +154,44 @@ class SliderControl extends BaseControl {
 }
 
 /**
- * Button control for click handling.
+ * SingleButtonControl for single-action buttons.
  */
-class ButtonControl extends BaseControl {
+class SingleButtonControl extends BaseControl {
+    constructor(buttonElement, options = {}) {
+        super(buttonElement, options);
+        this.button = this.elements[0];
+        this.bindEvents();
+    }
+
+    bindEvents() {
+        if (!this.button) return;
+        this.button.addEventListener('click', (e) => this.handleClick(e));
+    }
+
+    handleClick(event) {
+        this.setDisplayState(CONTROL_STATES.OUTDATED);
+        if (this._onChange) {
+            this._onChange(true);
+        }
+    }
+
+    setValue(value) {
+        // No-op for single button
+    }
+
+    getValue() {
+        return undefined;
+    }
+}
+
+/**
+ * RadioGroupControl for mutually exclusive button groups.
+ */
+class RadioGroupControl extends BaseControl {
     constructor(buttonElements, options = {}) {
         super(buttonElements, options);
         this.buttons = this.elements;
-        this.options = {
-            type: 'single',
-            activeClass: 'active',
-            clickValue: undefined,
-            ...options
-        };
+        this.activeClass = options.activeClass || 'active';
         this.bindEvents();
     }
 
@@ -179,14 +205,12 @@ class ButtonControl extends BaseControl {
     handleClick(event, buttonIndex) {
         const button = event.target;
         this.setDisplayState(CONTROL_STATES.OUTDATED);
-        if (this.options.type === 'radio-group') {
-            this.buttons.forEach(btn => btn.classList.remove(this.options.activeClass));
-            button.classList.add(this.options.activeClass);
-        } else if (this.options.type === 'toggle') {
-            button.classList.toggle(this.options.activeClass);
-        }
+        this.buttons.forEach(btn => btn.classList.remove(this.activeClass));
+        button.classList.add(this.activeClass);
         if (this._onChange) {
-            const value = this.options.clickValue !== undefined ? this.options.clickValue : (button.dataset.value || buttonIndex);
+            const value = button.dataset.value !== undefined
+                ? button.dataset.value
+                : buttonIndex;
             this._onChange(value);
         }
     }
@@ -196,28 +220,27 @@ class ButtonControl extends BaseControl {
     }
 
     getValue() {
-        // Return active button value if available
         for (let btn of this.buttons) {
-            if (btn.classList.contains(this.options.activeClass)) {
-                return btn.dataset.value || btn.textContent;
+            if (btn.classList.contains(this.activeClass)) {
+                if (btn.dataset.value !== undefined) return btn.dataset.value;
+                return btn.textContent;
             }
         }
         return undefined;
     }
 
     setActiveButton(index) {
-        if (this.options.type === 'radio-group') {
-            this.buttons.forEach((btn, i) => {
-                if (btn) btn.classList.toggle(this.options.activeClass, i === index);
-            });
-        }
+        this.buttons.forEach((btn, i) => {
+            if (btn) btn.classList.toggle(this.activeClass, i === index);
+        });
     }
 
     setActiveByValue(value) {
         this.buttons.forEach(btn => {
-            if (btn && btn.dataset.value !== undefined) {
-                const isActive = btn.dataset.value == value;
-                btn.classList.toggle(this.options.activeClass, isActive);
+            let btnValue = btn.dataset.value !== undefined ? btn.dataset.value : undefined;
+            if (btnValue !== undefined) {
+                const isActive = btnValue == value;
+                btn.classList.toggle(this.activeClass, isActive);
             }
         });
     }

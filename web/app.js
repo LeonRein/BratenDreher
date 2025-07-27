@@ -132,29 +132,21 @@ class BratenDreherApp {
         }));
 
         // Preset buttons
-        this.controls.set('presetButtons', new ButtonControl(Array.from(this.presetBtns), {
-            type: 'radio-group',
+        this.controls.set('presetButtons', new RadioGroupControl(Array.from(this.presetBtns), {
             activeClass: 'active'
         }));
 
         // Emergency stop button
-        this.controls.set('emergencyStopBtn', new ButtonControl(this.emergencyStopBtn, {
-            type: 'single'
-        }));
+        this.controls.set('emergencyStopBtn', new SingleButtonControl(this.emergencyStopBtn));
 
         // Statistics reset button
-        this.controls.set('resetStatsBtn', new ButtonControl(this.resetStatsBtn, {
-            type: 'single'
-        }));
+        this.controls.set('resetStatsBtn', new SingleButtonControl(this.resetStatsBtn));
 
         // Stall reset button
-        this.controls.set('resetStallBtn', new ButtonControl(this.resetStallBtn, {
-            type: 'single'
-        }));
+        this.controls.set('resetStallBtn', new SingleButtonControl(this.resetStallBtn));
 
         // Direction buttons - create as radio group
-        this.controls.set('directionButtons', new ButtonControl([this.clockwiseBtn, this.counterclockwiseBtn], {
-            type: 'radio-group',
+        this.controls.set('directionButtons', new RadioGroupControl([this.clockwiseBtn, this.counterclockwiseBtn], {
             activeClass: 'active'
         }));
 
@@ -261,8 +253,8 @@ class BratenDreherApp {
 
         // Power delivery controls
         this.controls.set('voltageSelect', new SelectControl(this.voltageSelect));
-        this.controls.set('negotiateBtn', new ButtonControl(this.negotiateBtn));
-        this.controls.set('autoNegotiateBtn', new ButtonControl(this.autoNegotiateBtn));
+        this.controls.set('negotiateBtn', new SingleButtonControl(this.negotiateBtn));
+        this.controls.set('autoNegotiateBtn', new SingleButtonControl(this.autoNegotiateBtn));
         this.controls.set('pdStatusDisplay', new DisplayControl(this.pdStatus));
         this.controls.set('pdPowerGoodDisplay', new DisplayControl(this.pdPowerGood));
         this.controls.set('pdNegotiatedVoltageDisplay', new DisplayControl(this.pdNegotiatedVoltage));
