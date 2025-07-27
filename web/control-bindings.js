@@ -198,8 +198,8 @@ class AccelerationControlBinding extends ControlBinding {
         if (statusUpdate.acc !== undefined) {
             const timeSeconds = this.statusValueTransform(statusUpdate.acc);
             this.accelerationSlider.setValue(timeSeconds);
-            this.accelerationDisplay.updateValue(timeSeconds);
-            if (this.accelerationTimeValueDisplay) this.accelerationTimeValueDisplay.updateValue(timeSeconds.toFixed(1));
+            this.accelerationDisplay.setValue(timeSeconds);
+            if (this.accelerationTimeValueDisplay) this.accelerationTimeValueDisplay.setValue(timeSeconds.toFixed(1));
         }
     }
 }
@@ -226,10 +226,10 @@ class StatisticsControlBinding extends ControlBinding {
 
     customStatusHandler(statusUpdate, controls) {
         if (statusUpdate.tr !== undefined) {
-            this.totalRevolutionsDisplay.updateValue(this.displayTransform(this.statusValueTransform(statusUpdate.tr), 'tr'));
+            this.totalRevolutionsDisplay.setValue(this.displayTransform(this.statusValueTransform(statusUpdate.tr), 'tr'));
         }
         if (statusUpdate.rt !== undefined) {
-            this.runTimeDisplay.updateValue(this.displayTransform(this.statusValueTransform(statusUpdate.rt), 'rt'));
+            this.runTimeDisplay.setValue(this.displayTransform(this.statusValueTransform(statusUpdate.rt), 'rt'));
             if (typeof this.updateAverageSpeed === 'function') {
                 this.updateAverageSpeed();
             }
@@ -274,21 +274,21 @@ class TmcStatusControlBinding extends ControlBinding {
         if (statusUpdate.tmcst !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.tmcst, 'tmcst');
             const display = this.displayTransform(transformed, 'tmcst');
-            this.tmcStatusDisplay.updateValue(display);
+            this.tmcStatusDisplay.setValue(display);
             this.tmcStatusDisplay.updateClass(display === 'OK' ? 'status-success' : 'status-error');
         }
 
         if (statusUpdate.tmct !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.tmct, 'tmct');
             const display = this.displayTransform(transformed, 'tmct');
-            this.tmcTempDisplay.updateValue(display.label);
+            this.tmcTempDisplay.setValue(display.label);
             this.tmcTempDisplay.updateClass(display.className);
         }
 
         if (statusUpdate.sd !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.sd, 'sd');
             const display = this.displayTransform(transformed, 'sd');
-            this.stallStatusDisplay.updateValue(display);
+            this.stallStatusDisplay.setValue(display);
             const color = statusUpdate.sd ? '#e74c3c' : '#10b981';
             this.stallStatusDisplay.displays.forEach(element => {
                 if (element) element.style.color = color;
@@ -299,7 +299,7 @@ class TmcStatusControlBinding extends ControlBinding {
         if (statusUpdate.sc !== undefined) {
             const transformed = this.statusValueTransform(statusUpdate.sc, 'sc');
             const display = this.displayTransform(transformed, 'sc');
-            this.stallCountDisplay.updateValue(display);
+            this.stallCountDisplay.setValue(display);
             const color = statusUpdate.sc > 0 ? '#e74c3c' : '#10b981';
             this.stallCountDisplay.displays.forEach(element => {
                 if (element) element.style.color = color;
@@ -315,7 +315,7 @@ class CurrentSpeedControlBinding extends ControlBinding {
             statusKeys: ['cs'],
             customStatusHandler: (statusUpdate, controls, config) => {
                 if (statusUpdate.cs !== undefined) {
-                    currentSpeedDisplay.updateValue(statusUpdate.cs);
+                    currentSpeedDisplay.setValue(statusUpdate.cs);
                 }
             }
         };
@@ -331,7 +331,7 @@ class TimestampControlBinding extends ControlBinding {
         const defaults = {
             statusKeys: [],
             customStatusHandler: () => {
-                lastUpdateDisplay.updateValue(new Date().toLocaleTimeString());
+                lastUpdateDisplay.setValue(new Date().toLocaleTimeString());
             }
         };
         super({ ...defaults, ...config });
@@ -366,7 +366,7 @@ class SpeedControlBinding extends ControlBinding {
         // Wire up event handlers
         this.speedSlider.onChange((value) => {
             this.handleValueChange(value);
-            this.speedValueDisplay.updateValue(value.toFixed(1));
+            this.speedValueDisplay.setValue(value.toFixed(1));
         });
 
         this.presetButtons.onChange((value) => {
@@ -389,8 +389,8 @@ class SpeedControlBinding extends ControlBinding {
             // Update setpoint speed
             const speed = statusUpdate.sp;
             this.speedSlider.setValue(speed);
-            this.speedDisplay.updateValue(speed);
-            this.speedValueDisplay.updateValue(speed.toFixed(1));
+            this.speedDisplay.setValue(speed);
+            this.speedValueDisplay.setValue(speed.toFixed(1));
 
             // Update preset button active state
             this.updatePresetButtonState(speed);
@@ -484,7 +484,7 @@ class DirectionControlBinding extends ControlBinding {
             this.directionButtons.setActiveButton(clockwise ? 0 : 1);
 
             // Update direction display
-            this.directionDisplay.updateValue(clockwise ? 'Clockwise' : 'Counter-clockwise');
+            this.directionDisplay.setValue(clockwise ? 'Clockwise' : 'Counter-clockwise');
 
             // Apply color coding
             const color = clockwise ? '#3b82f6' : '#8b5cf6';
@@ -537,7 +537,7 @@ class VariableSpeedControlBinding extends ControlBinding {
             const enabled = statusUpdate.sve;
             this.toggle.setValue(enabled);
             this.updateVariableSpeedUI(enabled);
-            this.statusDisplay.updateValue(enabled ? 'ON' : 'OFF');
+            this.statusDisplay.setValue(enabled ? 'ON' : 'OFF');
 
             // Color coding
             const color = enabled ? '#10b981' : '#1f2937';
@@ -810,7 +810,7 @@ class StallGuardControlBinding extends ControlBinding {
         // Wire up event handler
         this.thresholdSlider.onChange((value) => {
             this.handleValueChange(value);
-            if (this.thresholdValueDisplay) this.thresholdValueDisplay.updateValue(value.toFixed(1));
+            if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(value.toFixed(1));
         });
     }
 
@@ -818,11 +818,11 @@ class StallGuardControlBinding extends ControlBinding {
         if (statusUpdate.sgt !== undefined) {
             const threshold = this.statusValueTransform(statusUpdate.sgt, 'sgt');
             this.thresholdSlider.setValue(threshold);
-            if (this.thresholdValueDisplay) this.thresholdValueDisplay.updateValue(threshold.toFixed(1));
+            if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(threshold.toFixed(1));
         }
         if (statusUpdate.sgr !== undefined) {
             const result = this.statusValueTransform(statusUpdate.sgr, 'sgr');
-            this.resultDisplay.updateValue(this.displayTransform(result, 'sgr'));
+            this.resultDisplay.setValue(this.displayTransform(result, 'sgr'));
             if (this.thresholdSlider.fillElement) {
                 this.thresholdSlider.updateFillWidth(result);
                 this.thresholdSlider.fillElement.style.opacity = "1.0";
@@ -869,11 +869,11 @@ class StallGuardControlBinding extends ControlBinding {
         if (statusUpdate.sgt !== undefined) {
             const threshold = this.statusValueTransform(statusUpdate.sgt, 'sgt');
             this.thresholdSlider.setValue(threshold);
-            if (this.thresholdValueDisplay) this.thresholdValueDisplay.updateValue(threshold.toFixed(1));
+            if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(threshold.toFixed(1));
         }
         if (statusUpdate.sgr !== undefined) {
             const result = this.statusValueTransform(statusUpdate.sgr, 'sgr');
-            this.resultDisplay.updateValue(this.displayTransform(result, 'sgr'));
+            this.resultDisplay.setValue(this.displayTransform(result, 'sgr'));
             if (this.thresholdSlider.fillElement) {
                 this.thresholdSlider.updateFillWidth(result);
                 this.thresholdSlider.fillElement.style.opacity = "1.0";
@@ -1091,7 +1091,7 @@ class StrengthControlBinding extends ControlBinding {
         // Wire up event handler
         this.strengthSlider.onChange((value) => {
             this.handleValueChange(value);
-            this.strengthValueDisplay.updateValue(value.toFixed(1));
+            this.strengthValueDisplay.setValue(value.toFixed(1));
         });
     }
 
@@ -1136,7 +1136,7 @@ class PhaseControlBinding extends ControlBinding {
         // Wire up event handler
         this.phaseSlider.onChange((value) => {
             this.handleValueChange(value);
-            this.phaseValueDisplay.updateValue(value.toFixed(1));
+            this.phaseValueDisplay.setValue(value.toFixed(1));
         });
     }
 
@@ -1144,7 +1144,7 @@ class PhaseControlBinding extends ControlBinding {
         if (statusUpdate.svp !== undefined) {
             const phaseDegrees = this.statusValueTransform(statusUpdate.svp, 'svp');
             this.phaseSlider.setValue(phaseDegrees);
-            this.phaseValueDisplay.updateValue(phaseDegrees.toFixed(1));
+            this.phaseValueDisplay.setValue(phaseDegrees.toFixed(1));
         }
     }
 }

@@ -196,22 +196,19 @@ class RadioGroupControl extends BaseControl {
     }
 
     bindEvents() {
-        this.buttons.forEach((button, index) => {
+        this.buttons.forEach((button) => {
             if (!button) return;
-            button.addEventListener('click', (e) => this.handleClick(e, index));
+            button.addEventListener('click', (e) => this.handleClick(e));
         });
     }
 
-    handleClick(event, buttonIndex) {
+    handleClick(event) {
         const button = event.target;
         this.setDisplayState(CONTROL_STATES.OUTDATED);
         this.buttons.forEach(btn => btn.classList.remove(this.activeClass));
         button.classList.add(this.activeClass);
-        if (this._onChange) {
-            const value = button.dataset.value !== undefined
-                ? button.dataset.value
-                : buttonIndex;
-            this._onChange(value);
+        if (this._onChange && button.dataset.value !== undefined) {
+            this._onChange(button.dataset.value);
         }
     }
 
@@ -323,14 +320,6 @@ class DisplayControl extends BaseControl {
     }
 
     setValue(value) {
-        this.updateValue(value);
-    }
-
-    getValue() {
-        return this.displays[0] ? this.displays[0].textContent : undefined;
-    }
-
-    updateValue(value) {
         this.displays.forEach(element => {
             if (element) {
                 element.textContent = value;
@@ -341,6 +330,10 @@ class DisplayControl extends BaseControl {
                 }
             }
         });
+    }
+
+    getValue() {
+        return this.displays[0] ? this.displays[0].textContent : undefined;
     }
 
     updateClass(className) {
