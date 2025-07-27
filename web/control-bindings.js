@@ -141,7 +141,13 @@ class AccelerationControlBinding extends ControlBinding {
 
         this.addControl(accelerationSlider);
         this.addControl(accelerationDisplay);
-            }
+
+        // Wire up event handler
+        this.accelerationSlider.onChange((value) => {
+            this.handleValueChange(value);
+            this.accelerationTimeValueDisplay.updateValue(value.toFixed(1));
+        });
+    }
 
     static MAX_SPEED_RPM = 30.0;
     static GEAR_RATIO = 10;
@@ -350,6 +356,18 @@ class SpeedControlBinding extends ControlBinding {
         this.addControl(speedSlider);
         this.addControl(speedDisplay);
         this.addControl(presetButtons);
+
+        // Wire up event handlers
+        this.speedSlider.onChange((value) => {
+            this.handleValueChange(value);
+            this.speedValueDisplay.updateValue(value.toFixed(1));
+        });
+
+        this.presetButtons.onChange((value, index, button) => {
+            const speed = parseFloat(button.dataset.speed);
+            this.speedSlider.setValue(speed);
+            this.handleValueChange(speed);
+        });
     }
 
     displayTransform(value) {
@@ -439,6 +457,12 @@ class DirectionControlBinding extends ControlBinding {
 
         this.addControl(directionButtons);
         this.addControl(directionDisplay);
+
+        // Wire up event handler
+        this.directionButtons.onChange((value, index, button) => {
+            const clockwise = index === 0; // First button is clockwise
+            this.setDirection(clockwise);
+        });
     }
 
     customStatusHandler(statusUpdate, controls) {
@@ -482,6 +506,19 @@ class VariableSpeedControlBinding extends ControlBinding {
         this.addControl(strengthSlider);
         this.addControl(phaseSlider);
         this.addControl(statusDisplay);
+
+        // Wire up event handlers
+        this.toggle.onChange((enabled) => {
+            this.setVariableSpeedEnabled(enabled);
+        });
+
+        this.strengthSlider.onChange((value) => {
+            this.handleValueChange(value);
+        });
+
+        this.phaseSlider.onChange((value) => {
+            this.handleValueChange(value);
+        });
     }
 
     customStatusHandler(statusUpdate, controls) {
@@ -618,6 +655,15 @@ class PowerDeliveryControlBinding extends ControlBinding {
         this.addControl(pdNegotiatedVoltageDisplay);
         this.addControl(pdCurrentVoltageDisplay);
 
+        // Wire up event handlers
+        this.negotiateBtn.onChange(() => {
+            this.negotiateVoltage();
+        });
+
+        this.autoNegotiateBtn.onChange(() => {
+            this.autoNegotiate();
+        });
+
         // State mapping for negotiation status
         this.negotiationStates = {
             0: { text: 'Idle', class: 'status-unknown' },
@@ -749,6 +795,12 @@ class StallGuardControlBinding extends ControlBinding {
         this.addControl(thresholdSlider);
         this.addControl(resultDisplay);
         if (thresholdValueDisplay) this.addControl(thresholdValueDisplay);
+
+        // Wire up event handler
+        this.thresholdSlider.onChange((value) => {
+            this.handleValueChange(value);
+            if (this.thresholdValueDisplay) this.thresholdValueDisplay.updateValue(value.toFixed(1));
+        });
     }
 
     customStatusHandler(statusUpdate, controls) {
@@ -848,6 +900,11 @@ class EmergencyStopControlBinding extends ControlBinding {
         this.emergencyStopBtn = emergencyStopBtn;
         this.speedSlider = speedSlider;
         this.addControl(emergencyStopBtn);
+
+        // Wire up event handler
+        this.emergencyStopBtn.onChange(() => {
+            this.handleValueChange(true);
+        });
     }
 
     async handleValueChange() {
@@ -883,6 +940,11 @@ class StatisticsResetControlBinding extends ControlBinding {
         });
         this.resetStatsBtn = resetStatsBtn;
         this.addControl(resetStatsBtn);
+
+        // Wire up event handler
+        this.resetStatsBtn.onChange(() => {
+            this.handleValueChange(true);
+        });
     }
 
     async handleValueChange() {
@@ -911,6 +973,11 @@ class StallResetControlBinding extends ControlBinding {
         });
         this.resetStallBtn = resetStallBtn;
         this.addControl(resetStallBtn);
+
+        // Wire up event handler
+        this.resetStallBtn.onChange(() => {
+            this.handleValueChange(true);
+        });
     }
 
     async handleValueChange() {
@@ -940,6 +1007,11 @@ class MotorControlBinding extends ControlBinding {
         });
         this.addControl(motorToggle);
         this.addControl(motorStatusDisplay);
+
+        // Wire up event handler
+        motorToggle.onChange((enabled) => {
+            this.handleValueChange(enabled);
+        });
     }
 }
 
@@ -959,6 +1031,12 @@ class CurrentControlBinding extends ControlBinding {
         this.addControl(currentSlider);
         this.addControl(currentDisplay);
         if (currentValueDisplay) this.addControl(currentValueDisplay);
+
+        // Wire up event handler
+        this.currentSlider.onChange((value) => {
+            this.handleValueChange(value);
+            this.currentValueDisplay.updateValue(value.toFixed(1));
+        });
     }
 
     customStatusHandler(statusUpdate, controls) {
@@ -985,6 +1063,12 @@ class StrengthControlBinding extends ControlBinding {
         this.strengthValueDisplay = strengthValueDisplay;
         this.addControl(strengthSlider);
         if (strengthValueDisplay) this.addControl(strengthValueDisplay);
+
+        // Wire up event handler
+        this.strengthSlider.onChange((value) => {
+            this.handleValueChange(value);
+            this.strengthValueDisplay.updateValue(value.toFixed(1));
+        });
     }
 
     customStatusHandler(statusUpdate, controls) {
@@ -1024,13 +1108,19 @@ class PhaseControlBinding extends ControlBinding {
         this.phaseValueDisplay = phaseValueDisplay;
         this.addControl(phaseSlider);
         if (phaseValueDisplay) this.addControl(phaseValueDisplay);
+
+        // Wire up event handler
+        this.phaseSlider.onChange((value) => {
+            this.handleValueChange(value);
+            this.phaseValueDisplay.updateValue(value.toFixed(1));
+        });
     }
 
     customStatusHandler(statusUpdate, controls) {
         if (statusUpdate.svp !== undefined) {
             const phaseDegrees = this.statusValueTransform(statusUpdate.svp, 'svp');
             this.phaseSlider.setValue(phaseDegrees);
-            if (this.phaseValueDisplay) this.phaseValueDisplay.updateValue(phaseDegrees.toFixed(1));
+            this.phaseValueDisplay.updateValue(phaseDegrees.toFixed(1));
         }
     }
 }
