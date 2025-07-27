@@ -421,27 +421,20 @@ class SpeedControlBinding extends ControlBinding {
         let closestDifference = Infinity;
 
         this.presetButtons.buttons.forEach(button => {
-            if (button && button.dataset.speed) {
-                const presetSpeed = parseFloat(button.dataset.speed);
-                const difference = Math.abs(presetSpeed - currentSpeed);
+if (button && button.dataset.value) {
+    const presetSpeed = parseFloat(button.dataset.value);
+    const difference = Math.abs(presetSpeed - currentSpeed);
 
-                if (difference < closestDifference && difference < 0.1) { // Within 0.1 RPM tolerance
-                    closestDifference = difference;
-                    closestButton = button;
-                }
-            }
+    if (difference < closestDifference && difference < 0.1) { // Within 0.1 RPM tolerance
+        closestDifference = difference;
+        closestButton = button;
+    }
+}
         });
 
-        // Update button states
-        this.presetButtons.buttons.forEach(button => {
-            if (button) {
-                if (button === closestButton) {
-                    button.classList.add(this.presetButtons.options.activeClass);
-                } else {
-                    button.classList.remove(this.presetButtons.options.activeClass);
-                }
-            }
-        });
+if (closestButton && closestButton.dataset.value !== undefined) {
+    this.presetButtons.setValue(closestButton.dataset.value);
+}
     }
 }
 

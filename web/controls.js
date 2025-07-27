@@ -214,11 +214,7 @@ class RadioGroupControl extends BaseControl {
 
     setValue(value) {
         this.buttons.forEach(btn => {
-            let btnValue = btn.dataset.value !== undefined ? btn.dataset.value : undefined;
-            if (btnValue !== undefined) {
-                const isActive = btnValue == value;
-                btn.classList.toggle(this.activeClass, isActive);
-            }
+            btn.classList.toggle(this.activeClass, btn.dataset.value == value);
         });
     }
 
