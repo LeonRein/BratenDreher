@@ -129,7 +129,7 @@ class ControlBinding {
  */
 
 class AccelerationControlBinding extends ControlBinding {
-    constructor(accelerationSlider, accelerationDisplay) {
+    constructor(accelerationSlider, accelerationDisplay, accelerationTimeValueDisplay) {
         super({
             commandType: 'sa',
             statusKeys: ['acc']
@@ -137,10 +137,11 @@ class AccelerationControlBinding extends ControlBinding {
 
         this.accelerationSlider = accelerationSlider;
         this.accelerationDisplay = accelerationDisplay;
+        this.accelerationTimeValueDisplay = accelerationTimeValueDisplay;
 
         this.addControl(accelerationSlider);
         this.addControl(accelerationDisplay);
-    }
+            }
 
     static MAX_SPEED_RPM = 30.0;
     static GEAR_RATIO = 10;
@@ -185,6 +186,15 @@ class AccelerationControlBinding extends ControlBinding {
     statusValueTransform(accelerationValue) {
         const timeSeconds = this.accelerationToTime(accelerationValue);
         return parseFloat(timeSeconds.toFixed(1));
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.acc !== undefined) {
+            const timeSeconds = this.statusValueTransform(statusUpdate.acc);
+            this.accelerationSlider.setValue(timeSeconds);
+            this.accelerationDisplay.updateValue(timeSeconds);
+            if (this.accelerationTimeValueDisplay) this.accelerationTimeValueDisplay.updateValue(timeSeconds.toFixed(1));
+        }
     }
 }
 
@@ -326,7 +336,7 @@ class TimestampControlBinding extends ControlBinding {
 
 // Speed control binding with preset buttons and fill indicator
 class SpeedControlBinding extends ControlBinding {
-    constructor(speedSlider, speedDisplay, presetButtons) {
+    constructor(speedSlider, speedDisplay, presetButtons, speedValueDisplay) {
         super({
             commandType: 'ss',
             statusKeys: ['sp', 'cs']
@@ -335,6 +345,7 @@ class SpeedControlBinding extends ControlBinding {
         this.speedSlider = speedSlider;
         this.speedDisplay = speedDisplay;
         this.presetButtons = presetButtons;
+        this.speedValueDisplay = speedValueDisplay;
 
         this.addControl(speedSlider);
         this.addControl(speedDisplay);
@@ -355,6 +366,7 @@ class SpeedControlBinding extends ControlBinding {
             const speed = statusUpdate.sp;
             this.speedSlider.setValue(speed);
             this.speedDisplay.updateValue(speed);
+            this.speedValueDisplay.updateValue(speed.toFixed(1));
 
             // Update preset button active state
             this.updatePresetButtonState(speed);
@@ -729,12 +741,41 @@ class PowerDeliveryControlBinding extends ControlBinding {
  * - Implements transformation functions as class methods
  */
 class StallGuardControlBinding extends ControlBinding {
-    constructor(thresholdSlider, resultDisplay) {
+    constructor(thresholdSlider, resultDisplay, thresholdValueDisplay) {
         super({ commandType: 'st', statusKeys: ['sgt', 'sgr'] });
         this.thresholdSlider = thresholdSlider;
         this.resultDisplay = resultDisplay;
+        this.thresholdValueDisplay = thresholdValueDisplay;
         this.addControl(thresholdSlider);
         this.addControl(resultDisplay);
+        if (thresholdValueDisplay) this.addControl(thresholdValueDisplay);
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.sgt !== undefined) {
+            const threshold = this.statusValueTransform(statusUpdate.sgt, 'sgt');
+            this.thresholdSlider.setValue(threshold);
+            if (this.thresholdValueDisplay) this.thresholdValueDisplay.updateValue(threshold.toFixed(1));
+        }
+        if (statusUpdate.sgr !== undefined) {
+            const result = this.statusValueTransform(statusUpdate.sgr, 'sgr');
+            this.resultDisplay.updateValue(this.displayTransform(result, 'sgr'));
+            if (this.thresholdSlider.fillElement) {
+                this.thresholdSlider.updateFillWidth(result);
+                this.thresholdSlider.fillElement.style.opacity = "1.0";
+            }
+            // Color fill based on stall threshold
+            const sliderPercent = parseFloat(this.thresholdSlider.slider.value); // invert slider
+            if (this.thresholdSlider.fillElement) {
+                if (result < sliderPercent * 0.8) {
+                    this.thresholdSlider.setFillColor('#10b981');
+                } else if (result < sliderPercent) {
+                    this.thresholdSlider.setFillColor('#f59e0b');
+                } else {
+                    this.thresholdSlider.setFillColor('#ef4444');
+                }
+            }
+        }
     }
 
     statusValueTransform(value, key) {
@@ -761,40 +802,31 @@ class StallGuardControlBinding extends ControlBinding {
         return Math.round((100 - percent) * 2.55);
     }
 
-    handleStatusUpdate(statusUpdate) {
-        // Use base class logic for relevant keys
-        const relevantKeys = this.statusKeys.filter(key => statusUpdate[key] !== undefined);
-        if (relevantKeys.length === 0) return;
-
-        // Update controls for each key
-        relevantKeys.forEach(key => {
-            const value = statusUpdate[key];
-            const transformedValue = this.statusValueTransform(value, key);
-
-        if (key === 'sgt') {
-            this.thresholdSlider.setValue(transformedValue);
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.sgt !== undefined) {
+            const threshold = this.statusValueTransform(statusUpdate.sgt, 'sgt');
+            this.thresholdSlider.setValue(threshold);
+            if (this.thresholdValueDisplay) this.thresholdValueDisplay.updateValue(threshold.toFixed(1));
         }
-
-        if (key === 'sgr') {
-            // Update result display and fill
-            this.resultDisplay.updateValue(this.displayTransform(transformedValue, 'sgr'));
+        if (statusUpdate.sgr !== undefined) {
+            const result = this.statusValueTransform(statusUpdate.sgr, 'sgr');
+            this.resultDisplay.updateValue(this.displayTransform(result, 'sgr'));
             if (this.thresholdSlider.fillElement) {
-                this.thresholdSlider.updateFillWidth(transformedValue);
+                this.thresholdSlider.updateFillWidth(result);
                 this.thresholdSlider.fillElement.style.opacity = "1.0";
             }
             // Color fill based on stall threshold
             const sliderPercent = parseFloat(this.thresholdSlider.slider.value); // invert slider
             if (this.thresholdSlider.fillElement) {
-                if (transformedValue < sliderPercent * 0.8) {
+                if (result < sliderPercent * 0.8) {
                     this.thresholdSlider.setFillColor('#10b981');
-                } else if (transformedValue < sliderPercent) {
+                } else if (result < sliderPercent) {
                     this.thresholdSlider.setFillColor('#f59e0b');
                 } else {
                     this.thresholdSlider.setFillColor('#ef4444');
                 }
             }
         }
-        });
     }
 
     hideFill() {
@@ -915,14 +947,26 @@ class MotorControlBinding extends ControlBinding {
  * Current control binding
  */
 class CurrentControlBinding extends ControlBinding {
-    constructor(currentSlider, currentDisplay) {
+    constructor(currentSlider, currentDisplay, currentValueDisplay) {
         super({
             commandType: 'sc',
             statusKeys: ['cur'],
             inputValueTransform: (value) => parseInt(value)
         });
+        this.currentSlider = currentSlider;
+        this.currentDisplay = currentDisplay;
+        this.currentValueDisplay = currentValueDisplay;
         this.addControl(currentSlider);
         this.addControl(currentDisplay);
+        if (currentValueDisplay) this.addControl(currentValueDisplay);
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.cur !== undefined) {
+            this.currentSlider.setValue(statusUpdate.cur);
+            this.currentDisplay.updateValue(statusUpdate.cur);
+            if (this.currentValueDisplay) this.currentValueDisplay.updateValue(statusUpdate.cur.toFixed(1));
+        }
     }
 }
 
@@ -930,14 +974,25 @@ class CurrentControlBinding extends ControlBinding {
  * Strength control binding
  */
 class StrengthControlBinding extends ControlBinding {
-    constructor(strengthSlider) {
+    constructor(strengthSlider, strengthValueDisplay) {
         super({
             commandType: 'sv',
             statusKeys: ['svs'],
             inputValueTransform: (value) => parseInt(value) / 100.0,
             statusValueTransform: (value) => Math.round(value * 100)
         });
+        this.strengthSlider = strengthSlider;
+        this.strengthValueDisplay = strengthValueDisplay;
         this.addControl(strengthSlider);
+        if (strengthValueDisplay) this.addControl(strengthValueDisplay);
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.svs !== undefined) {
+            const strength = this.statusValueTransform(statusUpdate.svs, 'svs');
+            this.strengthSlider.setValue(strength);
+            if (this.strengthValueDisplay) this.strengthValueDisplay.updateValue(strength.toFixed(1));
+        }
     }
 }
 
@@ -945,7 +1000,7 @@ class StrengthControlBinding extends ControlBinding {
  * Phase control binding
  */
 class PhaseControlBinding extends ControlBinding {
-    constructor(phaseSlider) {
+    constructor(phaseSlider, phaseValueDisplay) {
         super({
             commandType: 'svp',
             statusKeys: ['svp'],
@@ -965,6 +1020,17 @@ class PhaseControlBinding extends ControlBinding {
                 return phaseDegrees;
             }
         });
+        this.phaseSlider = phaseSlider;
+        this.phaseValueDisplay = phaseValueDisplay;
         this.addControl(phaseSlider);
+        if (phaseValueDisplay) this.addControl(phaseValueDisplay);
+    }
+
+    customStatusHandler(statusUpdate, controls) {
+        if (statusUpdate.svp !== undefined) {
+            const phaseDegrees = this.statusValueTransform(statusUpdate.svp, 'svp');
+            this.phaseSlider.setValue(phaseDegrees);
+            if (this.phaseValueDisplay) this.phaseValueDisplay.updateValue(phaseDegrees.toFixed(1));
+        }
     }
 }

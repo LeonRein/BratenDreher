@@ -93,14 +93,12 @@ class SliderControl extends BaseControl {
     constructor(sliderElement, options = {}) {
         super(sliderElement, options);
         this.slider = this.elements[0];
-        this.valueElement = options.valueElement;
-        this.fillElement = options.fillElement;
+                this.fillElement = options.fillElement;
         this.options = {
             debounceTime: 500,
             ...options
         };
-        if (this.valueElement) this.addAdditionalElement(this.valueElement, { applyDisabled: false });
-        if (this.fillElement) this.addAdditionalElement(this.fillElement, { applyOpacity: false, applyDisabled: false, applyColors: false, applyClasses: false });
+                if (this.fillElement) this.addAdditionalElement(this.fillElement, { applyOpacity: false, applyDisabled: false, applyColors: false, applyClasses: false });
         this.bindEvents();
     }
 
@@ -116,9 +114,8 @@ class SliderControl extends BaseControl {
 
     handleInput(event) {
         const rawValue = parseFloat(event.target.value);
-        const displayValue = rawValue.toString();
-        if (this.valueElement) this.valueElement.textContent = displayValue;
-        this.setDisplayState(CONTROL_STATES.OUTDATED);
+const displayValue = rawValue.toString();
+this.setDisplayState(CONTROL_STATES.OUTDATED);
         if (this.timer) clearTimeout(this.timer);
         this.timer = setTimeout(() => {
             if (this._onChange) this._onChange(rawValue);
@@ -126,10 +123,9 @@ class SliderControl extends BaseControl {
     }
 
     setValue(value) {
-        if (this.slider) {
-            this.slider.value = value;
-            if (this.valueElement) this.valueElement.textContent = value.toString();
-        }
+if (this.slider) {
+    this.slider.value = value;
+}
     }
 
     getValue() {

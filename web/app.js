@@ -105,10 +105,10 @@ class BratenDreherApp {
     initializeControls() {
         // Speed control
         this.controls.set('speedSlider', new SliderControl(this.speedSlider, {
-            valueElement: this.speedValue,
             fillElement: this.speedSliderFill,
             debounceTime: 500
         }));
+        this.controls.set('speedValueDisplay', new DisplayControl(this.speedValue));
 
         // Speed displays
         this.controls.set('setpointSpeedDisplay', new DisplayControl(this.setpointSpeed, {
@@ -170,9 +170,9 @@ class BratenDreherApp {
 
         // Current control
         this.controls.set('currentSlider', new SliderControl(this.currentSlider, {
-            valueElement: this.currentValue,
             debounceTime: 500
         }));
+        this.controls.set('currentValueDisplay', new DisplayControl(this.currentValue));
 
         this.controls.set('currentDisplay', new DisplayControl(this.currentCurrent, {
             formatter: (value) => `${value}%`,
@@ -186,9 +186,9 @@ class BratenDreherApp {
 
         // Acceleration control
         this.controls.set('accelerationSlider', new SliderControl(this.accelerationTimeSlider, {
-            valueElement: this.accelerationTimeValue,
             debounceTime: 500
         }));
+        this.controls.set('accelerationTimeValueDisplay', new DisplayControl(this.accelerationTimeValue));
 
         this.controls.set('accelerationDisplay', new DisplayControl(this.currentAcceleration, {
             formatter: (timeSeconds) => `${timeSeconds.toFixed(1)}s to max`,
@@ -204,13 +204,13 @@ class BratenDreherApp {
         const variableSpeedToggle = new ToggleControl(this.variableSpeedToggle);
         const variableSpeedStatusDisplay = new DisplayControl(this.variableSpeedStatus);
         const strengthSlider = new SliderControl(this.strengthSlider, {
-            valueElement: this.strengthValue,
             debounceTime: 500
         });
         const phaseSlider = new SliderControl(this.phaseSlider, {
-            valueElement: this.phaseValue,
             debounceTime: 500
         });
+        this.controls.set('strengthValueDisplay', new DisplayControl(this.strengthValue));
+        this.controls.set('phaseValueDisplay', new DisplayControl(this.phaseValue));
 
         // Variable speed graph control
         this.variableSpeedGraphCanvas = document.getElementById('variableSpeedGraph');
@@ -233,10 +233,10 @@ class BratenDreherApp {
 
         // StallGuard controls
         this.controls.set('stallguardSlider', new SliderControl(this.stallguardThresholdSlider, {
-            valueElement: this.stallguardThresholdValue,
             fillElement: this.stallguardSliderFill,
             debounceTime: 300
         }));
+        this.controls.set('stallguardThresholdValueDisplay', new DisplayControl(this.stallguardThresholdValue));
 
         this.controls.set('stallguardResultDisplay', new DisplayControl(this.stallguardResultValue));
 
@@ -298,11 +298,12 @@ class BratenDreherApp {
 
     initializeBindings() {
         // Speed control binding
-        this.bindings.set('speed', new SpeedControlBinding(
-            this.controls.get('speedSlider'),
-            this.controls.get('setpointSpeedDisplay'),
-            this.controls.get('presetButtons')
-        ));
+this.bindings.set('speed', new SpeedControlBinding(
+    this.controls.get('speedSlider'),
+    this.controls.get('setpointSpeedDisplay'),
+    this.controls.get('presetButtons'),
+    this.controls.get('speedValueDisplay')
+));
 
         // Direction control binding
         this.bindings.set('direction', new DirectionControlBinding(
@@ -335,15 +336,17 @@ class BratenDreherApp {
         ));
 
         // Current control binding
-        this.bindings.set('current', new CurrentControlBinding(
-            this.controls.get('currentSlider'),
-            this.controls.get('currentDisplay')
-        ));
+this.bindings.set('current', new CurrentControlBinding(
+    this.controls.get('currentSlider'),
+    this.controls.get('currentDisplay'),
+    this.controls.get('currentValueDisplay')
+));
 
-        this.bindings.set('acceleration', new AccelerationControlBinding(
-            this.controls.get('accelerationSlider'),
-            this.controls.get('accelerationDisplay')
-        ));
+this.bindings.set('acceleration', new AccelerationControlBinding(
+    this.controls.get('accelerationSlider'),
+    this.controls.get('accelerationDisplay'),
+    this.controls.get('accelerationTimeValueDisplay')
+));
 
         // Variable speed binding
         this.bindings.set('variableSpeed', new VariableSpeedControlBinding(
@@ -360,20 +363,23 @@ class BratenDreherApp {
         ));
 
         // Strength binding
-        this.bindings.set('strength', new StrengthControlBinding(
-            this.controls.get('strengthSlider')
-        ));
+this.bindings.set('strength', new StrengthControlBinding(
+    this.controls.get('strengthSlider'),
+    this.controls.get('strengthValueDisplay')
+));
 
         // Phase binding
-        this.bindings.set('phase', new PhaseControlBinding(
-            this.controls.get('phaseSlider')
-        ));
+this.bindings.set('phase', new PhaseControlBinding(
+    this.controls.get('phaseSlider'),
+    this.controls.get('phaseValueDisplay')
+));
 
         // StallGuard binding
-        this.bindings.set('stallguard', new StallGuardControlBinding(
-            this.controls.get('stallguardSlider'),
-            this.controls.get('stallguardResultDisplay')
-        ));
+this.bindings.set('stallguard', new StallGuardControlBinding(
+    this.controls.get('stallguardSlider'),
+    this.controls.get('stallguardResultDisplay'),
+    this.controls.get('stallguardThresholdValueDisplay')
+));
 
         // Power delivery binding
         this.bindings.set('powerDelivery', new PowerDeliveryControlBinding(
@@ -429,6 +435,7 @@ class BratenDreherApp {
         // Speed slider event
         this.controls.get('speedSlider').onChange((value) => {
             this.bindings.get('speed').handleValueChange(value);
+            this.controls.get('speedValueDisplay').updateValue(value.toFixed(1));
         });
 
         // Preset button events
@@ -452,11 +459,13 @@ class BratenDreherApp {
         // Current slider event
         this.controls.get('currentSlider').onChange((value) => {
             this.bindings.get('current').handleValueChange(value);
+            this.controls.get('currentValueDisplay').updateValue(value.toFixed(1));
         });
 
         // Acceleration slider event
         this.controls.get('accelerationSlider').onChange((value) => {
             this.bindings.get('acceleration').handleValueChange(value);
+            this.controls.get('accelerationTimeValueDisplay').updateValue(value.toFixed(1));
         });
 
         // Variable speed toggle event
@@ -467,16 +476,19 @@ class BratenDreherApp {
         // Strength slider event
         this.controls.get('strengthSlider').onChange((value) => {
             this.bindings.get('strength').handleValueChange(value);
+            this.controls.get('strengthValueDisplay').updateValue(value.toFixed(1));
         });
 
         // Phase slider event
         this.controls.get('phaseSlider').onChange((value) => {
             this.bindings.get('phase').handleValueChange(value);
+            this.controls.get('phaseValueDisplay').updateValue(value.toFixed(1));
         });
 
         // StallGuard slider event
         this.controls.get('stallguardSlider').onChange((value) => {
             this.bindings.get('stallguard').handleValueChange(value);
+            this.controls.get('stallguardThresholdValueDisplay').updateValue(value.toFixed(1));
         });
 
         // Power delivery events
