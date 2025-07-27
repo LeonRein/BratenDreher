@@ -98,24 +98,10 @@ class ControlBinding {
             const transformedValue = this.statusValueTransform(value, key);
 
             // Update controls based on their type
-            this.controls.forEach(control => {
-                this.updateControlFromStatus(control, key, transformedValue);
+            this.controls.forEach(control => {        
+                control.setValue(transformedValue);
             });
         });
-    }
-
-    updateControlFromStatus(control, statusKey, value) {
-        if (control instanceof SliderControl) {
-            control.setValue(value);
-        } else if (control instanceof ToggleControl) {
-            control.setValue(value);
-        } else if (control instanceof SelectControl) {
-            control.setValue(value);
-        } else if (control instanceof DisplayControl) {
-            control.setValue(this.displayTransform(value, statusKey));
-} else if (control instanceof ButtonControl) {
-    control.setValue(value);
-}
     }
 }
 
@@ -134,9 +120,9 @@ class AccelerationControlBinding extends ControlBinding {
         if (accelerationDisplay) {
             accelerationDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}s to max`;
         }
-if (accelerationTimeValueDisplay) {
-    accelerationTimeValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}s`;
-}
+        if (accelerationTimeValueDisplay) {
+            accelerationTimeValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}s`;
+        }
 
         this.accelerationSlider = accelerationSlider;
         this.accelerationDisplay = accelerationDisplay;
@@ -384,9 +370,9 @@ class SpeedControlBinding extends ControlBinding {
         if (speedDisplay) {
             speedDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} RPM`;
         }
-if (speedValueDisplay) {
-    speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} RPM`;
-}
+        if (speedValueDisplay) {
+            speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} RPM`;
+        }
 
         this.speedSlider = speedSlider;
         this.speedDisplay = speedDisplay;
@@ -460,20 +446,20 @@ if (speedValueDisplay) {
         let closestDifference = Infinity;
 
         this.presetButtons.buttons.forEach(button => {
-if (button && button.dataset.value) {
-    const presetSpeed = parseFloat(button.dataset.value);
-    const difference = Math.abs(presetSpeed - currentSpeed);
+            if (button && button.dataset.value) {
+                const presetSpeed = parseFloat(button.dataset.value);
+                const difference = Math.abs(presetSpeed - currentSpeed);
 
-    if (difference < closestDifference && difference < 0.1) { // Within 0.1 RPM tolerance
-        closestDifference = difference;
-        closestButton = button;
-    }
-}
+                if (difference < closestDifference && difference < 0.1) { // Within 0.1 RPM tolerance
+                    closestDifference = difference;
+                    closestButton = button;
+                }
+            }
         });
 
-if (closestButton && closestButton.dataset.value !== undefined) {
-    this.presetButtons.setValue(closestButton.dataset.value);
-}
+        if (closestButton && closestButton.dataset.value !== undefined) {
+            this.presetButtons.setValue(closestButton.dataset.value);
+        }
     }
 }
 
@@ -800,18 +786,18 @@ class PowerDeliveryControlBinding extends ControlBinding {
         }
 
         if (statusUpdate.pdnv !== undefined) {
-if (this.pdNegotiatedVoltageDisplay && this.pdNegotiatedVoltageDisplay.displays && this.pdNegotiatedVoltageDisplay.displays[0]) {
-    this.pdNegotiatedVoltageDisplay.displays[0].textContent = statusUpdate.pdnv > 0 ?
-        `${statusUpdate.pdnv} V` : '-';
-    this.pdNegotiatedVoltageDisplay.displays[0].style.opacity = '1.0';
-}
+            if (this.pdNegotiatedVoltageDisplay && this.pdNegotiatedVoltageDisplay.displays && this.pdNegotiatedVoltageDisplay.displays[0]) {
+                this.pdNegotiatedVoltageDisplay.displays[0].textContent = statusUpdate.pdnv > 0 ?
+                    `${statusUpdate.pdnv} V` : '-';
+                this.pdNegotiatedVoltageDisplay.displays[0].style.opacity = '1.0';
+            }
         }
 
         if (statusUpdate.pdcv !== undefined) {
-if (this.pdCurrentVoltageDisplay && this.pdCurrentVoltageDisplay.displays && this.pdCurrentVoltageDisplay.displays[0]) {
-    this.pdCurrentVoltageDisplay.displays[0].textContent = `${statusUpdate.pdcv.toFixed(1)} V`;
-    this.pdCurrentVoltageDisplay.displays[0].style.opacity = '1.0';
-}
+            if (this.pdCurrentVoltageDisplay && this.pdCurrentVoltageDisplay.displays && this.pdCurrentVoltageDisplay.displays[0]) {
+                this.pdCurrentVoltageDisplay.displays[0].textContent = `${statusUpdate.pdcv.toFixed(1)} V`;
+                this.pdCurrentVoltageDisplay.displays[0].style.opacity = '1.0';
+            }
         }
     }
 }
@@ -880,12 +866,12 @@ class StallGuardControlBinding extends ControlBinding {
         return value;
     }
 
-displayTransform(value, key) {
-    if (key === 'sgt' || key === 'sgr') {
-        return `${value.toFixed(1)}%`;
+    displayTransform(value, key) {
+        if (key === 'sgt' || key === 'sgr') {
+            return `${value.toFixed(1)}%`;
+        }
+        return value.toString();
     }
-    return value.toString();
-}
 
     inputValueTransform(percent) {
         // Invert percent for backend value (0-100 becomes 100-0)
@@ -1081,9 +1067,9 @@ class CurrentControlBinding extends ControlBinding {
         if (currentDisplay) {
             currentDisplay.displayTransform = (value) => `${Number(value)}%`;
         }
-if (currentValueDisplay) {
-    currentValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}%`;
-}
+        if (currentValueDisplay) {
+            currentValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}%`;
+        }
 
         this.currentSlider = currentSlider;
         this.currentDisplay = currentDisplay;
@@ -1121,9 +1107,9 @@ class StrengthControlBinding extends ControlBinding {
         });
 
         // Set displayTransform for strength value display
-if (strengthValueDisplay) {
-    strengthValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}%`;
-}
+        if (strengthValueDisplay) {
+            strengthValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}%`;
+        }
 
         this.strengthSlider = strengthSlider;
         this.strengthValueDisplay = strengthValueDisplay;
@@ -1172,9 +1158,9 @@ class PhaseControlBinding extends ControlBinding {
         });
 
         // Set displayTransform for phase value display
-if (phaseValueDisplay) {
-    phaseValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}°`;
-}
+        if (phaseValueDisplay) {
+            phaseValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}°`;
+        }
 
         this.phaseSlider = phaseSlider;
         this.phaseValueDisplay = phaseValueDisplay;
