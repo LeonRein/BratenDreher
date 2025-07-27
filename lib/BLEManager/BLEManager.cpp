@@ -147,10 +147,6 @@ void BLEManager::handleCommand(const std::string& command) {
         return;
     }
 
-    //print the json document for debugging
-    dbg_println("Received command JSON:");
-    serializeJsonPretty(doc, Serial);
-
     const char* type = doc["type"];
     if (!type) {
         dbg_println("Missing command type");
