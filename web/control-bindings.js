@@ -758,19 +758,7 @@ this.thresholdSlider = thresholdSlider;
 this.resultDisplay = resultDisplay;
 this.thresholdValueDisplay = thresholdValueDisplay;
 
-if (thresholdSlider) {
-    thresholdSlider.options.colorizer = (value) => {
-        // Replicate previous fill color logic
-        const sliderPercent = parseFloat(thresholdSlider.slider.value);
-        if (value < sliderPercent * 0.8) {
-            return '#10b981'; // green
-        } else if (value < sliderPercent) {
-            return '#f59e0b'; // yellow
-        } else {
-            return '#ef4444'; // red
-        }
-    };
-}
+/* No colorizer for slider fill */
 
 this.addControl(thresholdSlider);
 this.addControl(resultDisplay);

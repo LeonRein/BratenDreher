@@ -132,11 +132,6 @@ class SliderControl extends BaseControl {
         if (this.fillElement) {
             this.fillElement.style.width = `${percentage}%`;
             this.fillElement.style.opacity = '1';
-            if (this.options.colorizer && this.slider) {
-                const value = parseFloat(this.slider.value);
-                const color = this.options.colorizer(value);
-                if (color) this.fillElement.style.background = color;
-            }
         }
     }
 
