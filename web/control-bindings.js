@@ -439,7 +439,7 @@ class SpeedControlBinding extends ControlBinding {
                 const presetSpeed = parseFloat(button.dataset.value);
                 const difference = Math.abs(presetSpeed - currentSpeed);
 
-                if (difference < closestDifference && difference < 0.1) { // Within 0.1 RPM tolerance
+                if (difference < closestDifference && difference < 0.11) { // Within 0.11 RPM tolerance
                     closestDifference = difference;
                     closestButton = button;
                 }
@@ -448,6 +448,10 @@ class SpeedControlBinding extends ControlBinding {
 
         if (closestButton && closestButton.dataset.value !== undefined) {
             this.presetButtons.setValue(closestButton.dataset.value);
+        }
+        else {
+            // No close preset found, reset to default state
+            this.presetButtons.setValue(null);
         }
     }
 }
