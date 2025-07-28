@@ -4,11 +4,9 @@
  */
 class ControlBinding {
     constructor({
-        commandType = null,
         statusKeys = [],
         additionalParams = {}
     } = {}) {
-        this.commandType = commandType;
         this.statusKeys = statusKeys;
         this.additionalParams = additionalParams;
 
@@ -40,8 +38,8 @@ class ControlBinding {
     }
 
     // Handle value changes from UI controls
-    async handleValueChange(value) {
-        if (!this.commandManager || !this.commandType) {
+    async handleValueChange(value, commandType) {
+        if (!this.commandManager || !commandType) {
             console.warn('ControlBinding: No command manager or command type configured');
             return false;
         }
@@ -54,7 +52,7 @@ class ControlBinding {
         // Transform value and send command
         const transformedValue = this.inputValueTransform(value);
         const success = await this.commandManager.sendCommand(
-            this.commandType,
+            commandType,
             transformedValue,
             this.additionalParams || {}
         );
@@ -98,7 +96,6 @@ class ControlBinding {
 class AccelerationControlBinding extends ControlBinding {
     constructor(accelerationSlider, accelerationDisplay, accelerationTimeValueDisplay) {
         super({
-            commandType: 'sa',
             statusKeys: ['acc']
         });
 
@@ -120,7 +117,7 @@ class AccelerationControlBinding extends ControlBinding {
         // Wire up event handler
         this.accelerationSlider.onChange((value) => {
             this.accelerationTimeValueDisplay.setValue(value);
-            this.handleValueChange(value);
+            this.handleValueChange(value, 'sa');
         });
     }
 
@@ -344,7 +341,6 @@ class SpeedControlBinding extends ControlBinding {
      */
     constructor(speedSlider, speedDisplay, presetButtons, speedValueDisplay) {
         super({
-            commandType: 'ss',
             statusKeys: ['sp', 'cs']
         });
 
@@ -364,13 +360,13 @@ class SpeedControlBinding extends ControlBinding {
         // Wire up event handlers
         this.speedSlider.onChange((value) => {
             this.speedValueDisplay.setValue(value);
-            this.handleValueChange(value);
+            this.handleValueChange(value, 'ss');
         });
 
         this.presetButtons.onChange((value) => {
             const speed = parseFloat(value);
             this.speedSlider.setValue(speed);
-            this.handleValueChange(speed);
+            this.handleValueChange(speed, 'ss');
         });
     }
 
@@ -443,7 +439,6 @@ class DirectionControlBinding extends ControlBinding {
      */
     constructor(directionButtons, directionDisplay) {
         super({
-            commandType: 'sd',
             statusKeys: ['dir']
         });
 
@@ -457,7 +452,7 @@ class DirectionControlBinding extends ControlBinding {
         this.directionButtons.onChange((value) => {
             // value is either "cw" or "ccw"
             const clockwise = value === "cw";
-            this.setDirection(clockwise);
+            this.handleValueChange(clockwise, 'sd');
         });
     }
 
@@ -481,7 +476,7 @@ class DirectionControlBinding extends ControlBinding {
 // Variable speed control binding with UI coordination
 class VariableSpeedControlBinding extends ControlBinding {
     constructor(toggle, statusDisplay, controlsContainer) {
-        super({ commandType: null, statusKeys: ['sve'] });
+        super({ statusKeys: ['sve'] });
         this.addControl(toggle);
         this.addControl(statusDisplay);
         this.toggle = toggle;
@@ -489,7 +484,7 @@ class VariableSpeedControlBinding extends ControlBinding {
         this.controlsContainer = controlsContainer;
 
         toggle.onChange((enabled) => {
-            this.setVariableSpeedEnabled(enabled);
+            this.handleValueChange(enabled, enabled ? 'esv' : 'dsv');
         });
     }
     customStatusHandler(transformedValue, key) {
@@ -504,7 +499,7 @@ class VariableSpeedControlBinding extends ControlBinding {
             });
         }
     }
-    async setVariableSpeedEnabled(enabled) {
+    async handleValueChange(enabled) {
         const commandType = enabled ? 'esv' : 'dsv';
         this.toggle.setValue(enabled);
         this.updateVariableSpeedUI(enabled);
@@ -574,7 +569,6 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
 class PowerDeliveryControlBinding extends ControlBinding {
     constructor(voltageSelect, negotiateBtn, autoNegotiateBtn, pdStatusDisplay, pdPowerGoodDisplay, pdNegotiatedVoltageDisplay, pdCurrentVoltageDisplay) {
         super({
-            commandType: null, // Multiple command types
             statusKeys: ['pdns', 'pdpg', 'pdnv', 'pdcv']
         });
 
@@ -597,11 +591,11 @@ class PowerDeliveryControlBinding extends ControlBinding {
 
         // Wire up event handlers
         this.negotiateBtn.onChange(() => {
-            this.negotiateVoltage();
+            this.handleValueChange(parseInt(this.voltageSelect.getValue()), 'stv');
         });
 
         this.autoNegotiateBtn.onChange(() => {
-            this.autoNegotiate();
+            this.handleValueChange(1, 'anh');
         });
 
         // State mapping for negotiation status
@@ -665,21 +659,24 @@ class PowerDeliveryControlBinding extends ControlBinding {
         }
     }
 
-    async negotiateVoltage() {
-        const selectedVoltage = parseInt(this.voltageSelect.getValue());
-        if (selectedVoltage && this.commandManager) {
-            this.showNegotiationStarted(false);
-            return await this.commandManager.sendCommand('stv', selectedVoltage);
+    async handleValueChange(action) {
+        if (action && action.type === 'negotiate') {
+            const selectedVoltage = parseInt(this.voltageSelect.getValue());
+            if (selectedVoltage && this.commandManager) {
+                this.showNegotiationStarted(false);
+                return await this.commandManager.sendCommand('stv', selectedVoltage);
+            }
+            return false;
         }
-        return false;
-    }
-
-    async autoNegotiate() {
-        if (this.commandManager) {
-            this.showNegotiationStarted(true);
-            return await this.commandManager.sendCommand('anh', 1);
+        if (action && action.type === 'autoNegotiate') {
+            if (this.commandManager) {
+                this.showNegotiationStarted(true);
+                return await this.commandManager.sendCommand('anh', 1);
+            }
+            return false;
         }
-        return false;
+        // fallback to base implementation if needed
+        return super.handleValueChange(action);
     }
 
     showNegotiationStarted(isAutoNegotiation = false) {
@@ -725,7 +722,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
  */
 class StallGuardControlBinding extends ControlBinding {
     constructor(thresholdSlider, resultDisplay, thresholdValueDisplay) {
-        super({ commandType: 'st', statusKeys: ['sgt', 'sgr'] });
+        super({ statusKeys: ['sgt', 'sgr'] });
         this.thresholdSlider = thresholdSlider;
         this.resultDisplay = resultDisplay;
         this.thresholdValueDisplay = thresholdValueDisplay;
@@ -736,7 +733,7 @@ class StallGuardControlBinding extends ControlBinding {
         // Wire up event handler
         this.thresholdSlider.onChange((value) => {
             this.thresholdValueDisplay.setValue(value);
-            this.handleValueChange(value);
+            this.handleValueChange(value, 'st');
         });
     }
 
@@ -831,7 +828,6 @@ class EmergencyStopControlBinding extends ControlBinding {
      */
     constructor(emergencyStopBtn, speedSlider = null, config = {}) {
         super({
-            commandType: 'es',
             ...config
         });
         this.emergencyStopBtn = emergencyStopBtn;
@@ -840,7 +836,7 @@ class EmergencyStopControlBinding extends ControlBinding {
 
         // Wire up event handler
         this.emergencyStopBtn.onChange(() => {
-            this.handleValueChange(true);
+            this.handleValueChange(true, 'es');
         });
     }
 
@@ -876,7 +872,6 @@ class StatisticsResetControlBinding extends ControlBinding {
      */
     constructor(resetStatsBtn, config = {}) {
         super({
-            commandType: 'rc',
             ...config
         });
         this.resetStatsBtn = resetStatsBtn;
@@ -884,7 +879,7 @@ class StatisticsResetControlBinding extends ControlBinding {
 
         // Wire up event handler
         this.resetStatsBtn.onChange(() => {
-            this.handleValueChange(true);
+            this.handleValueChange(true, 'rc');
         });
     }
 
@@ -913,7 +908,6 @@ class StallResetControlBinding extends ControlBinding {
      */
     constructor(resetStallBtn, config = {}) {
         super({
-            commandType: 'rs',
             ...config
         });
         this.resetStallBtn = resetStallBtn;
@@ -921,7 +915,7 @@ class StallResetControlBinding extends ControlBinding {
 
         // Wire up event handler
         this.resetStallBtn.onChange(() => {
-            this.handleValueChange(true);
+            this.handleValueChange(true, 'rs');
         });
     }
 
@@ -946,7 +940,6 @@ class StallResetControlBinding extends ControlBinding {
 class MotorControlBinding extends ControlBinding {
     constructor(motorToggle, motorStatusDisplay) {
         super({
-            commandType: 'en',
             statusKeys: ['en'],
             debounceTime: 0
         });
@@ -955,7 +948,7 @@ class MotorControlBinding extends ControlBinding {
 
         // Wire up event handler
         motorToggle.onChange((enabled) => {
-            this.handleValueChange(enabled);
+            this.handleValueChange(enabled, 'en');
         });
     }
 }
@@ -966,7 +959,6 @@ class MotorControlBinding extends ControlBinding {
 class CurrentControlBinding extends ControlBinding {
     constructor(currentSlider, currentDisplay, currentValueDisplay) {
         super({
-            commandType: 'sc',
             statusKeys: ['cur'],
             inputValueTransform: (value) => parseInt(value)
         });
@@ -985,7 +977,7 @@ class CurrentControlBinding extends ControlBinding {
         // Wire up event handler
         this.currentSlider.onChange((value) => {
             this.currentValueDisplay.setValue(value);
-            this.handleValueChange(value);
+            this.handleValueChange(value, 'sc');
         });
     }
 
@@ -1003,7 +995,7 @@ class CurrentControlBinding extends ControlBinding {
  */
 class StrengthControlBinding extends ControlBinding {
     constructor(strengthSlider, strengthValueDisplay, variableSpeedActive = false) {
-        super({ commandType: 'sv', statusKeys: ['svs'] });
+        super({ statusKeys: ['svs'] });
         if (!variableSpeedActive) {
             this.addControl(strengthSlider);
             if (strengthValueDisplay) this.addControl(strengthValueDisplay);
@@ -1016,7 +1008,7 @@ class StrengthControlBinding extends ControlBinding {
         if (!variableSpeedActive) {
             strengthSlider.onChange((value) => {
                 strengthValueDisplay.setValue(value);
-                this.handleValueChange(value);
+                this.handleValueChange(value, 'sv');
             });
         }
     }
@@ -1030,7 +1022,7 @@ class StrengthControlBinding extends ControlBinding {
  */
 class PhaseControlBinding extends ControlBinding {
     constructor(phaseSlider, phaseValueDisplay, variableSpeedActive = false) {
-        super({ commandType: 'svp', statusKeys: ['svp'] });
+        super({ statusKeys: ['svp'] });
         if (!variableSpeedActive) {
             this.addControl(phaseSlider);
             if (phaseValueDisplay) this.addControl(phaseValueDisplay);
@@ -1043,7 +1035,7 @@ class PhaseControlBinding extends ControlBinding {
         if (!variableSpeedActive) {
             phaseSlider.onChange((value) => {
                 phaseValueDisplay.setValue(value);
-                this.handleValueChange(value);
+                this.handleValueChange(value, 'svp');
             });
         }
     }
