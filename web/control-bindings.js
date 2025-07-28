@@ -500,11 +500,9 @@ class DirectionControlBinding extends ControlBinding {
 // Variable speed control binding with UI coordination
 class VariableSpeedControlBinding extends ControlBinding {
     constructor(toggle, statusDisplay, controlsContainer) {
-        super({
-            debounceTime: 0
-        });
+        super({});
         if (toggle) this.addControl('sve', toggle);
-        if (statusDisplay) this.addControl('sve', statfusDisplay);
+        if (statusDisplay) this.addControl('sve', statusDisplay);
         this.toggle = toggle;
         this.statusDisplay = statusDisplay;
         this.controlsContainer = controlsContainer;
@@ -554,17 +552,17 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
      * @param {GraphControl} graphControl
      */
     constructor(graphControl) {
-        super({
-        });
+        super({});
 
         this.graphControl = graphControl;
-
-        this.addControl(graphControl);
-
-        // Buffer for last sample values
         this.lastCa = null;
         this.lastCs = null;
         this.lastSp = null;
+
+        // Register graphControl for relevant status keys
+        this.addControl('ca', graphControl);
+        this.addControl('cs', graphControl);
+        this.addControl('sp', graphControl);
     }
 
     statusValueTransform(value, key) {
@@ -580,11 +578,12 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
     }
 
     customStatusHandler(transformedValue, key) {
-        // Store latest value for each key
+        // Buffer latest values for each key
         if (key === 'ca') this.lastCa = transformedValue;
         if (key === 'cs') this.lastCs = transformedValue;
         if (key === 'sp') this.lastSp = transformedValue;
 
+        // Add sample to graph when all are available
         if (this.lastCa !== null && this.lastCs !== null && this.lastSp !== null) {
             this.graphControl.addSample(this.lastCa, this.lastCs, this.lastSp);
         }
