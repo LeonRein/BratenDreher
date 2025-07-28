@@ -387,6 +387,7 @@ class SpeedControlBinding extends ControlBinding {
         this.addControl(speedSlider);
         this.addControl(speedDisplay);
         this.addControl(presetButtons);
+        this.addControl(speedValueDisplay);
 
         // Wire up event handlers
         this.speedSlider.onChange((value) => {
