@@ -11,7 +11,7 @@ class ControlBinding {
         this.debounceTime = debounceTime;
         this.debounceTime = debounceTime;
 
-        this.controls = [];
+        this.statusKeyToControls = {};
         this.commandManager = null;
         this._debounceTimer = null;
         this._lastDebounceArgs = null;
@@ -26,8 +26,9 @@ class ControlBinding {
     }
 
     customStatusHandler(transformedValue, key) {
-        // Default: update all controls with transformed value
-        this.controls.forEach(control => {
+        // Default: update only controls associated with the key
+        const controls = this.statusKeyToControls[key] || [];
+        controls.forEach(control => {
             control.setValue(transformedValue);
         });
     }
@@ -36,8 +37,11 @@ class ControlBinding {
         this.commandManager = commandManager;
     }
 
-    addControl(control) {
-        this.controls.push(control);
+    addControl(statusKey, control) {
+        if (!this.statusKeyToControls[statusKey]) {
+            this.statusKeyToControls[statusKey] = [];
+        }
+        this.statusKeyToControls[statusKey].push(control);
     }
 
     // Handle value changes from UI controls
@@ -48,7 +52,7 @@ class ControlBinding {
         }
 
         // Set all controls to outdated state
-        this.controls.forEach(control => {
+        Object.values(this.statusKeyToControls).flat().forEach(control => {
             control.setDisplayState(CONTROL_STATES.OUTDATED);
         });
 
@@ -80,7 +84,7 @@ class ControlBinding {
                 transformedValue
             );
             if (success) {
-                this.controls.forEach(control => {
+                Object.values(this.statusKeyToControls).flat().forEach(control => {
                     control.setDisplayState(CONTROL_STATES.RETRY);
                 });
             }
@@ -98,11 +102,11 @@ class ControlBinding {
             return;
         }
 
-        this.controls.forEach(control => {
-            control.setDisplayState(CONTROL_STATES.VALID);
-        });
-
         relevantKeys.forEach(key => {
+            const controls = this.statusKeyToControls[key] || [];
+            controls.forEach(control => {
+                control.setDisplayState(CONTROL_STATES.VALID);
+            });
             const value = statusUpdate[key];
             const transformedValue = this.statusValueTransform(value, key);
             this.customStatusHandler(transformedValue, key);
@@ -139,8 +143,9 @@ class AccelerationControlBinding extends ControlBinding {
         this.accelerationDisplay = accelerationDisplay;
         this.accelerationTimeValueDisplay = accelerationTimeValueDisplay;
 
-        this.addControl(accelerationSlider);
-        this.addControl(accelerationDisplay);
+        this.addControl('acc', accelerationSlider);
+        this.addControl('acc', accelerationDisplay);
+        if (accelerationTimeValueDisplay) this.addControl('acc', accelerationTimeValueDisplay);
 
         // Wire up event handler
         this.accelerationSlider.onChange((value) => {
@@ -228,9 +233,9 @@ class StatisticsControlBinding extends ControlBinding {
         this.latestRevolutions = 0;
         this.latestRuntimeMs = 0;
 
-        this.addControl(totalRevolutionsDisplay);
-        this.addControl(runTimeDisplay);
-        this.addControl(avgSpeedDisplay);
+        this.addControl('tr', totalRevolutionsDisplay);
+        this.addControl('rt', runTimeDisplay);
+        this.addControl('tr', avgSpeedDisplay);
     }
 
     statusValueTransform(value) {
@@ -288,10 +293,10 @@ class TmcStatusControlBinding extends ControlBinding {
         this.stallStatusDisplay = stallStatusDisplay;
         this.stallCountDisplay = stallCountDisplay;
 
-        this.addControl(tmcStatusDisplay);
-        this.addControl(tmcTempDisplay);
-        this.addControl(stallStatusDisplay);
-        this.addControl(stallCountDisplay);
+        if (tmcStatusDisplay) this.addControl('tmcst', tmcStatusDisplay);
+        if (tmcTempDisplay) this.addControl('tmct', tmcTempDisplay);
+        if (stallStatusDisplay) this.addControl('sd', stallStatusDisplay);
+        if (stallCountDisplay) this.addControl('sc', stallCountDisplay);
     }
 
     statusValueTransform(value, key) {
@@ -336,7 +341,7 @@ class CurrentSpeedControlBinding extends ControlBinding {
 
         currentSpeedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
 
-        this.addControl(currentSpeedDisplay);
+        this.addControl('cs', currentSpeedDisplay);
     }
 }
 
@@ -351,7 +356,7 @@ class TimestampControlBinding extends ControlBinding {
         };
         super({ ...defaults, ...config });
 
-        this.addControl(lastUpdateDisplay);
+        this.addControl('timestamp', lastUpdateDisplay);
     }
 }
 
@@ -384,10 +389,12 @@ class SpeedControlBinding extends ControlBinding {
         this.presetButtons = presetButtons;
         this.speedValueDisplay = speedValueDisplay;
 
-        this.addControl(speedSlider);
-        this.addControl(speedDisplay);
-        this.addControl(presetButtons);
-        this.addControl(speedValueDisplay);
+        this.addControl('sp', speedSlider);
+        this.addControl('sp', presetButtons);
+        this.addControl('sp', speedValueDisplay);
+        this.addControl('cs', speedSlider);
+        this.addControl('cs', speedDisplay);
+        // speedValueDisplay should only be validated for 'sp'
 
         // Wire up event handlers
         this.speedSlider.onChange((value) => {
@@ -481,8 +488,8 @@ class DirectionControlBinding extends ControlBinding {
             directionDisplay.options.colorizer = (value) => value === 'Clockwise' ? '#3b82f6' : '#8b5cf6';
         }
 
-        this.addControl(directionButtons);
-        this.addControl(directionDisplay);
+        if (directionButtons) this.addControl('dir', directionButtons);
+        if (directionDisplay) this.addControl('dir', directionDisplay);
 
         // Wire up event handler
         this.directionButtons.onChange((value) => {
@@ -509,8 +516,8 @@ class DirectionControlBinding extends ControlBinding {
 class VariableSpeedControlBinding extends ControlBinding {
     constructor(toggle, statusDisplay, controlsContainer) {
         super({ statusKeys: ['sve'] });
-        this.addControl(toggle);
-        this.addControl(statusDisplay);
+        if (toggle) this.addControl('sve', toggle);
+        if (statusDisplay) this.addControl('sve', statusDisplay);
         this.toggle = toggle;
         this.statusDisplay = statusDisplay;
         this.controlsContainer = controlsContainer;
@@ -755,15 +762,16 @@ class PowerDeliveryControlBinding extends ControlBinding {
 class StallGuardControlBinding extends ControlBinding {
     constructor(thresholdSlider, resultDisplay, thresholdValueDisplay) {
         super({ statusKeys: ['sgt', 'sgr'], debounceTime: 150 });
-this.thresholdSlider = thresholdSlider;
-this.resultDisplay = resultDisplay;
-this.thresholdValueDisplay = thresholdValueDisplay;
+        this.thresholdSlider = thresholdSlider;
+        this.resultDisplay = resultDisplay;
+        this.thresholdValueDisplay = thresholdValueDisplay;
 
-/* No colorizer for slider fill */
+        /* No colorizer for slider fill */
 
-this.addControl(thresholdSlider);
-this.addControl(resultDisplay);
-if (thresholdValueDisplay) this.addControl(thresholdValueDisplay);
+        this.addControl('sgt', thresholdSlider);
+        this.addControl('sgr', thresholdSlider);
+        this.addControl('sgr', resultDisplay);
+        if (thresholdValueDisplay) this.addControl('sgt', thresholdValueDisplay);
 
         // Wire up event handler
         this.thresholdSlider.onChange((value) => {
@@ -825,14 +833,14 @@ if (thresholdValueDisplay) this.addControl(thresholdValueDisplay);
             this.thresholdSlider.setValue(transformedValue);
             if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(transformedValue.toFixed(1));
         }
-if (key === 'sgr') {
-    this.resultDisplay.setValue(this.displayTransform(transformedValue, 'sgr'));
-    if (this.thresholdSlider.fillElement) {
-        this.thresholdSlider.updateFillWidth(transformedValue);
-        this.thresholdSlider.fillElement.style.opacity = "1.0";
-    }
-    // Colorizer now handles fill color
-}
+        if (key === 'sgr') {
+            this.resultDisplay.setValue(this.displayTransform(transformedValue, 'sgr'));
+            if (this.thresholdSlider.fillElement) {
+                this.thresholdSlider.updateFillWidth(transformedValue);
+                this.thresholdSlider.fillElement.style.opacity = "1.0";
+            }
+            // Colorizer now handles fill color
+        }
     }
 
     hideFill() {
@@ -857,7 +865,7 @@ class EmergencyStopControlBinding extends ControlBinding {
         });
         this.emergencyStopBtn = emergencyStopBtn;
         this.speedSlider = speedSlider;
-        this.addControl(emergencyStopBtn);
+        if (emergencyStopBtn) this.addControl('emergency', emergencyStopBtn);
 
         // Wire up event handler
         this.emergencyStopBtn.onChange(() => {
@@ -900,7 +908,7 @@ class StatisticsResetControlBinding extends ControlBinding {
             ...config
         });
         this.resetStatsBtn = resetStatsBtn;
-        this.addControl(resetStatsBtn);
+        if (resetStatsBtn) this.addControl('resetStats', resetStatsBtn);
 
         // Wire up event handler
         this.resetStatsBtn.onChange(() => {
@@ -936,7 +944,7 @@ class StallResetControlBinding extends ControlBinding {
             ...config
         });
         this.resetStallBtn = resetStallBtn;
-        this.addControl(resetStallBtn);
+        if (resetStallBtn) this.addControl('resetStall', resetStallBtn);
 
         // Wire up event handler
         this.resetStallBtn.onChange(() => {
@@ -968,8 +976,8 @@ class MotorControlBinding extends ControlBinding {
             statusKeys: ['en'],
             debounceTime: 0
         });
-        this.addControl(motorToggle);
-        this.addControl(motorStatusDisplay);
+        if (motorToggle) this.addControl('en', motorToggle);
+        if (motorStatusDisplay) this.addControl('en', motorStatusDisplay);
 
         // Wire up event handler
         motorToggle.onChange((enabled) => {
@@ -1002,9 +1010,9 @@ class CurrentControlBinding extends ControlBinding {
         this.currentSlider = currentSlider;
         this.currentDisplay = currentDisplay;
         this.currentValueDisplay = currentValueDisplay;
-        this.addControl(currentSlider);
-        this.addControl(currentDisplay);
-        if (currentValueDisplay) this.addControl(currentValueDisplay);
+        if (currentSlider) this.addControl('cur', currentSlider);
+        if (currentDisplay) this.addControl('cur', currentDisplay);
+        if (currentValueDisplay) this.addControl('cur', currentValueDisplay);
 
         // Wire up event handler
         this.currentSlider.onChange((value) => {
@@ -1029,8 +1037,8 @@ class StrengthControlBinding extends ControlBinding {
     constructor(strengthSlider, strengthValueDisplay, variableSpeedActive = false) {
         super({ statusKeys: ['svs'], debounceTime: 150 });
         if (!variableSpeedActive) {
-            this.addControl(strengthSlider);
-            if (strengthValueDisplay) this.addControl(strengthValueDisplay);
+            if (strengthSlider) this.addControl('svs', strengthSlider);
+            if (strengthValueDisplay) this.addControl('svs', strengthValueDisplay);
         }
 
         if (strengthValueDisplay) {
@@ -1056,8 +1064,8 @@ class PhaseControlBinding extends ControlBinding {
     constructor(phaseSlider, phaseValueDisplay, variableSpeedActive = false) {
         super({ statusKeys: ['svp'], debounceTime: 150 });
         if (!variableSpeedActive) {
-            this.addControl(phaseSlider);
-            if (phaseValueDisplay) this.addControl(phaseValueDisplay);
+            if (phaseSlider) this.addControl('svp', phaseSlider);
+            if (phaseValueDisplay) this.addControl('svp', phaseValueDisplay);
         }
 
         if (phaseValueDisplay) {
