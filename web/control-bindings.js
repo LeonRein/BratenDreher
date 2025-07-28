@@ -68,7 +68,7 @@ class ControlBinding {
                     args.transformedValue
                 );
                 if (success) {
-                    this.controls.forEach(control => {
+                    Object.values(this.statusKeyToControls).flat().forEach(control => {
                         control.setDisplayState(CONTROL_STATES.RETRY);
                     });
                 }
@@ -426,15 +426,6 @@ class SpeedControlBinding extends ControlBinding {
         }
     }
 
-    // Override handleValueChange to update preset buttons when slider moves
-    async handleValueChange(value, commandType) {
-        // Update preset buttons immediately when slider moves
-        this.updatePresetButtonState(value);
-
-        // Call parent implementation
-        return await super.handleValueChange(value, commandType);
-    }
-
     // Update preset button active state based on current speed
     updatePresetButtonState(currentSpeed) {
         if (!this.presetButtons || !this.presetButtons.buttons) return;
@@ -743,7 +734,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
 /**
  * StallGuardControlBinding
  * Implements ControlBinding for StallGuard threshold (sgt) and result (sgr).
- * - Uses new ControlBinding constructor: super(commandType, statusKeys)
+ * - Uses new ControlBinding constructor: super(commandType)
  * - Registers controls via addControl
  * - Implements transformation functions as class methods
  */
