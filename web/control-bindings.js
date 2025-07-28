@@ -754,12 +754,27 @@ class PowerDeliveryControlBinding extends ControlBinding {
 class StallGuardControlBinding extends ControlBinding {
     constructor(thresholdSlider, resultDisplay, thresholdValueDisplay) {
         super({ statusKeys: ['sgt', 'sgr'], debounceTime: 150 });
-        this.thresholdSlider = thresholdSlider;
-        this.resultDisplay = resultDisplay;
-        this.thresholdValueDisplay = thresholdValueDisplay;
-        this.addControl(thresholdSlider);
-        this.addControl(resultDisplay);
-        if (thresholdValueDisplay) this.addControl(thresholdValueDisplay);
+this.thresholdSlider = thresholdSlider;
+this.resultDisplay = resultDisplay;
+this.thresholdValueDisplay = thresholdValueDisplay;
+
+if (thresholdSlider) {
+    thresholdSlider.options.colorizer = (value) => {
+        // Replicate previous fill color logic
+        const sliderPercent = parseFloat(thresholdSlider.slider.value);
+        if (value < sliderPercent * 0.8) {
+            return '#10b981'; // green
+        } else if (value < sliderPercent) {
+            return '#f59e0b'; // yellow
+        } else {
+            return '#ef4444'; // red
+        }
+    };
+}
+
+this.addControl(thresholdSlider);
+this.addControl(resultDisplay);
+if (thresholdValueDisplay) this.addControl(thresholdValueDisplay);
 
         // Wire up event handler
         this.thresholdSlider.onChange((value) => {
@@ -821,24 +836,14 @@ class StallGuardControlBinding extends ControlBinding {
             this.thresholdSlider.setValue(transformedValue);
             if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(transformedValue.toFixed(1));
         }
-        if (key === 'sgr') {
-            this.resultDisplay.setValue(this.displayTransform(transformedValue, 'sgr'));
-            if (this.thresholdSlider.fillElement) {
-                this.thresholdSlider.updateFillWidth(transformedValue);
-                this.thresholdSlider.fillElement.style.opacity = "1.0";
-            }
-            // Color fill based on stall threshold
-            const sliderPercent = parseFloat(this.thresholdSlider.slider.value); // invert slider
-            if (this.thresholdSlider.fillElement) {
-                if (transformedValue < sliderPercent * 0.8) {
-                    this.thresholdSlider.setFillColor('#10b981');
-                } else if (transformedValue < sliderPercent) {
-                    this.thresholdSlider.setFillColor('#f59e0b');
-                } else {
-                    this.thresholdSlider.setFillColor('#ef4444');
-                }
-            }
-        }
+if (key === 'sgr') {
+    this.resultDisplay.setValue(this.displayTransform(transformedValue, 'sgr'));
+    if (this.thresholdSlider.fillElement) {
+        this.thresholdSlider.updateFillWidth(transformedValue);
+        this.thresholdSlider.fillElement.style.opacity = "1.0";
+    }
+    // Colorizer now handles fill color
+}
     }
 
     hideFill() {
