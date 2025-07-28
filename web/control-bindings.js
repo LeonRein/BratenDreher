@@ -5,13 +5,16 @@
 class ControlBinding {
     constructor({
         statusKeys = [],
-        additionalParams = {}
+        debounceTime = 0 // ms, 0 disables debounce
     } = {}) {
         this.statusKeys = statusKeys;
-        this.additionalParams = additionalParams;
+        this.debounceTime = debounceTime;
+        this.debounceTime = debounceTime;
 
         this.controls = [];
         this.commandManager = null;
+        this._debounceTimer = null;
+        this._lastDebounceArgs = null;
     }
 
     inputValueTransform(value) {
@@ -49,22 +52,40 @@ class ControlBinding {
             control.setDisplayState(CONTROL_STATES.OUTDATED);
         });
 
-        // Transform value and send command
+        // Transform value
         const transformedValue = this.inputValueTransform(value);
-        const success = await this.commandManager.sendCommand(
-            commandType,
-            transformedValue,
-            this.additionalParams || {}
-        );
 
-        if (success) {
-            // Set controls to retry state briefly to show command was sent
-            this.controls.forEach(control => {
-                control.setDisplayState(CONTROL_STATES.RETRY);
-            });
+        // Debounce only command manager calls, not display updates
+        if (this.debounceTime > 0) {
+            // Save latest args for debounce
+            this._lastDebounceArgs = { commandType, transformedValue };
+            if (this._debounceTimer) clearTimeout(this._debounceTimer);
+            this._debounceTimer = setTimeout(async () => {
+                const args = this._lastDebounceArgs;
+                const success = await this.commandManager.sendCommand(
+                    args.commandType,
+                    args.transformedValue
+                );
+                if (success) {
+                    this.controls.forEach(control => {
+                        control.setDisplayState(CONTROL_STATES.RETRY);
+                    });
+                }
+            }, this.debounceTime);
+            return true;
+        } else {
+            // Immediate command
+            const success = await this.commandManager.sendCommand(
+                commandType,
+                transformedValue
+            );
+            if (success) {
+                this.controls.forEach(control => {
+                    control.setDisplayState(CONTROL_STATES.RETRY);
+                });
+            }
+            return success;
         }
-
-        return success;
     }
 
     // Handle status updates from the backend
@@ -96,7 +117,8 @@ class ControlBinding {
 class AccelerationControlBinding extends ControlBinding {
     constructor(accelerationSlider, accelerationDisplay, accelerationTimeValueDisplay) {
         super({
-            statusKeys: ['acc']
+            statusKeys: ['acc'],
+            debounceTime: 150
         });
 
         // Set displayTransform for acceleration displays
@@ -341,7 +363,8 @@ class SpeedControlBinding extends ControlBinding {
      */
     constructor(speedSlider, speedDisplay, presetButtons, speedValueDisplay) {
         super({
-            statusKeys: ['sp', 'cs']
+            statusKeys: ['sp', 'cs'],
+            debounceTime: 150
         });
 
         // Set displayTransform for speed displays
@@ -722,7 +745,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
  */
 class StallGuardControlBinding extends ControlBinding {
     constructor(thresholdSlider, resultDisplay, thresholdValueDisplay) {
-        super({ statusKeys: ['sgt', 'sgr'] });
+        super({ statusKeys: ['sgt', 'sgr'], debounceTime: 150 });
         this.thresholdSlider = thresholdSlider;
         this.resultDisplay = resultDisplay;
         this.thresholdValueDisplay = thresholdValueDisplay;
@@ -960,7 +983,8 @@ class CurrentControlBinding extends ControlBinding {
     constructor(currentSlider, currentDisplay, currentValueDisplay) {
         super({
             statusKeys: ['cur'],
-            inputValueTransform: (value) => parseInt(value)
+            inputValueTransform: (value) => parseInt(value),
+            debounceTime: 150
         });
 
         // Set displayTransform for current displays
@@ -995,7 +1019,7 @@ class CurrentControlBinding extends ControlBinding {
  */
 class StrengthControlBinding extends ControlBinding {
     constructor(strengthSlider, strengthValueDisplay, variableSpeedActive = false) {
-        super({ statusKeys: ['svs'] });
+        super({ statusKeys: ['svs'], debounceTime: 150 });
         if (!variableSpeedActive) {
             this.addControl(strengthSlider);
             if (strengthValueDisplay) this.addControl(strengthValueDisplay);
@@ -1022,7 +1046,7 @@ class StrengthControlBinding extends ControlBinding {
  */
 class PhaseControlBinding extends ControlBinding {
     constructor(phaseSlider, phaseValueDisplay, variableSpeedActive = false) {
-        super({ statusKeys: ['svp'] });
+        super({ statusKeys: ['svp'], debounceTime: 150 });
         if (!variableSpeedActive) {
             this.addControl(phaseSlider);
             if (phaseValueDisplay) this.addControl(phaseValueDisplay);

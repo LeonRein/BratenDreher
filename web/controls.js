@@ -95,7 +95,6 @@ class SliderControl extends BaseControl {
         this.slider = this.elements[0];
         this.fillElement = options.fillElement;
         this.options = {
-            debounceTime: 500,
             ...options
         };
         if (this.fillElement) this.addAdditionalElement(this.fillElement, { applyOpacity: false, applyDisabled: false, applyColors: false, applyClasses: false });
@@ -116,10 +115,7 @@ class SliderControl extends BaseControl {
         const rawValue = parseFloat(event.target.value);
         const displayValue = rawValue.toString();
         this.setDisplayState(CONTROL_STATES.OUTDATED);
-        if (this.timer) clearTimeout(this.timer);
-        this.timer = setTimeout(() => {
-            if (this._onChange) this._onChange(rawValue);
-        }, this.options.debounceTime);
+        if (this._onChange) this._onChange(rawValue);
     }
 
     setValue(value) {
