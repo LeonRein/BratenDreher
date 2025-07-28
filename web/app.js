@@ -111,25 +111,13 @@ class BratenDreherApp {
         this.controls.set('speedValueDisplay', new DisplayControl(this.speedValue));
 
         // Speed displays
-        this.controls.set('setpointSpeedDisplay', new DisplayControl(this.setpointSpeed, {
-            formatter: (value) => `${value.toFixed(1)} RPM`,
-            colorizer: (value) => {
-                if (value === 0) return '#1f2937';
-                if (value < 5) return '#10b981';
-                if (value < 15) return '#3b82f6';
-                return '#8b5cf6';
-            }
-        }));
+this.controls.set('setpointSpeedDisplay', new DisplayControl(this.setpointSpeed, {
+    formatter: (value) => `${value.toFixed(1)} RPM`
+}));
 
-        this.controls.set('currentSpeedDisplay', new DisplayControl(this.currentSpeed, {
-            formatter: (value) => `${value.toFixed(1)} RPM`,
-            colorizer: (value) => {
-                if (value === 0) return '#1f2937';
-                if (value < 5) return '#10b981';
-                if (value < 15) return '#3b82f6';
-                return '#8b5cf6';
-            }
-        }));
+this.controls.set('currentSpeedDisplay', new DisplayControl(this.currentSpeed, {
+    formatter: (value) => `${value.toFixed(1)} RPM`
+}));
 
         // Preset buttons
         this.controls.set('presetButtons', new RadioGroupControl(Array.from(this.presetBtns), {
@@ -155,10 +143,9 @@ class BratenDreherApp {
 
         // Motor toggle
         this.controls.set('motorToggle', new ToggleControl(this.motorToggle));
-        this.controls.set('motorStatusDisplay', new DisplayControl(this.motorStatus, {
-            formatter: (enabled) => enabled ? 'Enabled' : 'Stopped',
-            colorizer: (enabled) => enabled ? '#10b981' : '#1f2937'
-        }));
+this.controls.set('motorStatusDisplay', new DisplayControl(this.motorStatus, {
+    formatter: (enabled) => enabled ? 'Enabled' : 'Stopped'
+}));
 
         // Current control
         this.controls.set('currentSlider', new SliderControl(this.currentSlider, {
@@ -166,15 +153,9 @@ class BratenDreherApp {
         }));
         this.controls.set('currentValueDisplay', new DisplayControl(this.currentValue));
 
-        this.controls.set('currentDisplay', new DisplayControl(this.currentCurrent, {
-            formatter: (value) => `${value}%`,
-            colorizer: (value) => {
-                if (value <= 20) return '#10b981';
-                if (value <= 50) return '#3b82f6';
-                if (value <= 80) return '#f59e0b';
-                return '#8b5cf6';
-            }
-        }));
+this.controls.set('currentDisplay', new DisplayControl(this.currentCurrent, {
+    formatter: (value) => `${value}%`
+}));
 
         // Acceleration control
         this.controls.set('accelerationSlider', new SliderControl(this.accelerationTimeSlider, {
@@ -182,15 +163,9 @@ class BratenDreherApp {
         }));
         this.controls.set('accelerationTimeValueDisplay', new DisplayControl(this.accelerationTimeValue));
 
-        this.controls.set('accelerationDisplay', new DisplayControl(this.currentAcceleration, {
-            formatter: (timeSeconds) => `${timeSeconds.toFixed(1)}s to max`,
-            colorizer: (timeSeconds) => {
-                if (timeSeconds <= 2) return '#8b5cf6';
-                if (timeSeconds <= 5) return '#3b82f6';
-                if (timeSeconds <= 10) return '#10b981';
-                return '#1f2937';
-            }
-        }));
+this.controls.set('accelerationDisplay', new DisplayControl(this.currentAcceleration, {
+    formatter: (timeSeconds) => `${timeSeconds.toFixed(1)}s to max`
+}));
 
         // Variable speed controls - using CompositeControl for coordinated management
         const variableSpeedToggle = new ToggleControl(this.variableSpeedToggle);

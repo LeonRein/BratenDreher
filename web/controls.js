@@ -318,12 +318,11 @@ class DisplayControl extends BaseControl {
         const transformed = this.displayTransform(value);
         this.displays.forEach(element => {
             if (element) {
-                element.textContent = transformed;
-                element.style.opacity = '1.0';
-                if (this.options.colorizer) {
-                    const color = this.options.colorizer(transformed);
-                    if (color) element.style.color = color;
-                }
+element.textContent = transformed;
+if (this.options.colorizer) {
+    const color = this.options.colorizer(transformed);
+    if (color) element.style.color = color;
+}
             }
         });
     }

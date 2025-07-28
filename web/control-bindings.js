@@ -124,6 +124,12 @@ class AccelerationControlBinding extends ControlBinding {
         // Set displayTransform for acceleration displays
         if (accelerationDisplay) {
             accelerationDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}s to max`;
+            accelerationDisplay.options.colorizer = (timeSeconds) => {
+                if (timeSeconds <= 2) return '#8b5cf6';
+                if (timeSeconds <= 5) return '#3b82f6';
+                if (timeSeconds <= 10) return '#10b981';
+                return '#1f2937';
+            };
         }
         if (accelerationTimeValueDisplay) {
             accelerationTimeValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}s`;
@@ -270,9 +276,11 @@ class TmcStatusControlBinding extends ControlBinding {
         }
         if (stallStatusDisplay) {
             stallStatusDisplay.displayTransform = (value) => value ? 'STALL!' : 'OK';
+            stallStatusDisplay.options.colorizer = (value) => value ? '#e74c3c' : '#10b981';
         }
         if (stallCountDisplay) {
             stallCountDisplay.displayTransform = (value) => value.toString();
+            stallCountDisplay.options.colorizer = (value) => value > 0 ? '#e74c3c' : '#10b981';
         }
 
         this.tmcStatusDisplay = tmcStatusDisplay;
@@ -303,18 +311,12 @@ class TmcStatusControlBinding extends ControlBinding {
         }
         if (key === 'sd') {
             this.stallStatusDisplay.setValue(transformedValue);
-            const color = transformedValue ? '#e74c3c' : '#10b981';
             this.stallStatusDisplay.displays.forEach(element => {
-                if (element) element.style.color = color;
                 element.style.fontWeight = transformedValue ? 'bold' : 'normal';
             });
         }
         if (key === 'sc') {
             this.stallCountDisplay.setValue(transformedValue);
-            const color = transformedValue > 0 ? '#e74c3c' : '#10b981';
-            this.stallCountDisplay.displays.forEach(element => {
-                if (element) element.style.color = color;
-            });
         }
     }
 }
@@ -369,6 +371,12 @@ class SpeedControlBinding extends ControlBinding {
 
         // Set displayTransform for speed displays
         speedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+        speedDisplay.options.colorizer = (value) => {
+            if (value === 0) return '#1f2937';
+            if (value < 5) return '#10b981';
+            if (value < 15) return '#3b82f6';
+            return '#8b5cf6';
+        };
         speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
 
         this.speedSlider = speedSlider;
@@ -468,6 +476,10 @@ class DirectionControlBinding extends ControlBinding {
         this.directionButtons = directionButtons;
         this.directionDisplay = directionDisplay;
 
+        if (directionDisplay) {
+            directionDisplay.options.colorizer = (value) => value === 'Clockwise' ? '#3b82f6' : '#8b5cf6';
+        }
+
         this.addControl(directionButtons);
         this.addControl(directionDisplay);
 
@@ -484,10 +496,6 @@ class DirectionControlBinding extends ControlBinding {
             const clockwise = transformedValue === 'cw';
             this.directionButtons.setValue(clockwise ? "cw" : "ccw");
             this.directionDisplay.setValue(clockwise ? 'Clockwise' : 'Counter-clockwise');
-            const color = clockwise ? '#3b82f6' : '#8b5cf6';
-            this.directionDisplay.displays.forEach(element => {
-                if (element) element.style.color = color;
-            });
         }
     }
 
@@ -989,6 +997,12 @@ class CurrentControlBinding extends ControlBinding {
 
         // Set displayTransform for current displays
         currentDisplay.displayTransform = (value) => `${Number(value)} %`;
+        currentDisplay.options.colorizer = (value) => {
+            if (value <= 20) return '#10b981';
+            if (value <= 50) return '#3b82f6';
+            if (value <= 80) return '#f59e0b';
+            return '#8b5cf6';
+        };
         currentValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} %`;
 
         this.currentSlider = currentSlider;
