@@ -480,37 +480,18 @@ class DirectionControlBinding extends ControlBinding {
 
 // Variable speed control binding with UI coordination
 class VariableSpeedControlBinding extends ControlBinding {
-    constructor(toggle, strengthSlider, phaseSlider, statusDisplay, controlsContainer) {
-        super({
-            commandType: null, // Multiple command types
-            statusKeys: ['sve', 'svs', 'svp']
-        });
-
+    constructor(toggle, statusDisplay, controlsContainer) {
+        super({ commandType: null, statusKeys: ['sve'] });
+        this.addControl(toggle);
+        this.addControl(statusDisplay);
         this.toggle = toggle;
-        this.strengthSlider = strengthSlider;
-        this.phaseSlider = phaseSlider;
         this.statusDisplay = statusDisplay;
         this.controlsContainer = controlsContainer;
 
-        this.addControl(toggle);
-        this.addControl(strengthSlider);
-        this.addControl(phaseSlider);
-        this.addControl(statusDisplay);
-
-        // Wire up event handlers
-        this.toggle.onChange((enabled) => {
+        toggle.onChange((enabled) => {
             this.setVariableSpeedEnabled(enabled);
         });
-
-        this.strengthSlider.onChange((value) => {
-            this.handleValueChange(value);
-        });
-
-        this.phaseSlider.onChange((value) => {
-            this.handleValueChange(value);
-        });
     }
-
     customStatusHandler(transformedValue, key) {
         if (key === 'sve') {
             const enabled = transformedValue;
@@ -522,41 +503,16 @@ class VariableSpeedControlBinding extends ControlBinding {
                 if (element) element.style.color = color;
             });
         }
-        if (key === 'svs') {
-            this.strengthSlider.setValue(transformedValue);
-        }
-        if (key === 'svp') {
-            this.phaseSlider.setValue(transformedValue);
-        }
     }
-
-    statusValueTransform(value, key) {
-        if (key === 'svs') return Math.round(value * 100);
-        if (key === 'svp') {
-            let phaseDegrees = Math.round((value * 180) / Math.PI);
-            if (phaseDegrees > 180) {
-                phaseDegrees -= 360;
-            }
-            return phaseDegrees;
-        }
-        return value;
-    }
-
     async setVariableSpeedEnabled(enabled) {
         const commandType = enabled ? 'esv' : 'dsv';
-
-        // Update UI immediately
         this.toggle.setValue(enabled);
         this.updateVariableSpeedUI(enabled);
-
-        // Set controls to outdated state
         this.controls.forEach(control => {
             control.setDisplayState(CONTROL_STATES.OUTDATED);
         });
-
         return await this.commandManager.sendCommand(commandType, true);
     }
-
     updateVariableSpeedUI(enabled) {
         if (this.controlsContainer) {
             if (enabled) {
@@ -1046,39 +1002,29 @@ currentValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} %
  * Strength control binding
  */
 class StrengthControlBinding extends ControlBinding {
-    constructor(strengthSlider, strengthValueDisplay) {
-        super({
-            commandType: 'sv',
-            statusKeys: ['svs']
-        });
+    constructor(strengthSlider, strengthValueDisplay, variableSpeedActive = false) {
+        super({ commandType: 'sv', statusKeys: ['svs'] });
+        if (!variableSpeedActive) {
+            this.addControl(strengthSlider);
+            if (strengthValueDisplay) this.addControl(strengthValueDisplay);
+        }
 
-        // Set displayTransform for strength value display
-strengthValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} %`;
+        if (strengthValueDisplay) {
+            strengthValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} %`;
+        }
 
-        this.strengthSlider = strengthSlider;
-        this.strengthValueDisplay = strengthValueDisplay;
-        this.addControl(strengthSlider);
-        if (strengthValueDisplay) this.addControl(strengthValueDisplay);
-
-        // Wire up event handler
-        this.strengthSlider.onChange((value) => {
-            this.handleValueChange(value);
-            this.strengthValueDisplay.setValue(value);
-        });
+        if (!variableSpeedActive) {
+            strengthSlider.onChange((value) => {
+                this.handleValueChange(value);
+                if (strengthValueDisplay) strengthValueDisplay.setValue(this.statusValueTransform(value));
+            });
+        }
     }
-
-    inputValueTransform(value) {
-        return parseInt(value) / 100.0;
-    }
-
-    statusValueTransform(value, key) {
-        return Math.round(value * 100);
-    }
-
+    inputValueTransform(value) { return parseInt(value) / 100.0; }
+    statusValueTransform(value) { return Math.round(value * 100); }
     customStatusHandler(transformedValue, key) {
         if (key === 'svs') {
-            this.strengthSlider.setValue(transformedValue);
-            if (this.strengthValueDisplay) this.strengthValueDisplay.setValue(transformedValue.toFixed(1));
+            this.controls.forEach(control => control.setValue(transformedValue));
         }
     }
 }
@@ -1087,48 +1033,37 @@ strengthValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} 
  * Phase control binding
  */
 class PhaseControlBinding extends ControlBinding {
-    constructor(phaseSlider, phaseValueDisplay) {
-        super({
-            commandType: 'svp',
-            statusKeys: ['svp'],
-            inputValueTransform: (value) => {
-                const phase = parseInt(value);
-                let phaseForRadians = phase;
-                if (phaseForRadians < 0) {
-                    phaseForRadians += 360;
-                }
-                return (phaseForRadians * Math.PI) / 180;
-            },
-            statusValueTransform: (value) => {
-                let phaseDegrees = Math.round((value * 180) / Math.PI);
-                if (phaseDegrees > 180) {
-                    phaseDegrees -= 360;
-                }
-                return phaseDegrees;
-            }
-        });
+    constructor(phaseSlider, phaseValueDisplay, variableSpeedActive = false) {
+        super({ commandType: 'svp', statusKeys: ['svp'] });
+        if (!variableSpeedActive) {
+            this.addControl(phaseSlider);
+            if (phaseValueDisplay) this.addControl(phaseValueDisplay);
+        }
 
-        // Set displayTransform for phase value display
         if (phaseValueDisplay) {
             phaseValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}°`;
         }
 
-        this.phaseSlider = phaseSlider;
-        this.phaseValueDisplay = phaseValueDisplay;
-        this.addControl(phaseSlider);
-        if (phaseValueDisplay) this.addControl(phaseValueDisplay);
-
-        // Wire up event handler
-        this.phaseSlider.onChange((value) => {
-            this.handleValueChange(value);
-            this.phaseValueDisplay.setValue(value);
-        });
+        if (!variableSpeedActive) {
+            phaseSlider.onChange((value) => {
+                this.handleValueChange(value);
+                if (phaseValueDisplay) phaseValueDisplay.setValue(this.statusValueTransform(value));
+            });
+        }
     }
-
+    inputValueTransform(value) {
+        let phase = parseInt(value);
+        if (phase < 0) phase += 360;
+        return (phase * Math.PI) / 180;
+    }
+    statusValueTransform(value) {
+        let phaseDegrees = Math.round((value * 180) / Math.PI);
+        if (phaseDegrees > 180) phaseDegrees -= 360;
+        return phaseDegrees;
+    }
     customStatusHandler(transformedValue, key) {
         if (key === 'svp') {
-            this.phaseSlider.setValue(transformedValue);
-            this.phaseValueDisplay.setValue(transformedValue.toFixed(1));
+            this.controls.forEach(control => control.setValue(transformedValue));
         }
     }
 }

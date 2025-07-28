@@ -343,10 +343,8 @@ class BratenDreherApp {
         // Variable speed binding
         this.bindings.set('variableSpeed', new VariableSpeedControlBinding(
             this.controls.get('variableSpeedToggle'),
-            this.controls.get('strengthSlider'),
-            this.controls.get('phaseSlider'),
             this.controls.get('variableSpeedStatusDisplay'),
-            this.variableSpeedControls
+            this.controls.get('variableSpeedControlsContainer')
         ));
 
         // Variable speed graph binding
