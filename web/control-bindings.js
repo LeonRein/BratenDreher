@@ -119,8 +119,8 @@ class AccelerationControlBinding extends ControlBinding {
 
         // Wire up event handler
         this.accelerationSlider.onChange((value) => {
-            this.handleValueChange(value);
             this.accelerationTimeValueDisplay.setValue(value);
+            this.handleValueChange(value);
         });
     }
 
@@ -184,17 +184,17 @@ class StatisticsControlBinding extends ControlBinding {
             statusKeys: ['tr', 'rt']
         });
 
-totalRevolutionsDisplay.displayTransform = (value) => `${Number(value).toFixed(2)}`;
-runTimeDisplay.displayTransform = (milliseconds) => {
-    // Format as hh:mm:ss.cc (centiseconds, two decimals)
-    const ms = Number(milliseconds);
-    const hours = Math.floor(ms / 3600000);
-    const minutes = Math.floor((ms % 3600000) / 60000);
-    const seconds = Math.floor((ms % 60000) / 1000);
-    const centiseconds = ((ms % 1000) / 10).toFixed(2);
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds}`;
-};
-avgSpeedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+        totalRevolutionsDisplay.displayTransform = (value) => `${Number(value).toFixed(2)}`;
+        runTimeDisplay.displayTransform = (milliseconds) => {
+            // Format as hh:mm:ss.cc (centiseconds, two decimals)
+            const ms = Number(milliseconds);
+            const hours = Math.floor(ms / 3600000);
+            const minutes = Math.floor((ms % 3600000) / 60000);
+            const seconds = Math.floor((ms % 60000) / 1000);
+            const centiseconds = ((ms % 1000) / 10).toFixed(2);
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds}`;
+        };
+        avgSpeedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
 
         this.totalRevolutionsDisplay = totalRevolutionsDisplay;
         this.runTimeDisplay = runTimeDisplay;
@@ -313,7 +313,7 @@ class CurrentSpeedControlBinding extends ControlBinding {
         };
         super({ ...defaults, ...config });
 
-currentSpeedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+        currentSpeedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
 
         this.addControl(currentSpeedDisplay);
     }
@@ -349,8 +349,8 @@ class SpeedControlBinding extends ControlBinding {
         });
 
         // Set displayTransform for speed displays
-speedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
-speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+        speedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+        speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
 
         this.speedSlider = speedSlider;
         this.speedDisplay = speedDisplay;
@@ -363,8 +363,8 @@ speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm
 
         // Wire up event handlers
         this.speedSlider.onChange((value) => {
-            this.handleValueChange(value);
             this.speedValueDisplay.setValue(value);
+            this.handleValueChange(value);
         });
 
         this.presetButtons.onChange((value) => {
@@ -735,8 +735,8 @@ class StallGuardControlBinding extends ControlBinding {
 
         // Wire up event handler
         this.thresholdSlider.onChange((value) => {
+            this.thresholdValueDisplay.setValue(value);
             this.handleValueChange(value);
-            if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(value.toFixed(1));
         });
     }
 
@@ -776,12 +776,12 @@ class StallGuardControlBinding extends ControlBinding {
         return value;
     }
 
-displayTransform(value, key) {
-    if (key === 'sgt' || key === 'sgr') {
-        return `${value.toFixed(1)} %`;
+    displayTransform(value, key) {
+        if (key === 'sgt' || key === 'sgr') {
+            return `${value.toFixed(1)} %`;
+        }
+        return value.toString();
     }
-    return value.toString();
-}
 
     inputValueTransform(percent) {
         // Invert percent for backend value (0-100 becomes 100-0)
@@ -972,8 +972,8 @@ class CurrentControlBinding extends ControlBinding {
         });
 
         // Set displayTransform for current displays
-currentDisplay.displayTransform = (value) => `${Number(value)} %`;
-currentValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} %`;
+        currentDisplay.displayTransform = (value) => `${Number(value)} %`;
+        currentValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} %`;
 
         this.currentSlider = currentSlider;
         this.currentDisplay = currentDisplay;
@@ -984,8 +984,8 @@ currentValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} %
 
         // Wire up event handler
         this.currentSlider.onChange((value) => {
-            this.handleValueChange(value);
             this.currentValueDisplay.setValue(value);
+            this.handleValueChange(value);
         });
     }
 
@@ -1015,18 +1015,14 @@ class StrengthControlBinding extends ControlBinding {
 
         if (!variableSpeedActive) {
             strengthSlider.onChange((value) => {
+                strengthValueDisplay.setValue(value);
                 this.handleValueChange(value);
-                if (strengthValueDisplay) strengthValueDisplay.setValue(this.statusValueTransform(value));
             });
         }
     }
     inputValueTransform(value) { return parseInt(value) / 100.0; }
     statusValueTransform(value) { return Math.round(value * 100); }
-    customStatusHandler(transformedValue, key) {
-        if (key === 'svs') {
-            this.controls.forEach(control => control.setValue(transformedValue));
-        }
-    }
+    // No customStatusHandler needed; base class implementation suffices.
 }
 
 /**
@@ -1046,8 +1042,8 @@ class PhaseControlBinding extends ControlBinding {
 
         if (!variableSpeedActive) {
             phaseSlider.onChange((value) => {
+                phaseValueDisplay.setValue(value);
                 this.handleValueChange(value);
-                if (phaseValueDisplay) phaseValueDisplay.setValue(this.statusValueTransform(value));
             });
         }
     }
@@ -1061,9 +1057,6 @@ class PhaseControlBinding extends ControlBinding {
         if (phaseDegrees > 180) phaseDegrees -= 360;
         return phaseDegrees;
     }
-    customStatusHandler(transformedValue, key) {
-        if (key === 'svp') {
-            this.controls.forEach(control => control.setValue(transformedValue));
-        }
-    }
+    // No customStatusHandler needed; base class implementation suffices.
+    // No customStatusHandler needed; base class implementation suffices.
 }
