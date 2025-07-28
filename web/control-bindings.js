@@ -397,12 +397,12 @@ class SpeedControlBinding extends ControlBinding {
     }
 
     // Override handleValueChange to update preset buttons when slider moves
-    async handleValueChange(value) {
+    async handleValueChange(value, commandType) {
         // Update preset buttons immediately when slider moves
         this.updatePresetButtonState(value);
 
         // Call parent implementation
-        return await super.handleValueChange(value);
+        return await super.handleValueChange(value, commandType);
     }
 
     // Update preset button active state based on current speed
