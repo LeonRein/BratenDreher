@@ -239,15 +239,11 @@ void BLEManager::handleCommand(const std::string& command) {
         systemCommand.sendCommand(cmd);
         dbg_printf("Speed variation phase command queued: %.2f radians\n", phase);
     }
-    else if (strcmp(type, "esv") == 0) {
-        StepperCommandData cmd(StepperCommand::ENABLE_SPEED_VARIATION);
+    else if (strcmp(type, "sv") == 0) {
+        bool enable = doc["value"];
+        StepperCommandData cmd(enable ? StepperCommand::ENABLE_SPEED_VARIATION : StepperCommand::DISABLE_SPEED_VARIATION);
         systemCommand.sendCommand(cmd);
-        dbg_printf("Enable speed variation command queued\n");
-    }
-    else if (strcmp(type, "dsv") == 0) {
-        StepperCommandData cmd(StepperCommand::DISABLE_SPEED_VARIATION);
-        systemCommand.sendCommand(cmd);
-        dbg_printf("Disable speed variation command queued\n");
+        dbg_printf(enable ? "Enable speed variation command queued\n" : "Disable speed variation command queued\n");
     }
     else if (strcmp(type, "st") == 0) {
         int threshold = doc["value"];
