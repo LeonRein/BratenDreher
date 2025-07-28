@@ -387,8 +387,7 @@ class BratenDreherApp {
         this.bindings.set('statistics', new StatisticsControlBinding(
             this.controls.get('totalRevolutionsDisplay'),
             this.controls.get('runTimeDisplay'),
-            this.controls.get('avgSpeedDisplay'),
-            this.updateAverageSpeed.bind(this)
+            this.controls.get('avgSpeedDisplay')
         ));
 
         this.bindings.set('tmcStatus', new TmcStatusControlBinding(
@@ -546,33 +545,6 @@ class BratenDreherApp {
 
     }
 
-    updateAverageSpeed() {
-        const revolutionsElement = this.totalRevolutions;
-        const runtimeElement = this.runTime;
-
-        if (!revolutionsElement || !runtimeElement) return;
-
-        const currentRevolutions = parseFloat(revolutionsElement.textContent) || 0;
-        const currentRuntimeText = runtimeElement.textContent;
-        let currentRuntimeSeconds = 0;
-
-        // Parse runtime from HH:MM:SS.mmm format
-        if (currentRuntimeText && currentRuntimeText !== '00:00:00.000') {
-            const [timePart, millisPart = '0'] = currentRuntimeText.split('.');
-            const timeParts = timePart.split(':');
-            currentRuntimeSeconds = parseInt(timeParts[0]) * 3600 + parseInt(timeParts[1]) * 60 + parseInt(timeParts[2]);
-            if (millisPart) {
-                currentRuntimeSeconds += parseInt(millisPart) / 1000;
-            }
-        }
-
-        if (currentRuntimeSeconds > 0 && currentRevolutions > 0) {
-            const avgSpeed = (currentRevolutions * 60) / currentRuntimeSeconds;
-            this.controls.get('avgSpeedDisplay').setValue(avgSpeed);
-        } else {
-            this.controls.get('avgSpeedDisplay').setValue(0.0);
-        }
-    }
 
     formatTime(milliseconds) {
         const totalSeconds = Math.floor(milliseconds / 1000);

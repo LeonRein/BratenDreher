@@ -179,22 +179,19 @@ class AccelerationControlBinding extends ControlBinding {
 }
 
 class StatisticsControlBinding extends ControlBinding {
-    constructor(totalRevolutionsDisplay, runTimeDisplay, avgSpeedDisplay, updateAverageSpeed) {
+    constructor(totalRevolutionsDisplay, runTimeDisplay, avgSpeedDisplay) {
         super({
             statusKeys: ['tr', 'rt']
         });
 
-        // Set displayTransform for formatting
         if (totalRevolutionsDisplay) {
             totalRevolutionsDisplay.displayTransform = (value) => Number(value).toFixed(3);
         }
         if (runTimeDisplay) {
-            // Use global formatTime if available, otherwise fallback
             runTimeDisplay.displayTransform = (milliseconds) => {
                 if (typeof window !== "undefined" && window.app && typeof window.app.formatTime === "function") {
                     return window.app.formatTime(milliseconds);
                 }
-                // fallback: show milliseconds
                 return `${milliseconds} ms`;
             };
         }
@@ -205,7 +202,9 @@ class StatisticsControlBinding extends ControlBinding {
         this.totalRevolutionsDisplay = totalRevolutionsDisplay;
         this.runTimeDisplay = runTimeDisplay;
         this.avgSpeedDisplay = avgSpeedDisplay;
-        this.updateAverageSpeed = updateAverageSpeed;
+
+        this.latestRevolutions = 0;
+        this.latestRuntimeMs = 0;
 
         this.addControl(totalRevolutionsDisplay);
         this.addControl(runTimeDisplay);
@@ -213,18 +212,25 @@ class StatisticsControlBinding extends ControlBinding {
     }
 
     statusValueTransform(value) {
-        return value;
+        return Number(value);
     }
 
     customStatusHandler(transformedValue, key) {
         if (key === 'tr') {
+            this.latestRevolutions = transformedValue || 0;
             this.totalRevolutionsDisplay.setValue(transformedValue);
         }
         if (key === 'rt') {
+            this.latestRuntimeMs = transformedValue || 0;
             this.runTimeDisplay.setValue(transformedValue);
-            if (typeof this.updateAverageSpeed === 'function') {
-                this.updateAverageSpeed();
-            }
+        }
+        // Calculate average speed if both are available
+        if (this.latestRuntimeMs > 0 && this.latestRevolutions > 0) {
+            const runtimeSeconds = this.latestRuntimeMs / 1000;
+            const avgSpeed = (this.latestRevolutions * 60) / runtimeSeconds;
+            this.avgSpeedDisplay.setValue(avgSpeed);
+        } else {
+            this.avgSpeedDisplay.setValue(0.0);
         }
     }
 }
