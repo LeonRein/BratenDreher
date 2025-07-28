@@ -4,11 +4,8 @@
  */
 class ControlBinding {
     constructor({
-        statusKeys = [],
         debounceTime = 0 // ms, 0 disables debounce
     } = {}) {
-        this.statusKeys = statusKeys;
-        this.debounceTime = debounceTime;
         this.debounceTime = debounceTime;
 
         this.statusKeyToControls = {};
@@ -94,7 +91,7 @@ class ControlBinding {
 
     // Handle status updates from the backend
     handleStatusUpdate(statusUpdate) {
-        const relevantKeys = this.statusKeys.filter(key =>
+        const relevantKeys = Object.keys(this.statusKeyToControls).filter(key =>
             statusUpdate[key] !== undefined
         );
 
@@ -121,7 +118,6 @@ class ControlBinding {
 class AccelerationControlBinding extends ControlBinding {
     constructor(accelerationSlider, accelerationDisplay, accelerationTimeValueDisplay) {
         super({
-            statusKeys: ['acc'],
             debounceTime: 150
         });
 
@@ -211,7 +207,6 @@ class AccelerationControlBinding extends ControlBinding {
 class StatisticsControlBinding extends ControlBinding {
     constructor(totalRevolutionsDisplay, runTimeDisplay, avgSpeedDisplay) {
         super({
-            statusKeys: ['tr', 'rt']
         });
 
         totalRevolutionsDisplay.displayTransform = (value) => `${Number(value).toFixed(2)}`;
@@ -265,7 +260,6 @@ class StatisticsControlBinding extends ControlBinding {
 class TmcStatusControlBinding extends ControlBinding {
     constructor(tmcStatusDisplay, tmcTempDisplay, stallStatusDisplay, stallCountDisplay) {
         super({
-            statusKeys: ['tmcst', 'tmct', 'sd', 'sc']
         });
 
         // Set displayTransform for each DisplayControl
@@ -330,7 +324,6 @@ class TmcStatusControlBinding extends ControlBinding {
 class CurrentSpeedControlBinding extends ControlBinding {
     constructor(currentSpeedDisplay, config = {}) {
         const defaults = {
-            statusKeys: ['cs'],
             customStatusHandler: (statusUpdate, controls, config) => {
                 if (statusUpdate.cs !== undefined) {
                     currentSpeedDisplay.setValue(statusUpdate.cs);
@@ -349,7 +342,6 @@ class CurrentSpeedControlBinding extends ControlBinding {
 class TimestampControlBinding extends ControlBinding {
     constructor(lastUpdateDisplay, config = {}) {
         const defaults = {
-            statusKeys: [],
             customStatusHandler: () => {
                 lastUpdateDisplay.setValue(new Date().toLocaleTimeString());
             }
@@ -370,7 +362,6 @@ class SpeedControlBinding extends ControlBinding {
      */
     constructor(speedSlider, speedDisplay, presetButtons, speedValueDisplay) {
         super({
-            statusKeys: ['sp', 'cs'],
             debounceTime: 150
         });
 
@@ -478,7 +469,6 @@ class DirectionControlBinding extends ControlBinding {
      */
     constructor(directionButtons, directionDisplay) {
         super({
-            statusKeys: ['dir']
         });
 
         this.directionButtons = directionButtons;
@@ -515,7 +505,7 @@ class DirectionControlBinding extends ControlBinding {
 // Variable speed control binding with UI coordination
 class VariableSpeedControlBinding extends ControlBinding {
     constructor(toggle, statusDisplay, controlsContainer) {
-        super({ statusKeys: ['sve'] });
+        super({});
         if (toggle) this.addControl('sve', toggle);
         if (statusDisplay) this.addControl('sve', statusDisplay);
         this.toggle = toggle;
@@ -567,7 +557,6 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
      */
     constructor(graphControl) {
         super({
-            statusKeys: ['ca', 'cs', 'sp']
         });
 
         this.graphControl = graphControl;
@@ -608,7 +597,6 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
 class PowerDeliveryControlBinding extends ControlBinding {
     constructor(voltageSelect, negotiateBtn, autoNegotiateBtn, pdStatusDisplay, pdPowerGoodDisplay, pdNegotiatedVoltageDisplay, pdCurrentVoltageDisplay) {
         super({
-            statusKeys: ['pdns', 'pdpg', 'pdnv', 'pdcv']
         });
 
         this.voltageSelect = voltageSelect;
@@ -761,7 +749,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
  */
 class StallGuardControlBinding extends ControlBinding {
     constructor(thresholdSlider, resultDisplay, thresholdValueDisplay) {
-        super({ statusKeys: ['sgt', 'sgr'], debounceTime: 150 });
+        super({ debounceTime: 150 });
         this.thresholdSlider = thresholdSlider;
         this.resultDisplay = resultDisplay;
         this.thresholdValueDisplay = thresholdValueDisplay;
@@ -973,7 +961,6 @@ class StallResetControlBinding extends ControlBinding {
 class MotorControlBinding extends ControlBinding {
     constructor(motorToggle, motorStatusDisplay) {
         super({
-            statusKeys: ['en'],
             debounceTime: 0
         });
         if (motorToggle) this.addControl('en', motorToggle);
@@ -992,7 +979,6 @@ class MotorControlBinding extends ControlBinding {
 class CurrentControlBinding extends ControlBinding {
     constructor(currentSlider, currentDisplay, currentValueDisplay) {
         super({
-            statusKeys: ['cur'],
             inputValueTransform: (value) => parseInt(value),
             debounceTime: 150
         });
@@ -1035,7 +1021,7 @@ class CurrentControlBinding extends ControlBinding {
  */
 class StrengthControlBinding extends ControlBinding {
     constructor(strengthSlider, strengthValueDisplay, variableSpeedActive = false) {
-        super({ statusKeys: ['svs'], debounceTime: 150 });
+        super({ debounceTime: 150 });
         if (!variableSpeedActive) {
             if (strengthSlider) this.addControl('svs', strengthSlider);
             if (strengthValueDisplay) this.addControl('svs', strengthValueDisplay);
@@ -1062,7 +1048,7 @@ class StrengthControlBinding extends ControlBinding {
  */
 class PhaseControlBinding extends ControlBinding {
     constructor(phaseSlider, phaseValueDisplay, variableSpeedActive = false) {
-        super({ statusKeys: ['svp'], debounceTime: 150 });
+        super({ debounceTime: 150 });
         if (!variableSpeedActive) {
             if (phaseSlider) this.addControl('svp', phaseSlider);
             if (phaseValueDisplay) this.addControl('svp', phaseValueDisplay);
