@@ -500,44 +500,47 @@ class DirectionControlBinding extends ControlBinding {
 // Variable speed control binding with UI coordination
 class VariableSpeedControlBinding extends ControlBinding {
     constructor(toggle, statusDisplay, controlsContainer) {
-        super({});
+        super({
+            debounceTime: 0
+        });
         if (toggle) this.addControl('sve', toggle);
-        if (statusDisplay) this.addControl('sve', statusDisplay);
+        if (statusDisplay) this.addControl('sve', statfusDisplay);
         this.toggle = toggle;
         this.statusDisplay = statusDisplay;
         this.controlsContainer = controlsContainer;
 
-        toggle.onChange((enabled) => {
-            this.handleValueChange(enabled, enabled ? 'esv' : 'dsv');
+        toggle.onChange((value) => {
+            this.handleValueChange(value, 'sve');
         });
     }
+
+    inputValueTransform(value) {
+        // Ensure boolean
+        return !!value;
+    }
+
+    statusValueTransform(value) {
+        // Ensure boolean
+        return !!value;
+    }
+
     customStatusHandler(transformedValue, key) {
         if (key === 'sve') {
             const enabled = transformedValue;
             this.toggle.setValue(enabled);
-            this.updateVariableSpeedUI(enabled);
+            if (this.controlsContainer) {
+                if (enabled) {
+                    this.controlsContainer.classList.remove('disabled');
+                } else {
+                    this.controlsContainer.classList.add('disabled');
+                }
+            }
             this.statusDisplay.setValue(enabled ? 'ON' : 'OFF');
             const color = enabled ? '#10b981' : '#1f2937';
-            this.statusDisplay.displays.forEach(element => {
-                if (element) element.style.color = color;
-            });
-        }
-    }
-    async handleValueChange(enabled) {
-        const commandType = enabled ? 'esv' : 'dsv';
-        this.toggle.setValue(enabled);
-        this.updateVariableSpeedUI(enabled);
-        this.controls.forEach(control => {
-            control.setDisplayState(CONTROL_STATES.OUTDATED);
-        });
-        return await this.commandManager.sendCommand(commandType, true);
-    }
-    updateVariableSpeedUI(enabled) {
-        if (this.controlsContainer) {
-            if (enabled) {
-                this.controlsContainer.classList.remove('disabled');
-            } else {
-                this.controlsContainer.classList.add('disabled');
+            if (this.statusDisplay.displays) {
+                this.statusDisplay.displays.forEach(element => {
+                    if (element) element.style.color = color;
+                });
             }
         }
     }
@@ -1050,7 +1053,7 @@ class PhaseControlBinding extends ControlBinding {
         }
 
         if (phaseValueDisplay) {
-            phaseValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)}°`;
+            phaseValueDisplay.displayTransform = (value) => `${Number(-value).toFixed(1)}°`;
         }
 
         if (!variableSpeedActive) {
@@ -1061,14 +1064,14 @@ class PhaseControlBinding extends ControlBinding {
         }
     }
     inputValueTransform(value) {
-        let phase = parseInt(value);
+        let phase = -parseInt(value);
         if (phase < 0) phase += 360;
         return (phase * Math.PI) / 180;
     }
     statusValueTransform(value) {
         let phaseDegrees = Math.round((value * 180) / Math.PI);
         if (phaseDegrees > 180) phaseDegrees -= 360;
-        return phaseDegrees;
+        return -phaseDegrees;
     }
     // No customStatusHandler needed; base class implementation suffices.
     // No customStatusHandler needed; base class implementation suffices.
