@@ -270,7 +270,8 @@ class BratenDreherApp {
             this.controls.get('speedSliderFill'),
             this.controls.get('setpointSpeedDisplay'),
             this.controls.get('presetButtons'),
-            this.controls.get('speedValueDisplay')
+            this.controls.get('speedValueDisplay'),
+            this.controls.get('currentSpeedDisplay')
         ));
 
         // Direction control binding
@@ -372,9 +373,7 @@ class BratenDreherApp {
             this.controls.get('stallCountDisplay')
         ));
 
-        this.bindings.set('currentSpeed', new CurrentSpeedControlBinding(
-            this.controls.get('currentSpeedDisplay')
-        ));
+        /* currentSpeed binding merged into speed binding */
 
         this.bindings.set('timestamp', new TimestampControlBinding(
             this.controls.get('lastUpdateDisplay')

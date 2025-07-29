@@ -46,7 +46,7 @@ body {
   min-height: 100vh;
 }
 .container { 
-  max-width: 700px; 
+  max-width: 750px; 
   margin: var(--spacing) auto; 
   padding: calc(var(--spacing) * 1.5); 
 }

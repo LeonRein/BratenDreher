@@ -320,23 +320,7 @@ class TmcStatusControlBinding extends ControlBinding {
     }
 }
 
-// Current speed control binding
-class CurrentSpeedControlBinding extends ControlBinding {
-    constructor(currentSpeedDisplay, config = {}) {
-        const defaults = {
-            customStatusHandler: (statusUpdate, controls, config) => {
-                if (statusUpdate.cs !== undefined) {
-                    currentSpeedDisplay.setValue(statusUpdate.cs);
-                }
-            }
-        };
-        super({ ...defaults, ...config });
 
-        currentSpeedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
-
-        this.addControl('cs', currentSpeedDisplay);
-    }
-}
 
 // Timestamp control binding
 class TimestampControlBinding extends ControlBinding {
@@ -360,46 +344,61 @@ class SpeedControlBinding extends ControlBinding {
      * @param {DisplayControl} speedDisplay
      * @param {RadioGroupControl} presetButtons
      * @param {DisplayControl} speedValueDisplay
+     * @param {DisplayControl} currentSpeedDisplay
      */
-    constructor(speedSlider, speedFillControl, speedDisplay, presetButtons, speedValueDisplay) {
+    constructor(speedSlider, speedFillControl, speedDisplay, presetButtons, speedValueDisplay, currentSpeedDisplay) {
         super({
             debounceTime: 150
         });
-
-        // Set displayTransform for speed displays
-        speedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
-        speedDisplay.options.colorizer = (value) => {
-            if (value === 0) return '#1f2937';
-            if (value < 5) return '#10b981';
-            if (value < 15) return '#3b82f6';
-            return '#8b5cf6';
-        };
-        speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
 
         this.speedSlider = speedSlider;
         this.speedFillControl = speedFillControl;
         this.speedDisplay = speedDisplay;
         this.presetButtons = presetButtons;
         this.speedValueDisplay = speedValueDisplay;
+        this.currentSpeedDisplay = currentSpeedDisplay;
 
-        this.addControl('sp', speedSlider);
-        this.addControl('sp', presetButtons);
-        this.addControl('sp', speedValueDisplay);
-        this.addControl('cs', speedSlider);
-        this.addControl('cs', speedDisplay);
-        // speedValueDisplay should only be validated for 'sp'
+        // Set displayTransform for speed displays if present
+        if (speedDisplay) {
+            speedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+            if (speedDisplay.options) {
+                speedDisplay.options.colorizer = (value) => {
+                    if (value === 0) return '#1f2937';
+                    if (value < 5) return '#10b981';
+                    if (value < 15) return '#3b82f6';
+                    return '#8b5cf6';
+                };
+            }
+        }
+        if (currentSpeedDisplay) {
+            currentSpeedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+        }
+        if (speedValueDisplay) {
+            speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+        }
 
-        // Wire up event handlers
-        this.speedSlider.onChange((value) => {
-            this.speedValueDisplay.setValue(value);
-            this.handleValueChange(value, 'ss');
-        });
+        // Register controls if present
+        if (speedSlider) this.addControl('sp', speedSlider);
+        if (presetButtons) this.addControl('sp', presetButtons);
+        if (speedValueDisplay) this.addControl('sp', speedValueDisplay);
+        if (speedSlider) this.addControl('cs', speedSlider);
+        if (speedDisplay) this.addControl('cs', speedDisplay);
+        if (currentSpeedDisplay) this.addControl('cs', currentSpeedDisplay);
 
-        this.presetButtons.onChange((value) => {
-            const speed = parseFloat(value);
-            this.speedSlider.setValue(speed);
-            this.handleValueChange(speed, 'ss');
-        });
+        // Wire up event handlers if present
+        if (speedSlider && speedValueDisplay) {
+            speedSlider.onChange((value) => {
+                speedValueDisplay.setValue(value);
+                this.handleValueChange(value, 'ss');
+            });
+        }
+        if (presetButtons && speedSlider) {
+            presetButtons.onChange((value) => {
+                const speed = parseFloat(value);
+                speedSlider.setValue(speed);
+                this.handleValueChange(speed, 'ss');
+            });
+        }
     }
 
     displayTransform(value) {
@@ -424,6 +423,9 @@ class SpeedControlBinding extends ControlBinding {
                 const clampedValue = Math.max(min, Math.min(max, transformedValue));
                 const percentage = ((clampedValue - min) / (max - min)) * 100;
                 this.speedFillControl.setValue(percentage);
+            }
+            if (this.currentSpeedDisplay) {
+                this.currentSpeedDisplay.setValue(transformedValue);
             }
         }
     }
@@ -775,7 +777,6 @@ class StallGuardControlBinding extends ControlBinding {
         // Invert percent for backend value (0-100 becomes 100-0)
         return Math.round((100 - percent) * 2.55);
     }
-
 
     hideFill() {
         if (this.thresholdFillControl) {
