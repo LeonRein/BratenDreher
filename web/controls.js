@@ -1,7 +1,7 @@
 // Control state constants
 const CONTROL_STATES = {
     DISABLED: 'DISABLED',
-    OUTDATED: 'OUTDATED', 
+    OUTDATED: 'OUTDATED',
     RETRY: 'RETRY',
     TIMEOUT: 'TIMEOUT',
     VALID: 'VALID'
@@ -75,11 +75,11 @@ class BaseControl {
         if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     }
 
-    bindEvents() {}
+    bindEvents() { }
 
-    handleStatusUpdate(statusUpdate) {}
+    handleStatusUpdate(statusUpdate) { }
 
-    setValue(value) {}
+    setValue(value) { }
 
     getValue() { return undefined; }
 
@@ -87,25 +87,41 @@ class BaseControl {
 }
 
 /**
+ * Slider fill control for managing the fill element of a slider.
+ */
+class SliderFillControl extends BaseControl {
+    constructor(fillElement, options = {}) {
+        super(fillElement, options);
+        this.fillElement = this.elements[0];
+    }
+
+    setValue(percentage) {
+        if (this.fillElement) {
+            this.fillElement.style.width = `${percentage}%`;
+            this.fillElement.style.opacity = '1';
+        }
+    }
+
+    hideFill() {
+        if (this.fillElement) {
+            this.fillElement.style.opacity = '0';
+        }
+    }
+}
+
+/**
  * Slider control for range inputs.
+ * Now only manages the slider input, not the fill.
  */
 class SliderControl extends BaseControl {
     constructor(sliderElement, options = {}) {
         super(sliderElement, options);
         this.slider = this.elements[0];
-        this.valueElement = options.valueElement;
-        this.fillElement = options.fillElement;
-        this.options = {
-            debounceTime: 500,
-            ...options
-        };
-        if (this.valueElement) this.addAdditionalElement(this.valueElement, { applyDisabled: false });
-        if (this.fillElement) this.addAdditionalElement(this.fillElement, { applyOpacity: false, applyDisabled: false, applyColors: false, applyClasses: false });
+        this.options = { ...options };
         this.bindEvents();
     }
 
     setDisplayState(state, force = false) {
-        if (state === CONTROL_STATES.DISABLED) this.hideFill();
         super.setDisplayState(state, force);
     }
 
@@ -116,106 +132,104 @@ class SliderControl extends BaseControl {
 
     handleInput(event) {
         const rawValue = parseFloat(event.target.value);
-        const displayValue = rawValue.toString();
-        if (this.valueElement) this.valueElement.textContent = displayValue;
         this.setDisplayState(CONTROL_STATES.OUTDATED);
-        if (this.timer) clearTimeout(this.timer);
-        this.timer = setTimeout(() => {
-            if (this._onChange) this._onChange(rawValue);
-        }, this.options.debounceTime);
+        if (this._onChange) this._onChange(rawValue);
     }
 
     setValue(value) {
         if (this.slider) {
             this.slider.value = value;
-            if (this.valueElement) this.valueElement.textContent = value.toString();
         }
     }
 
     getValue() {
         return this.slider ? parseFloat(this.slider.value) : undefined;
     }
-
-    updateFillPosition(currentValue) {
-        if (!this.fillElement || !this.slider) return;
-        const min = parseFloat(this.slider.min);
-        const max = parseFloat(this.slider.max);
-        const clampedValue = Math.max(min, Math.min(max, currentValue));
-        const percentage = (clampedValue - min) / (max - min);
-        this.fillElement.style.width = `${percentage * 100}%`;
-        this.fillElement.style.opacity = '1';
-    }
-
-    hideFill() {
-        if (this.fillElement) this.fillElement.style.opacity = '0';
-    }
 }
 
 /**
- * Button control for click handling.
+ * SingleButtonControl for single-action buttons.
  */
-class ButtonControl extends BaseControl {
-    constructor(buttonElements, options = {}) {
-        super(buttonElements, options);
-        this.buttons = this.elements;
-        this.options = {
-            type: 'single',
-            activeClass: 'active',
-            clickValue: undefined,
-            ...options
-        };
+class SingleButtonControl extends BaseControl {
+    constructor(buttonElement, options = {}) {
+        super(buttonElement, options);
+        this.button = this.elements[0];
         this.bindEvents();
     }
 
     bindEvents() {
-        this.buttons.forEach((button, index) => {
-            if (!button) return;
-            button.addEventListener('click', (e) => this.handleClick(e, index));
-        });
+        if (!this.button) return;
+        this.button.addEventListener('click', (e) => this.handleClick(e));
     }
 
-    handleClick(event, buttonIndex) {
-        const button = event.target;
+    handleClick(event) {
         this.setDisplayState(CONTROL_STATES.OUTDATED);
-        if (this.options.type === 'radio-group') {
-            this.buttons.forEach(btn => btn.classList.remove(this.options.activeClass));
-            button.classList.add(this.options.activeClass);
-        } else if (this.options.type === 'toggle') {
-            button.classList.toggle(this.options.activeClass);
-        }
         if (this._onChange) {
-            const value = this.options.clickValue !== undefined ? this.options.clickValue : (button.dataset.value || buttonIndex);
-            this._onChange(value, buttonIndex, button);
+            this._onChange(true);
         }
     }
 
     setValue(value) {
-        this.setActiveByValue(value);
+        // No-op for single button
     }
 
     getValue() {
-        // Return active button value if available
+        return undefined;
+    }
+}
+
+/**
+ * RadioGroupControl for mutually exclusive button groups.
+ */
+class RadioGroupControl extends BaseControl {
+    constructor(buttonElements, options = {}) {
+        super(buttonElements, options);
+        this.buttons = this.elements;
+        this.activeClass = options.activeClass || 'active';
+        this.bindEvents();
+    }
+
+    bindEvents() {
+        this.buttons.forEach((button) => {
+            if (!button) return;
+            button.addEventListener('click', (e) => this.handleClick(e));
+        });
+    }
+
+    handleClick(event) {
+        const button = event.target;
+        this.setDisplayState(CONTROL_STATES.OUTDATED);
+        this.buttons.forEach(btn => btn.classList.remove(this.activeClass));
+        button.classList.add(this.activeClass);
+        if (this._onChange && button.dataset.value !== undefined) {
+            this._onChange(button.dataset.value);
+        }
+    }
+
+    setValue(value) {
+        this.buttons.forEach(btn => {
+            btn.classList.toggle(this.activeClass, btn.dataset.value == value);
+        });
+    }
+
+    getValue() {
         for (let btn of this.buttons) {
-            if (btn.classList.contains(this.options.activeClass)) {
-                return btn.dataset.value || btn.textContent;
+            if (btn.classList.contains(this.activeClass)) {
+                if (btn.dataset.value !== undefined) return btn.dataset.value;
+                return btn.textContent;
             }
         }
         return undefined;
     }
 
-    setActiveButton(index) {
-        if (this.options.type === 'radio-group') {
-            this.buttons.forEach((btn, i) => {
-                if (btn) btn.classList.toggle(this.options.activeClass, i === index);
-            });
-        }
-    }
+    /* setActiveButton removed: use setValue(value) instead, which calls setActiveByValue */
 
     setActiveByValue(value) {
         this.buttons.forEach(btn => {
-            if (btn && btn.dataset.value !== undefined) {
-                const isActive = btn.dataset.value == value;
-                btn.classList.toggle(this.options.activeClass, isActive);
+            let btnValue = btn.dataset.value !== undefined ? btn.dataset.value : undefined;
+            if (btnValue !== undefined) {
+                const isActive = btnValue == value;
+                btn.classList.toggle(this.activeClass, isActive);
             }
         });
     }
@@ -290,8 +304,8 @@ class DisplayControl extends BaseControl {
     constructor(displayElements, options = {}) {
         super(displayElements, options);
         this.displays = this.elements;
+        this.displayTransform = options.displayTransform || ((x) => x);
         this.options = {
-            formatter: (value) => value.toString(),
             colorizer: null,
             ...options
         };
@@ -299,25 +313,20 @@ class DisplayControl extends BaseControl {
     }
 
     setValue(value) {
-        this.updateValue(value);
+        const transformed = this.displayTransform(value);
+        this.displays.forEach(element => {
+            if (element) {
+element.textContent = transformed;
+if (this.options.colorizer) {
+    const color = this.options.colorizer(transformed);
+    if (color) element.style.color = color;
+}
+            }
+        });
     }
 
     getValue() {
         return this.displays[0] ? this.displays[0].textContent : undefined;
-    }
-
-    updateValue(value) {
-        const formattedValue = this.options.formatter(value);
-        this.displays.forEach(element => {
-            if (element) {
-                element.textContent = formattedValue;
-                element.style.opacity = '1.0';
-                if (this.options.colorizer) {
-                    const color = this.options.colorizer(value);
-                    if (color) element.style.color = color;
-                }
-            }
-        });
     }
 
     updateClass(className) {

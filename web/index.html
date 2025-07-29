@@ -58,7 +58,7 @@
             <!-- Speed Control -->
             <div class="control-group">
                 <label class="label" for="speedSlider">
-                    Speed: <span id="speedValue">1.0</span> RPM
+                    Speed: <span id="speedValue">1.0</span>
                 </label>
                 <div class="slider-container">
                     <div class="slider-wrapper">
@@ -67,10 +67,10 @@
                     </div>
                 </div>
                 <div class="preset-buttons">
-                    <button class="btn preset" data-speed="0.5">Very Slow</button>
-                    <button class="btn preset" data-speed="2.0">Slow</button>
-                    <button class="btn preset" data-speed="10.0">Medium</button>
-                    <button class="btn preset" data-speed="30.0">Fast</button>
+                    <button class="btn preset" data-value="0.5">Very Slow</button>
+                    <button class="btn preset" data-value="1.0">Slow</button>
+                    <button class="btn preset" data-value="2.0">Medium</button>
+                    <button class="btn preset" data-value="5.0">Fast</button>
                 </div>
             </div>
 
@@ -78,10 +78,10 @@
             <div class="control-group">
                 <label class="label">Direction</label>
                 <div class="direction-buttons">
-                    <button id="clockwiseBtn" class="btn direction active" data-direction="1">
+                    <button id="clockwiseBtn" class="btn direction active" data-value="cw">
                         ↻ Clockwise
                     </button>
-                    <button id="counterclockwiseBtn" class="btn direction" data-direction="0">
+                    <button id="counterclockwiseBtn" class="btn direction" data-value="ccw">
                         ↺ Counter-clockwise
                     </button>
                 </div>
@@ -116,7 +116,7 @@
                 <div class="group-box variable-speed-controls" id="variableSpeedControls">
                     <div class="setting-item">
                         <label for="strengthSlider" class="label">Variation Strength: <span
-                                id="strengthValue">20</span>%</label>
+                                id="strengthValue">20</span></label>
                         <div class="slider-container">
                             <div class="slider-wrapper">
                                 <div class="slider-fill"></div>
@@ -129,7 +129,7 @@
                         </div>
                     </div>
                     <div class="setting-item">
-                        <label for="phaseSlider" class="label">Phase Offset: <span id="phaseValue">0</span>°</label>
+                        <label for="phaseSlider" class="label">Phase Offset: <span id="phaseValue">0</span></label>
                         <div class="slider-container">
                             <div class="slider-wrapper">
                                 <div class="slider-fill"></div>
@@ -153,7 +153,7 @@
                 <h3>Advanced Settings</h3>
                 <div class="grid cols-2">
                     <div class="setting-item">
-                        <label for="currentSlider" class="label">Current: <span id="currentValue">30</span>%</label>
+                        <label for="currentSlider" class="label">Current: <span id="currentValue">30</span></label>
                         <div class="slider-container">
                             <div class="slider-wrapper">
                                 <div class="slider-fill"></div>
@@ -167,7 +167,7 @@
                     </div>
                     <div class="setting-item">
                         <label for="accelerationTimeSlider" class="label">Acceleration Time: <span
-                                id="accelerationTimeValue">5</span>s</label>
+                                id="accelerationTimeValue">5</span></label>
                         <div class="slider-container">
                             <div class="slider-wrapper">
                                 <div class="slider-fill"></div>
@@ -197,7 +197,7 @@
                 </div>
                 <div class="stat-item item-box">
                     <span class="stat-value" id="avgSpeed">0.000</span>
-                    <span class="stat-label">Avg Speed (RPM)</span>
+                    <span class="stat-label">Avg Speed</span>
                 </div>
             </div>
             <div class="stats-buttons">
@@ -222,11 +222,11 @@
                     </div>
                     <div class="power-item item-box">
                         <span class="power-label">Negotiated:</span>
-                        <span id="pdNegotiatedVoltage" class="power-value">- V</span>
+                        <span id="pdNegotiatedVoltage" class="power-value">-</span>
                     </div>
                     <div class="power-item item-box">
                         <span class="power-label">Current:</span>
-                        <span id="pdCurrentVoltage" class="power-value">- V</span>
+                        <span id="pdCurrentVoltage" class="power-value">-</span>
                     </div>
                 </div>
                 <div class="group-box power-controls">
@@ -259,14 +259,14 @@
                     <h3>StallGuard Threshold & Load Monitor</h3>
                     <div class="control-group">
                         <label for="stallguardThresholdSlider" class="label">
-                            Sensitivity: <span id="stallguardThresholdValue">50.2%</span>
-                            &nbsp;|&nbsp; Current Load: <span id="stallguardResultValue">50.0%</span>
+                            Sensitivity: <span id="stallguardThresholdValue">50.2</span>
+                            &nbsp;|&nbsp; Current Load: <span id="stallguardResultValue">50.0</span>
                         </label>
                         <div class="slider-container">
                             <div class="slider-wrapper">
                                 <div class="slider-fill" id="stallguardSliderFill"></div>
-                                <input type="range" id="stallguardThresholdSlider" class="slider" min="0" max="255"
-                                    step="1" value="128">
+                                <input type="range" id="stallguardThresholdSlider" class="slider" min="0" max="100"
+                                    step="1" value="50">
                             </div>
                         </div>
                         <div class="hint-box">
@@ -314,11 +314,11 @@
                 </div>
                 <div class="status-item item-box">
                     <span class="status-label">Setpoint RPM:</span>
-                    <span id="setpointSpeed" class="status-value">0.0 RPM</span>
+                    <span id="setpointSpeed" class="status-value">0.0</span>
                 </div>
                 <div class="status-item item-box">
                     <span class="status-label">Current RPM:</span>
-                    <span id="currentSpeed" class="status-value">0.0 RPM</span>
+                    <span id="currentSpeed" class="status-value">0.0</span>
                 </div>
                 <div class="status-item item-box">
                     <span class="status-label">Variable Speed:</span>
@@ -326,11 +326,11 @@
                 </div>
                 <div class="status-item item-box">
                     <span class="status-label">Acceleration:</span>
-                    <span id="currentAcceleration" class="status-value">5.0s to max</span>
+                    <span id="currentAcceleration" class="status-value">5.0</span>
                 </div>
                 <div class="status-item item-box">
                     <span class="status-label">Current:</span>
-                    <span id="currentCurrent" class="status-value">30%</span>
+                    <span id="currentCurrent" class="status-value">30</span>
                 </div>
                 <div class="status-item item-box">
                     <span class="status-label">TMC2209:</span>

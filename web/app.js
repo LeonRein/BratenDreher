@@ -105,57 +105,36 @@ class BratenDreherApp {
     initializeControls() {
         // Speed control
         this.controls.set('speedSlider', new SliderControl(this.speedSlider, {
-            valueElement: this.speedValue,
-            fillElement: this.speedSliderFill,
-            displayTransform: (value) => value.toFixed(1),
             debounceTime: 500
         }));
+        this.controls.set('speedSliderFill', new SliderFillControl(this.speedSliderFill));
+        this.controls.set('speedValueDisplay', new DisplayControl(this.speedValue));
 
         // Speed displays
         this.controls.set('setpointSpeedDisplay', new DisplayControl(this.setpointSpeed, {
-            formatter: (value) => `${value.toFixed(1)} RPM`,
-            colorizer: (value) => {
-                if (value === 0) return '#1f2937';
-                if (value < 5) return '#10b981';
-                if (value < 15) return '#3b82f6';
-                return '#8b5cf6';
-            }
+            formatter: (value) => `${value.toFixed(1)} RPM`
         }));
 
         this.controls.set('currentSpeedDisplay', new DisplayControl(this.currentSpeed, {
-            formatter: (value) => `${value.toFixed(1)} RPM`,
-            colorizer: (value) => {
-                if (value === 0) return '#1f2937';
-                if (value < 5) return '#10b981';
-                if (value < 15) return '#3b82f6';
-                return '#8b5cf6';
-            }
+            formatter: (value) => `${value.toFixed(1)} RPM`
         }));
 
         // Preset buttons
-        this.controls.set('presetButtons', new ButtonControl(Array.from(this.presetBtns), {
-            type: 'radio-group',
+        this.controls.set('presetButtons', new RadioGroupControl(Array.from(this.presetBtns), {
             activeClass: 'active'
         }));
 
         // Emergency stop button
-        this.controls.set('emergencyStopBtn', new ButtonControl(this.emergencyStopBtn, {
-            type: 'single'
-        }));
+        this.controls.set('emergencyStopBtn', new SingleButtonControl(this.emergencyStopBtn));
 
         // Statistics reset button
-        this.controls.set('resetStatsBtn', new ButtonControl(this.resetStatsBtn, {
-            type: 'single'
-        }));
+        this.controls.set('resetStatsBtn', new SingleButtonControl(this.resetStatsBtn));
 
         // Stall reset button
-        this.controls.set('resetStallBtn', new ButtonControl(this.resetStallBtn, {
-            type: 'single'
-        }));
+        this.controls.set('resetStallBtn', new SingleButtonControl(this.resetStallBtn));
 
         // Direction buttons - create as radio group
-        this.controls.set('directionButtons', new ButtonControl([this.clockwiseBtn, this.counterclockwiseBtn], {
-            type: 'radio-group',
+        this.controls.set('directionButtons', new RadioGroupControl([this.clockwiseBtn, this.counterclockwiseBtn], {
             activeClass: 'active'
         }));
 
@@ -165,57 +144,40 @@ class BratenDreherApp {
         // Motor toggle
         this.controls.set('motorToggle', new ToggleControl(this.motorToggle));
         this.controls.set('motorStatusDisplay', new DisplayControl(this.motorStatus, {
-            formatter: (enabled) => enabled ? 'Enabled' : 'Stopped',
-            colorizer: (enabled) => enabled ? '#10b981' : '#1f2937'
+            formatter: (enabled) => enabled ? 'Enabled' : 'Stopped'
         }));
 
         // Current control
         this.controls.set('currentSlider', new SliderControl(this.currentSlider, {
-            valueElement: this.currentValue,
-            displayTransform: (value) => value.toString(),
             debounceTime: 500
         }));
+        this.controls.set('currentValueDisplay', new DisplayControl(this.currentValue));
 
         this.controls.set('currentDisplay', new DisplayControl(this.currentCurrent, {
-            formatter: (value) => `${value}%`,
-            colorizer: (value) => {
-                if (value <= 20) return '#10b981';
-                if (value <= 50) return '#3b82f6';
-                if (value <= 80) return '#f59e0b';
-                return '#8b5cf6';
-            }
+            formatter: (value) => `${value}%`
         }));
 
         // Acceleration control
         this.controls.set('accelerationSlider', new SliderControl(this.accelerationTimeSlider, {
-            valueElement: this.accelerationTimeValue,
-            displayTransform: (value) => Number(value).toFixed(1),
             debounceTime: 500
         }));
+        this.controls.set('accelerationTimeValueDisplay', new DisplayControl(this.accelerationTimeValue));
 
         this.controls.set('accelerationDisplay', new DisplayControl(this.currentAcceleration, {
-            formatter: (timeSeconds) => `${timeSeconds.toFixed(1)}s to max`,
-            colorizer: (timeSeconds) => {
-                if (timeSeconds <= 2) return '#8b5cf6';
-                if (timeSeconds <= 5) return '#3b82f6';
-                if (timeSeconds <= 10) return '#10b981';
-                return '#1f2937';
-            }
+            formatter: (timeSeconds) => `${timeSeconds.toFixed(1)}s to max`
         }));
 
         // Variable speed controls - using CompositeControl for coordinated management
         const variableSpeedToggle = new ToggleControl(this.variableSpeedToggle);
         const variableSpeedStatusDisplay = new DisplayControl(this.variableSpeedStatus);
         const strengthSlider = new SliderControl(this.strengthSlider, {
-            valueElement: this.strengthValue,
-            displayTransform: (value) => value.toString(),
             debounceTime: 500
         });
         const phaseSlider = new SliderControl(this.phaseSlider, {
-            valueElement: this.phaseValue,
-            displayTransform: (value) => value.toString(),
             debounceTime: 500
         });
+        this.controls.set('strengthValueDisplay', new DisplayControl(this.strengthValue));
+        this.controls.set('phaseValueDisplay', new DisplayControl(this.phaseValue));
 
         // Variable speed graph control
         this.variableSpeedGraphCanvas = document.getElementById('variableSpeedGraph');
@@ -238,14 +200,10 @@ class BratenDreherApp {
 
         // StallGuard controls
         this.controls.set('stallguardSlider', new SliderControl(this.stallguardThresholdSlider, {
-            valueElement: this.stallguardThresholdValue,
-            fillElement: this.stallguardSliderFill,
-            displayTransform: (value) => {
-                const percentage = (value / 255) * 100;
-                return `${percentage.toFixed(1)}%`;
-            },
             debounceTime: 300
         }));
+        this.controls.set('stallguardSliderFill', new SliderFillControl(this.stallguardSliderFill));
+        this.controls.set('stallguardThresholdValueDisplay', new DisplayControl(this.stallguardThresholdValue));
 
         this.controls.set('stallguardResultDisplay', new DisplayControl(this.stallguardResultValue));
 
@@ -270,8 +228,12 @@ class BratenDreherApp {
 
         // Power delivery controls
         this.controls.set('voltageSelect', new SelectControl(this.voltageSelect));
-        this.controls.set('negotiateBtn', new ButtonControl(this.negotiateBtn));
-        this.controls.set('autoNegotiateBtn', new ButtonControl(this.autoNegotiateBtn));
+        this.controls.set('negotiateBtn', new SingleButtonControl(this.negotiateBtn));
+        this.controls.set('autoNegotiateBtn', new SingleButtonControl(this.autoNegotiateBtn));
+        this.controls.set('pdStatusDisplay', new DisplayControl(this.pdStatus));
+        this.controls.set('pdPowerGoodDisplay', new DisplayControl(this.pdPowerGood));
+        this.controls.set('pdNegotiatedVoltageDisplay', new DisplayControl(this.pdNegotiatedVoltage));
+        this.controls.set('pdCurrentVoltageDisplay', new DisplayControl(this.pdCurrentVoltage));
 
         // Statistics displays - using CompositeControl for coordinated management
         const totalRevolutionsDisplay = new DisplayControl(this.totalRevolutions, {
@@ -305,9 +267,11 @@ class BratenDreherApp {
         // Speed control binding
         this.bindings.set('speed', new SpeedControlBinding(
             this.controls.get('speedSlider'),
+            this.controls.get('speedSliderFill'),
             this.controls.get('setpointSpeedDisplay'),
             this.controls.get('presetButtons'),
-            this.speedSliderFill
+            this.controls.get('speedValueDisplay'),
+            this.controls.get('currentSpeedDisplay')
         ));
 
         // Direction control binding
@@ -343,53 +307,46 @@ class BratenDreherApp {
         // Current control binding
         this.bindings.set('current', new CurrentControlBinding(
             this.controls.get('currentSlider'),
-            this.controls.get('currentDisplay')
+            this.controls.get('currentDisplay'),
+            this.controls.get('currentValueDisplay')
         ));
 
-this.bindings.set('acceleration', new AccelerationControlBinding(
-    this.controls.get('accelerationSlider'),
-    this.controls.get('accelerationDisplay')
-));
+        this.bindings.set('acceleration', new AccelerationControlBinding(
+            this.controls.get('accelerationSlider'),
+            this.controls.get('accelerationDisplay'),
+            this.controls.get('accelerationTimeValueDisplay')
+        ));
 
         // Variable speed binding
         this.bindings.set('variableSpeed', new VariableSpeedControlBinding(
             this.controls.get('variableSpeedToggle'),
-            this.controls.get('strengthSlider'),
-            this.controls.get('phaseSlider'),
             this.controls.get('variableSpeedStatusDisplay'),
-            this.variableSpeedControls
+            this.controls.get('variableSpeedControlsContainer')
         ));
 
         // Variable speed graph binding
         this.bindings.set('variableSpeedGraph', new VariableSpeedGraphControlBinding(
-            this.controls.get('variableSpeedGraph'),
-            () => {
-                // Use setpoint speed from controls if available
-                const speedDisplay = this.controls.get('setpointSpeedDisplay');
-                if (speedDisplay && speedDisplay.displays && speedDisplay.displays[0]) {
-                    const text = speedDisplay.displays[0].textContent;
-                    const match = text.match(/([\d.]+)/);
-                    if (match) return parseFloat(match[1]);
-                }
-                return 1.0;
-            }
+            this.controls.get('variableSpeedGraph')
         ));
 
         // Strength binding
         this.bindings.set('strength', new StrengthControlBinding(
-            this.controls.get('strengthSlider')
+            this.controls.get('strengthSlider'),
+            this.controls.get('strengthValueDisplay')
         ));
 
         // Phase binding
         this.bindings.set('phase', new PhaseControlBinding(
-            this.controls.get('phaseSlider')
+            this.controls.get('phaseSlider'),
+            this.controls.get('phaseValueDisplay')
         ));
 
         // StallGuard binding
         this.bindings.set('stallguard', new StallGuardControlBinding(
             this.controls.get('stallguardSlider'),
+            this.controls.get('stallguardSliderFill'),
             this.controls.get('stallguardResultDisplay'),
-            this.stallguardSliderFill
+            this.controls.get('stallguardThresholdValueDisplay')
         ));
 
         // Power delivery binding
@@ -397,35 +354,30 @@ this.bindings.set('acceleration', new AccelerationControlBinding(
             this.controls.get('voltageSelect'),
             this.controls.get('negotiateBtn'),
             this.controls.get('autoNegotiateBtn'),
-            {
-                status: this.pdStatus,
-                powerGood: this.pdPowerGood,
-                negotiatedVoltage: this.pdNegotiatedVoltage,
-                currentVoltage: this.pdCurrentVoltage
-            }
+            this.controls.get('pdStatusDisplay'),
+            this.controls.get('pdPowerGoodDisplay'),
+            this.controls.get('pdNegotiatedVoltageDisplay'),
+            this.controls.get('pdCurrentVoltageDisplay')
         ));
 
-this.bindings.set('statistics', new StatisticsControlBinding(
-    this.controls.get('totalRevolutionsDisplay'),
-    this.controls.get('runTimeDisplay'),
-    this.controls.get('avgSpeedDisplay'),
-    this.updateAverageSpeed.bind(this)
-));
+        this.bindings.set('statistics', new StatisticsControlBinding(
+            this.controls.get('totalRevolutionsDisplay'),
+            this.controls.get('runTimeDisplay'),
+            this.controls.get('avgSpeedDisplay')
+        ));
 
-this.bindings.set('tmcStatus', new TmcStatusControlBinding(
-    this.controls.get('tmcStatusDisplay'),
-    this.controls.get('tmcTempDisplay'),
-    this.controls.get('stallStatusDisplay'),
-    this.controls.get('stallCountDisplay')
-));
+        this.bindings.set('tmcStatus', new TmcStatusControlBinding(
+            this.controls.get('tmcStatusDisplay'),
+            this.controls.get('tmcTempDisplay'),
+            this.controls.get('stallStatusDisplay'),
+            this.controls.get('stallCountDisplay')
+        ));
 
-this.bindings.set('currentSpeed', new CurrentSpeedControlBinding(
-    this.controls.get('currentSpeedDisplay')
-));
+        /* currentSpeed binding merged into speed binding */
 
-this.bindings.set('timestamp', new TimestampControlBinding(
-    this.controls.get('lastUpdateDisplay')
-));
+        this.bindings.set('timestamp', new TimestampControlBinding(
+            this.controls.get('lastUpdateDisplay')
+        ));
 
 
         // Set command manager for all bindings
@@ -440,89 +392,7 @@ this.bindings.set('timestamp', new TimestampControlBinding(
         this.reconnectBtn.addEventListener('click', () => this.commandManager.handleReconnect());
         this.disconnectBtn.addEventListener('click', () => this.commandManager.disconnect());
 
-        // Bind all control events
-        // this.controls.forEach(control => {
-        //     control.bindEvents();
-        // });
-
-        // Speed slider event
-        this.controls.get('speedSlider').onChange((value) => {
-            this.bindings.get('speed').handleValueChange(value);
-        });
-
-        // Preset button events
-        this.controls.get('presetButtons').onChange((value, index, button) => {
-            const speed = parseFloat(button.dataset.speed);
-            this.controls.get('speedSlider').setValue(speed);
-            this.bindings.get('speed').handleValueChange(speed);
-        });
-
-        // Direction button events
-        this.controls.get('directionButtons').onChange((value, index, button) => {
-            const clockwise = index === 0; // First button is clockwise
-            this.bindings.get('direction').setDirection(clockwise);
-        });
-
-        // Motor toggle event
-        this.controls.get('motorToggle').onChange((enabled) => {
-            this.bindings.get('motor').handleValueChange(enabled);
-        });
-
-        // Current slider event
-        this.controls.get('currentSlider').onChange((value) => {
-            this.bindings.get('current').handleValueChange(value);
-        });
-
-        // Acceleration slider event
-        this.controls.get('accelerationSlider').onChange((value) => {
-            this.bindings.get('acceleration').handleValueChange(value);
-        });
-
-        // Variable speed toggle event
-        this.controls.get('variableSpeedToggle').onChange((enabled) => {
-            this.bindings.get('variableSpeed').setVariableSpeedEnabled(enabled);
-        });
-
-        // Strength slider event
-        this.controls.get('strengthSlider').onChange((value) => {
-            this.bindings.get('strength').handleValueChange(value);
-        });
-
-        // Phase slider event
-        this.controls.get('phaseSlider').onChange((value) => {
-            this.bindings.get('phase').handleValueChange(value);
-        });
-
-        // StallGuard slider event
-        this.controls.get('stallguardSlider').onChange((value) => {
-            this.bindings.get('stallguard').handleValueChange(value);
-        });
-
-        // Power delivery events
-        this.controls.get('negotiateBtn').onChange(() => {
-            this.bindings.get('powerDelivery').negotiateVoltage();
-        });
-
-        this.controls.get('autoNegotiateBtn').onChange(() => {
-            this.bindings.get('powerDelivery').autoNegotiate();
-        });
-
-        // Emergency stop button event
-        this.controls.get('emergencyStopBtn').onChange(() => {
-            this.bindings.get('emergencyStop').handleValueChange(true);
-        });
-
-        // Statistics reset button event
-        this.controls.get('resetStatsBtn').onChange(() => {
-            this.bindings.get('statisticsReset').handleValueChange(true);
-        });
-
-        // Stall reset button event
-        this.controls.get('resetStallBtn').onChange(() => {
-            this.bindings.get('stallReset').handleValueChange(true);
-        });
-
-        // Emergency stop, statistics reset, and stall reset are now handled by bindings.
+        // All control event handlers are now set in their respective ControlBindings classes.
     }
 
     setupCommandManagerCallbacks() {
@@ -534,7 +404,7 @@ this.bindings.set('timestamp', new TimestampControlBinding(
         // Status updates from backend
         this.commandManager.onStatusUpdate = (statusUpdate) => {
             // Update last update time on every status message
-            this.controls.get('lastUpdateDisplay').updateValue(new Date().toLocaleTimeString());
+            this.controls.get('lastUpdateDisplay').setValue(new Date().toLocaleTimeString());
             this.handleStatusUpdate(statusUpdate);
         };
 
@@ -647,42 +517,5 @@ this.bindings.set('timestamp', new TimestampControlBinding(
             }
         });
 
-    }
-
-    updateAverageSpeed() {
-        const revolutionsElement = this.totalRevolutions;
-        const runtimeElement = this.runTime;
-
-        if (!revolutionsElement || !runtimeElement) return;
-
-        const currentRevolutions = parseFloat(revolutionsElement.textContent) || 0;
-        const currentRuntimeText = runtimeElement.textContent;
-        let currentRuntimeSeconds = 0;
-
-        // Parse runtime from HH:MM:SS.mmm format
-        if (currentRuntimeText && currentRuntimeText !== '00:00:00.000') {
-            const [timePart, millisPart = '0'] = currentRuntimeText.split('.');
-            const timeParts = timePart.split(':');
-            currentRuntimeSeconds = parseInt(timeParts[0]) * 3600 + parseInt(timeParts[1]) * 60 + parseInt(timeParts[2]);
-            if (millisPart) {
-                currentRuntimeSeconds += parseInt(millisPart) / 1000;
-            }
-        }
-
-        if (currentRuntimeSeconds > 0 && currentRevolutions > 0) {
-            const avgSpeed = (currentRevolutions * 60) / currentRuntimeSeconds;
-            this.controls.get('avgSpeedDisplay').updateValue(avgSpeed);
-        } else {
-            this.controls.get('avgSpeedDisplay').updateValue(0.0);
-        }
-    }
-
-    formatTime(milliseconds) {
-        const totalSeconds = Math.floor(milliseconds / 1000);
-        const tenths = Math.floor((milliseconds % 1000) / 100);
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const secs = totalSeconds % 60;
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${tenths}`;
     }
 }
