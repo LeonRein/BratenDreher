@@ -594,9 +594,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
         this.pdCurrentVoltageDisplay = pdCurrentVoltageDisplay;
         // this.negotiationTimeout = null;
 
-        this.addControl('pdvs', voltageSelect);
-        this.addControl('negotiate', negotiateBtn);
-        this.addControl('autoNegotiate', autoNegotiateBtn);
+        this.addControl('pdnv', voltageSelect);
         this.addControl('pdns', pdStatusDisplay);
         this.addControl('pdpg', pdPowerGoodDisplay);
         this.addControl('pdnv', pdNegotiatedVoltageDisplay);
@@ -662,9 +660,7 @@ class PowerDeliveryControlBinding extends ControlBinding {
             }
 
             // Update voltage selector on success
-            if (statusValue === 2 && this.voltageSelect && this.voltageSelect.setValue) {
-                this.voltageSelect.setValue(transformedValue);
-            }
+            // (Do not set voltageSelect to status code; handled in 'pdnv' below)
         }
 
         if (key === 'pdpg') {
@@ -681,6 +677,10 @@ class PowerDeliveryControlBinding extends ControlBinding {
                 this.pdNegotiatedVoltageDisplay.displays[0].textContent = transformedValue > 0 ?
                     `${transformedValue} V` : '-';
                 this.pdNegotiatedVoltageDisplay.displays[0].style.opacity = '1.0';
+            }
+            // Update voltage selector to negotiated voltage
+            if (this.voltageSelect && this.voltageSelect.setValue) {
+                this.voltageSelect.setValue(transformedValue);
             }
         }
 
