@@ -507,19 +507,9 @@ class VariableSpeedControlBinding extends ControlBinding {
         this.statusDisplay = statusDisplay;
         this.controlsContainer = controlsContainer;
 
-        toggle.onChange((value) => {
-            this.handleValueChange(value, 'sve');
+        toggle.onChange((enabled) => {
+            this.handleValueChange(enabled, 'sve');
         });
-    }
-
-    inputValueTransform(value) {
-        // Ensure boolean
-        return !!value;
-    }
-
-    statusValueTransform(value) {
-        // Ensure boolean
-        return !!value;
     }
 
     customStatusHandler(transformedValue, key) {
@@ -1031,7 +1021,7 @@ class StrengthControlBinding extends ControlBinding {
         if (!variableSpeedActive) {
             strengthSlider.onChange((value) => {
                 strengthValueDisplay.setValue(value);
-                this.handleValueChange(value, 'sv');
+                this.handleValueChange(value, 'svs');
             });
         }
     }

@@ -222,7 +222,7 @@ void BLEManager::handleCommand(const std::string& command) {
             sendNotification("error", "Acceleration must be 100-100000 steps/s²");
         }
     }
-    else if (strcmp(type, "sv") == 0) {
+    else if (strcmp(type, "svs") == 0) {
         float strength = doc["value"];
         if (strength >= 0.0f && strength <= 1.0f) {
             StepperCommandData cmd(StepperCommand::SET_SPEED_VARIATION, strength);
@@ -239,7 +239,7 @@ void BLEManager::handleCommand(const std::string& command) {
         systemCommand.sendCommand(cmd);
         dbg_printf("Speed variation phase command queued: %.2f radians\n", phase);
     }
-    else if (strcmp(type, "sv") == 0) {
+    else if (strcmp(type, "sve") == 0) {
         bool enable = doc["value"];
         StepperCommandData cmd(enable ? StepperCommand::ENABLE_SPEED_VARIATION : StepperCommand::DISABLE_SPEED_VARIATION);
         systemCommand.sendCommand(cmd);
