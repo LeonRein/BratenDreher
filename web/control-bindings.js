@@ -730,6 +730,14 @@ class StallGuardControlBinding extends ControlBinding {
 
         /* No colorizer for slider fill */
 
+        // Set displayTransform for result display
+        if (resultDisplay) {
+            resultDisplay.displayTransform = (value) => `${value.toFixed(1)} %`;
+        }
+        if (thresholdValueDisplay) {
+            thresholdValueDisplay.displayTransform = (value) => `${value.toFixed(1)} %`;
+        }
+
         this.addControl('sgt', thresholdSlider);
         this.addControl('sgr', thresholdSlider);
         this.addControl('sgr', resultDisplay);
@@ -740,30 +748,6 @@ class StallGuardControlBinding extends ControlBinding {
             this.thresholdValueDisplay.setValue(value);
             this.handleValueChange(value, 'st');
         });
-    }
-
-    customStatusHandler(transformedValue, key) {
-        if (key === 'sgt') {
-            this.thresholdSlider.setValue(transformedValue);
-            if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(transformedValue.toFixed(1));
-        }
-        if (key === 'sgr') {
-            this.resultDisplay.setValue(this.displayTransform(transformedValue, 'sgr'));
-            if (this.thresholdSlider.fillElement) {
-                this.thresholdSlider.updateFillWidth(transformedValue);
-                this.thresholdSlider.fillElement.style.opacity = "1.0";
-            }
-            const sliderPercent = parseFloat(this.thresholdSlider.slider.value);
-            if (this.thresholdSlider.fillElement) {
-                if (transformedValue < sliderPercent * 0.8) {
-                    this.thresholdSlider.setFillColor('#10b981');
-                } else if (transformedValue < sliderPercent) {
-                    this.thresholdSlider.setFillColor('#f59e0b');
-                } else {
-                    this.thresholdSlider.setFillColor('#ef4444');
-                }
-            }
-        }
     }
 
     statusValueTransform(value, key) {
@@ -778,13 +762,6 @@ class StallGuardControlBinding extends ControlBinding {
         return value;
     }
 
-    displayTransform(value, key) {
-        if (key === 'sgt' || key === 'sgr') {
-            return `${value.toFixed(1)} %`;
-        }
-        return value.toString();
-    }
-
     inputValueTransform(percent) {
         // Invert percent for backend value (0-100 becomes 100-0)
         return Math.round((100 - percent) * 2.55);
@@ -796,12 +773,12 @@ class StallGuardControlBinding extends ControlBinding {
             if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(transformedValue.toFixed(1));
         }
         if (key === 'sgr') {
-            this.resultDisplay.setValue(this.displayTransform(transformedValue, 'sgr'));
+            this.resultDisplay.setValue(transformedValue);
             if (this.thresholdSlider.fillElement) {
+                // transformedValue is percentage (0-100)
                 this.thresholdSlider.updateFillWidth(transformedValue);
                 this.thresholdSlider.fillElement.style.opacity = "1.0";
             }
-            // Colorizer now handles fill color
         }
     }
 
