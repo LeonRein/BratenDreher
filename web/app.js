@@ -105,19 +105,19 @@ class BratenDreherApp {
     initializeControls() {
         // Speed control
         this.controls.set('speedSlider', new SliderControl(this.speedSlider, {
-            fillElement: this.speedSliderFill,
             debounceTime: 500
         }));
+        this.controls.set('speedSliderFill', new SliderFillControl(this.speedSliderFill));
         this.controls.set('speedValueDisplay', new DisplayControl(this.speedValue));
 
         // Speed displays
-this.controls.set('setpointSpeedDisplay', new DisplayControl(this.setpointSpeed, {
-    formatter: (value) => `${value.toFixed(1)} RPM`
-}));
+        this.controls.set('setpointSpeedDisplay', new DisplayControl(this.setpointSpeed, {
+            formatter: (value) => `${value.toFixed(1)} RPM`
+        }));
 
-this.controls.set('currentSpeedDisplay', new DisplayControl(this.currentSpeed, {
-    formatter: (value) => `${value.toFixed(1)} RPM`
-}));
+        this.controls.set('currentSpeedDisplay', new DisplayControl(this.currentSpeed, {
+            formatter: (value) => `${value.toFixed(1)} RPM`
+        }));
 
         // Preset buttons
         this.controls.set('presetButtons', new RadioGroupControl(Array.from(this.presetBtns), {
@@ -143,9 +143,9 @@ this.controls.set('currentSpeedDisplay', new DisplayControl(this.currentSpeed, {
 
         // Motor toggle
         this.controls.set('motorToggle', new ToggleControl(this.motorToggle));
-this.controls.set('motorStatusDisplay', new DisplayControl(this.motorStatus, {
-    formatter: (enabled) => enabled ? 'Enabled' : 'Stopped'
-}));
+        this.controls.set('motorStatusDisplay', new DisplayControl(this.motorStatus, {
+            formatter: (enabled) => enabled ? 'Enabled' : 'Stopped'
+        }));
 
         // Current control
         this.controls.set('currentSlider', new SliderControl(this.currentSlider, {
@@ -153,9 +153,9 @@ this.controls.set('motorStatusDisplay', new DisplayControl(this.motorStatus, {
         }));
         this.controls.set('currentValueDisplay', new DisplayControl(this.currentValue));
 
-this.controls.set('currentDisplay', new DisplayControl(this.currentCurrent, {
-    formatter: (value) => `${value}%`
-}));
+        this.controls.set('currentDisplay', new DisplayControl(this.currentCurrent, {
+            formatter: (value) => `${value}%`
+        }));
 
         // Acceleration control
         this.controls.set('accelerationSlider', new SliderControl(this.accelerationTimeSlider, {
@@ -163,9 +163,9 @@ this.controls.set('currentDisplay', new DisplayControl(this.currentCurrent, {
         }));
         this.controls.set('accelerationTimeValueDisplay', new DisplayControl(this.accelerationTimeValue));
 
-this.controls.set('accelerationDisplay', new DisplayControl(this.currentAcceleration, {
-    formatter: (timeSeconds) => `${timeSeconds.toFixed(1)}s to max`
-}));
+        this.controls.set('accelerationDisplay', new DisplayControl(this.currentAcceleration, {
+            formatter: (timeSeconds) => `${timeSeconds.toFixed(1)}s to max`
+        }));
 
         // Variable speed controls - using CompositeControl for coordinated management
         const variableSpeedToggle = new ToggleControl(this.variableSpeedToggle);
@@ -200,9 +200,9 @@ this.controls.set('accelerationDisplay', new DisplayControl(this.currentAccelera
 
         // StallGuard controls
         this.controls.set('stallguardSlider', new SliderControl(this.stallguardThresholdSlider, {
-            fillElement: this.stallguardSliderFill,
             debounceTime: 300
         }));
+        this.controls.set('stallguardSliderFill', new SliderFillControl(this.stallguardSliderFill));
         this.controls.set('stallguardThresholdValueDisplay', new DisplayControl(this.stallguardThresholdValue));
 
         this.controls.set('stallguardResultDisplay', new DisplayControl(this.stallguardResultValue));
@@ -267,6 +267,7 @@ this.controls.set('accelerationDisplay', new DisplayControl(this.currentAccelera
         // Speed control binding
         this.bindings.set('speed', new SpeedControlBinding(
             this.controls.get('speedSlider'),
+            this.controls.get('speedSliderFill'),
             this.controls.get('setpointSpeedDisplay'),
             this.controls.get('presetButtons'),
             this.controls.get('speedValueDisplay')
@@ -342,6 +343,7 @@ this.controls.set('accelerationDisplay', new DisplayControl(this.currentAccelera
         // StallGuard binding
         this.bindings.set('stallguard', new StallGuardControlBinding(
             this.controls.get('stallguardSlider'),
+            this.controls.get('stallguardSliderFill'),
             this.controls.get('stallguardResultDisplay'),
             this.controls.get('stallguardThresholdValueDisplay')
         ));

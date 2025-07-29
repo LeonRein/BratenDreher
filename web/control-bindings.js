@@ -356,11 +356,12 @@ class TimestampControlBinding extends ControlBinding {
 class SpeedControlBinding extends ControlBinding {
     /**
      * @param {SliderControl} speedSlider
+     * @param {SliderFillControl} speedFillControl
      * @param {DisplayControl} speedDisplay
      * @param {RadioGroupControl} presetButtons
      * @param {DisplayControl} speedValueDisplay
      */
-    constructor(speedSlider, speedDisplay, presetButtons, speedValueDisplay) {
+    constructor(speedSlider, speedFillControl, speedDisplay, presetButtons, speedValueDisplay) {
         super({
             debounceTime: 150
         });
@@ -376,6 +377,7 @@ class SpeedControlBinding extends ControlBinding {
         speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
 
         this.speedSlider = speedSlider;
+        this.speedFillControl = speedFillControl;
         this.speedDisplay = speedDisplay;
         this.presetButtons = presetButtons;
         this.speedValueDisplay = speedValueDisplay;
@@ -416,12 +418,12 @@ class SpeedControlBinding extends ControlBinding {
             this.updatePresetButtonState(transformedValue);
         }
         if (key === 'cs') {
-            if (this.speedSlider && this.speedSlider.slider) {
+            if (this.speedSlider && this.speedSlider.slider && this.speedFillControl) {
                 const min = parseFloat(this.speedSlider.slider.min);
                 const max = parseFloat(this.speedSlider.slider.max);
                 const clampedValue = Math.max(min, Math.min(max, transformedValue));
                 const percentage = ((clampedValue - min) / (max - min)) * 100;
-                this.speedSlider.updateFillWidth(percentage);
+                this.speedFillControl.updateFillWidth(percentage);
             }
         }
     }
@@ -722,9 +724,16 @@ class PowerDeliveryControlBinding extends ControlBinding {
  * - Implements transformation functions as class methods
  */
 class StallGuardControlBinding extends ControlBinding {
-    constructor(thresholdSlider, resultDisplay, thresholdValueDisplay) {
+    /**
+     * @param {SliderControl} thresholdSlider
+     * @param {SliderFillControl} thresholdFillControl
+     * @param {DisplayControl} resultDisplay
+     * @param {DisplayControl} thresholdValueDisplay
+     */
+    constructor(thresholdSlider, thresholdFillControl, resultDisplay, thresholdValueDisplay) {
         super({ debounceTime: 150 });
         this.thresholdSlider = thresholdSlider;
+        this.thresholdFillControl = thresholdFillControl;
         this.resultDisplay = resultDisplay;
         this.thresholdValueDisplay = thresholdValueDisplay;
 
@@ -774,17 +783,16 @@ class StallGuardControlBinding extends ControlBinding {
         }
         if (key === 'sgr') {
             this.resultDisplay.setValue(transformedValue);
-            if (this.thresholdSlider.fillElement) {
+            if (this.thresholdFillControl) {
                 // transformedValue is percentage (0-100)
-                this.thresholdSlider.updateFillWidth(transformedValue);
-                this.thresholdSlider.fillElement.style.opacity = "1.0";
+                this.thresholdFillControl.updateFillWidth(transformedValue);
             }
         }
     }
 
     hideFill() {
-        if (this.thresholdSlider && this.thresholdSlider.fillElement) {
-            this.thresholdSlider.hideFill();
+        if (this.thresholdFillControl) {
+            this.thresholdFillControl.hideFill();
         }
     }
 }

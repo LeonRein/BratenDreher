@@ -87,22 +87,41 @@ class BaseControl {
 }
 
 /**
+ * Slider fill control for managing the fill element of a slider.
+ */
+class SliderFillControl extends BaseControl {
+    constructor(fillElement, options = {}) {
+        super(fillElement, options);
+        this.fillElement = this.elements[0];
+    }
+
+    updateFillWidth(percentage) {
+        if (this.fillElement) {
+            this.fillElement.style.width = `${percentage}%`;
+            this.fillElement.style.opacity = '1';
+        }
+    }
+
+    hideFill() {
+        if (this.fillElement) {
+            this.fillElement.style.opacity = '0';
+        }
+    }
+}
+
+/**
  * Slider control for range inputs.
+ * Now only manages the slider input, not the fill.
  */
 class SliderControl extends BaseControl {
     constructor(sliderElement, options = {}) {
         super(sliderElement, options);
         this.slider = this.elements[0];
-        this.fillElement = options.fillElement;
-        this.options = {
-            ...options
-        };
-        if (this.fillElement) this.addAdditionalElement(this.fillElement, { applyOpacity: false, applyDisabled: false, applyColors: false, applyClasses: false });
+        this.options = { ...options };
         this.bindEvents();
     }
 
     setDisplayState(state, force = false) {
-        if (state === CONTROL_STATES.DISABLED) this.hideFill();
         super.setDisplayState(state, force);
     }
 
@@ -113,7 +132,6 @@ class SliderControl extends BaseControl {
 
     handleInput(event) {
         const rawValue = parseFloat(event.target.value);
-        const displayValue = rawValue.toString();
         this.setDisplayState(CONTROL_STATES.OUTDATED);
         if (this._onChange) this._onChange(rawValue);
     }
@@ -126,21 +144,6 @@ class SliderControl extends BaseControl {
 
     getValue() {
         return this.slider ? parseFloat(this.slider.value) : undefined;
-    }
-
-    updateFillWidth(percentage) {
-        if (this.fillElement) {
-            this.fillElement.style.width = `${percentage}%`;
-            this.fillElement.style.opacity = '1';
-        }
-    }
-
-    // setFillColor removed: use colorizer instead
-
-    hideFill() {
-        if (this.fillElement) {
-            this.fillElement.style.opacity = '0';
-        }
     }
 }
 
