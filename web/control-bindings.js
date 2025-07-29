@@ -583,8 +583,7 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
 // Power delivery control binding with complex state management
 class PowerDeliveryControlBinding extends ControlBinding {
     constructor(voltageSelect, negotiateBtn, autoNegotiateBtn, pdStatusDisplay, pdPowerGoodDisplay, pdNegotiatedVoltageDisplay, pdCurrentVoltageDisplay) {
-        super({
-        });
+        super({});
 
         this.voltageSelect = voltageSelect;
         this.negotiateBtn = negotiateBtn;
@@ -593,19 +592,20 @@ class PowerDeliveryControlBinding extends ControlBinding {
         this.pdPowerGoodDisplay = pdPowerGoodDisplay;
         this.pdNegotiatedVoltageDisplay = pdNegotiatedVoltageDisplay;
         this.pdCurrentVoltageDisplay = pdCurrentVoltageDisplay;
-        this.negotiationTimeout = null;
+        // this.negotiationTimeout = null;
 
-        this.addControl(voltageSelect);
-        this.addControl(negotiateBtn);
-        this.addControl(autoNegotiateBtn);
-        this.addControl(pdStatusDisplay);
-        this.addControl(pdPowerGoodDisplay);
-        this.addControl(pdNegotiatedVoltageDisplay);
-        this.addControl(pdCurrentVoltageDisplay);
+        this.addControl('pdvs', voltageSelect);
+        this.addControl('negotiate', negotiateBtn);
+        this.addControl('autoNegotiate', autoNegotiateBtn);
+        this.addControl('pdns', pdStatusDisplay);
+        this.addControl('pdpg', pdPowerGoodDisplay);
+        this.addControl('pdnv', pdNegotiatedVoltageDisplay);
+        this.addControl('pdcv', pdCurrentVoltageDisplay);
 
-        // Wire up event handlers
+        // Wire up event handlers with correct signature
         this.negotiateBtn.onChange(() => {
-            this.handleValueChange(parseInt(this.voltageSelect.getValue()), 'stv');
+            const selectedVoltage = parseInt(this.voltageSelect.getValue());
+            this.handleValueChange(selectedVoltage, 'stv');
         });
 
         this.autoNegotiateBtn.onChange(() => {
@@ -620,6 +620,25 @@ class PowerDeliveryControlBinding extends ControlBinding {
             3: { text: 'Failed (No PD Adapter)', class: 'status-error' },
             4: { text: 'Auto-Negotiating...', class: 'status-warning' }
         };
+    }
+
+    async handleValueChange(value, commandType) {
+        if (commandType === 'stv') {
+            if (value && this.commandManager) {
+                this.showNegotiationStarted(false);
+                return await this.commandManager.sendCommand('stv', value);
+            }
+            return false;
+        }
+        if (commandType === 'anh') {
+            if (this.commandManager) {
+                this.showNegotiationStarted(true);
+                return await this.commandManager.sendCommand('anh', value);
+            }
+            return false;
+        }
+        // fallback to base implementation for other commands
+        return super.handleValueChange(value, commandType);
     }
 
     customStatusHandler(transformedValue, key) {
@@ -673,26 +692,6 @@ class PowerDeliveryControlBinding extends ControlBinding {
         }
     }
 
-    async handleValueChange(action) {
-        if (action && action.type === 'negotiate') {
-            const selectedVoltage = parseInt(this.voltageSelect.getValue());
-            if (selectedVoltage && this.commandManager) {
-                this.showNegotiationStarted(false);
-                return await this.commandManager.sendCommand('stv', selectedVoltage);
-            }
-            return false;
-        }
-        if (action && action.type === 'autoNegotiate') {
-            if (this.commandManager) {
-                this.showNegotiationStarted(true);
-                return await this.commandManager.sendCommand('anh', 1);
-            }
-            return false;
-        }
-        // fallback to base implementation if needed
-        return super.handleValueChange(action);
-    }
-
     showNegotiationStarted(isAutoNegotiation = false) {
         // Update status display
         if (this.pdStatusDisplay && this.pdStatusDisplay.displays && this.pdStatusDisplay.displays[0]) {
@@ -705,25 +704,13 @@ class PowerDeliveryControlBinding extends ControlBinding {
         this.negotiateBtn.setDisplayState(CONTROL_STATES.RETRY);
         this.autoNegotiateBtn.setDisplayState(CONTROL_STATES.RETRY);
 
-        // Set timeout fallback
-        if (this.negotiationTimeout) {
-            clearTimeout(this.negotiationTimeout);
-        }
-        this.negotiationTimeout = setTimeout(() => {
-            this.resetNegotiateButtons();
-        }, 15000);
+        // No timeout fallback needed; rely on backend status updates
     }
 
     resetNegotiateButtons() {
         this.negotiateBtn.setDisplayState(CONTROL_STATES.VALID);
         this.autoNegotiateBtn.setDisplayState(CONTROL_STATES.VALID);
-
-        if (this.negotiationTimeout) {
-            clearTimeout(this.negotiationTimeout);
-            this.negotiationTimeout = null;
-        }
     }
-
 }
 
 // StallGuard control binding with load visualization
