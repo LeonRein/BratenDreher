@@ -423,7 +423,7 @@ class SpeedControlBinding extends ControlBinding {
                 const max = parseFloat(this.speedSlider.slider.max);
                 const clampedValue = Math.max(min, Math.min(max, transformedValue));
                 const percentage = ((clampedValue - min) / (max - min)) * 100;
-                this.speedFillControl.updateFillWidth(percentage);
+                this.speedFillControl.setValue(percentage);
             }
         }
     }
@@ -748,9 +748,9 @@ class StallGuardControlBinding extends ControlBinding {
         }
 
         this.addControl('sgt', thresholdSlider);
-        this.addControl('sgr', thresholdSlider);
+        this.addControl('sgr', thresholdFillControl);
         this.addControl('sgr', resultDisplay);
-        if (thresholdValueDisplay) this.addControl('sgt', thresholdValueDisplay);
+        this.addControl('sgt', thresholdValueDisplay);
 
         // Wire up event handler
         this.thresholdSlider.onChange((value) => {
@@ -776,19 +776,6 @@ class StallGuardControlBinding extends ControlBinding {
         return Math.round((100 - percent) * 2.55);
     }
 
-    customStatusHandler(transformedValue, key) {
-        if (key === 'sgt') {
-            this.thresholdSlider.setValue(transformedValue);
-            if (this.thresholdValueDisplay) this.thresholdValueDisplay.setValue(transformedValue.toFixed(1));
-        }
-        if (key === 'sgr') {
-            this.resultDisplay.setValue(transformedValue);
-            if (this.thresholdFillControl) {
-                // transformedValue is percentage (0-100)
-                this.thresholdFillControl.updateFillWidth(transformedValue);
-            }
-        }
-    }
 
     hideFill() {
         if (this.thresholdFillControl) {

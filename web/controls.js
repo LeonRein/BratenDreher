@@ -95,7 +95,7 @@ class SliderFillControl extends BaseControl {
         this.fillElement = this.elements[0];
     }
 
-    updateFillWidth(percentage) {
+    setValue(percentage) {
         if (this.fillElement) {
             this.fillElement.style.width = `${percentage}%`;
             this.fillElement.style.opacity = '1';
