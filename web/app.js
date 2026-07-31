@@ -25,7 +25,36 @@ class BratenDreherApp {
         // Ensure all controls start in disabled state
         this.updateUI();
 
+        // Tell the user up front if their browser cannot do Bluetooth at all,
+        // instead of leaving them with a UI whose Connect button does nothing.
+        this.checkBluetoothSupport();
+
         console.log('BratenDreher Application initialized with new architecture');
+    }
+
+    checkBluetoothSupport() {
+        if (navigator.bluetooth) return;
+
+        this.connectBtn.disabled = true;
+        this.reconnectBtn.disabled = true;
+
+        const banner = document.createElement('div');
+        banner.className = 'card unsupported-banner';
+        banner.innerHTML =
+            '<h2>⚠️ Bluetooth nicht verfügbar</h2>' +
+            '<p>Dieser Browser unterstützt die Web Bluetooth API nicht, ' +
+            'daher kann keine Verbindung zum BratenDreher aufgebaut werden.</p>' +
+            '<p>Unter <strong>Android</strong> funktioniert Chrome (oder Edge). ' +
+            'Unter <strong>iOS</strong> ist Web Bluetooth in keinem Browser verfügbar, ' +
+            'da alle auf WebKit basieren müssen.</p>';
+
+        const container = document.querySelector('.container');
+        const header = container ? container.querySelector('.header') : null;
+        if (header && header.nextSibling) {
+            container.insertBefore(banner, header.nextSibling);
+        } else if (container) {
+            container.insertBefore(banner, container.firstChild);
+        }
     }
 
 

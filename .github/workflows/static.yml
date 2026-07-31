@@ -33,6 +33,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
+      - name: Stamp service worker cache version
+        # Gives every deployment a unique cache name, so returning users pick up
+        # the new build instead of being served the previous one forever.
+        run: sed -i "s/__CACHE_VERSION__/${GITHUB_SHA}/" web/sw.js
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

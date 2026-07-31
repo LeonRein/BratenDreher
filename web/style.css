@@ -279,3 +279,18 @@ select:disabled,
   display: block;
   margin-top: 12px;
 }
+
+/* Shown when the browser has no Web Bluetooth support (e.g. any iOS browser) */
+.unsupported-banner {
+  border-left: 6px solid var(--color-accent-orange);
+}
+
+.unsupported-banner h2 {
+  color: var(--color-accent-orange);
+}
+
+.unsupported-banner p {
+  margin: 8px 0 0;
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+}

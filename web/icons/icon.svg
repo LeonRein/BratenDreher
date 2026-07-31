@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#667eea"/>
+      <stop offset="1" stop-color="#764ba2"/>
+    </linearGradient>
+  </defs>
+  <!-- Background bleeds to the edges so the same art works as a maskable icon. -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- Rotation arrow: 288 degree arc on r=150 about (256,256). The 72 degree
+       gap is centred on the bottom (theta 54 to 126), so both ends sit at the
+       same height, mirrored about the vertical axis. All art stays inside the
+       80% safe-zone circle (r=205) so it survives maskable cropping. -->
+  <path d="M 167.8 377.4 A 150 150 0 1 1 344.2 377.4"
+        stroke="#ffffff" stroke-width="46" fill="none" stroke-linecap="round"/>
+  <!-- Arrowhead: back edge on the arc end, tip 26 degrees further along the
+       same circle so the head follows the curve. Deliberately ~2.2x the stroke
+       width so it still reads as an arrow at 48px launcher size. -->
+  <g transform="translate(344.2 377.4) rotate(157.0)">
+    <polygon points="67.5,0 -8,-50 -8,50" fill="#ffffff"/>
+  </g>
+</svg>

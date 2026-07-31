@@ -12,6 +12,7 @@ und eine Web-App.
 - **USB-C Power Delivery**: Aushandlung von 5/9/12/15/20 V über den CH224K, inkl. Auto-Negotiation
 - **Bluetooth LE**: Steuerung über die Web Bluetooth API, MsgPack als Protokoll
 - **StallGuard**: Lastüberwachung und Stall-Erkennung über den TMC2209
+- **Installierbare Web-App**: PWA mit Offline-Support, auf Android per Chrome installierbar
 - **Persistente Einstellungen**: Geschwindigkeit, Richtung, Strom, Beschleunigung und StallGuard-Schwelle im Flash
 - **Statistik**: Umdrehungen und reine Motorlaufzeit (Standzeiten zählen nicht mit), daraus die Durchschnittsgeschwindigkeit
 - **OTA-Update**: WLAN-Update per Tastendruck beim Booten
@@ -86,6 +87,25 @@ Web Bluetooth benötigt HTTPS (oder `localhost`) sowie einen Chromium-basierten 
 python3 -m http.server 8000 --directory web
 # http://localhost:8000
 ```
+
+### Installation als App (Android)
+
+Die Seite ist eine Progressive Web App und lässt sich auf Android über Chrome
+per „Zum Startbildschirm hinzufügen" installieren. Sie startet dann ohne
+Browser-UI und funktioniert dank Service Worker auch ohne Netzverbindung -
+praktisch am Grill, wo die Verbindung zum Gerät ohnehin über BLE läuft.
+
+> **iOS wird nicht unterstützt.** Alle iOS-Browser müssen WebKit verwenden, und
+> WebKit implementiert die Web Bluetooth API nicht. Die App ließe sich zwar
+> installieren, könnte sich aber nicht mit dem BratenDreher verbinden. Fehlt
+> Web Bluetooth, zeigt die Seite darum einen entsprechenden Hinweis an.
+
+Der Service Worker ([web/sw.js](web/sw.js)) cached die komplette App und wird
+über einen Cache-Namen versioniert. Beim Deploy ersetzt der Workflow den
+Platzhalter `__CACHE_VERSION__` durch den Commit-SHA, sodass jede neue Version
+sauber übernommen wird - lokal bleibt der Platzhalter stehen, was für Tests
+genügt. Eine neue Version wird erst aktiv, wenn die App vollständig geschlossen
+und neu geöffnet wurde; damit reißt ein Update nie eine laufende BLE-Verbindung ab.
 
 ## 🔗 Bluetooth LE Protokoll
 

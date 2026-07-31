@@ -5,8 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BratenDreher Control</title>
-    <link rel="icon" type="image/svg+xml"
-        href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE2IDJMMjQgMTZMMTYgMzBMOCAxNkwxNiAyWiIgZmlsbD0iIzMzNzNkYyIvPgo8L3N2Zz4K">
+    <meta name="description" content="Steuerung für den BratenDreher Spießbraten-Motor über Bluetooth LE">
+
+    <!-- Installable web app (Android/Chrome) -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#667eea">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -381,6 +388,17 @@
             console.log('Initializing BratenDreher Web Interface with New Architecture');
             new BratenDreherApp();
         });
+
+        // Register the service worker that makes the app installable and
+        // usable offline. Requires a secure context, so this is skipped when
+        // served over plain http from something other than localhost.
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then((reg) => console.log('Service worker registered, scope:', reg.scope))
+                    .catch((err) => console.warn('Service worker registration failed:', err));
+            });
+        }
     </script>
 </body>
 
