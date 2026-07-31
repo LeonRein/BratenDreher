@@ -154,6 +154,8 @@ class AccelerationControlBinding extends ControlBinding {
     static GEAR_RATIO = 10;
     static STEPS_PER_REVOLUTION = 200;
     static MICROSTEPS = 16;
+    // Matches DEFAULT_ACCELERATION_TIME_S in StepperController.h
+    static DEFAULT_TIME_S = 15.0;
 
     rpmToStepsPerSecond(rpm) {
         const motorRPM = rpm * AccelerationControlBinding.GEAR_RATIO;
@@ -163,7 +165,7 @@ class AccelerationControlBinding extends ControlBinding {
 
     accelerationToTime(accelerationStepsPerSec2) {
         if (accelerationStepsPerSec2 === 0) {
-            return 5.0;
+            return AccelerationControlBinding.DEFAULT_TIME_S;
         }
         const maxStepsPerSecond = this.rpmToStepsPerSecond(AccelerationControlBinding.MAX_SPEED_RPM);
         const timeSeconds = maxStepsPerSecond / accelerationStepsPerSec2;

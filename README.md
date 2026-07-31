@@ -14,6 +14,7 @@ und eine Web-App.
 - **StallGuard**: Lastüberwachung und Stall-Erkennung über den TMC2209
 - **Tasten am Gerät**: Start/Stopp und Geschwindigkeit direkt am Board, ohne Handy
 - **Installierbare Web-App**: PWA mit Offline-Support, auf Android per Chrome installierbar
+- **Sanfte Rampe**: standardmäßig 15 s von Stillstand auf Maximaldrehzahl
 - **Persistente Einstellungen**: Geschwindigkeit, Richtung, Strom, Beschleunigung und StallGuard-Schwelle im Flash
 - **Statistik**: Umdrehungen und reine Motorlaufzeit (Standzeiten zählen nicht mit), daraus die Durchschnittsgeschwindigkeit
 - **OTA-Update**: WLAN-Update per Tastendruck beim Booten
@@ -83,17 +84,27 @@ Die drei Taster auf dem Board entsprechen ihrer Anordnung:
 
 | Taste | Funktion |
 |---|---|
-| SW1 (links) | langsamer, −1 RPM |
+| SW1 (links) | langsamer: 10 s mehr pro Umdrehung |
 | SW2 (mitte) | Motor an/aus |
-| SW3 (rechts) | schneller, +1 RPM |
+| SW2 doppelt | Drehrichtung umkehren |
+| SW3 (rechts) | schneller: 10 s weniger pro Umdrehung |
 
-Die Geschwindigkeitstasten wiederholen bei gedrücktem Halten (nach 700 ms alle
-250 ms), damit man nicht 30-mal drücken muss. Die Mitteltaste wiederholt
-bewusst nicht. Änderungen laufen über dieselbe Kommando-Queue wie BLE-Befehle,
-die Web-App aktualisiert sich also automatisch mit.
+Die Geschwindigkeit ändert sich in **Sekunden pro Umdrehung**, nicht in RPM -
+ein fester RPM-Schritt wäre im langsamen Bereich viel zu grob (von 0.5 RPM aus
+verdreifacht +1 RPM die Geschwindigkeit). Die Geschwindigkeitstasten
+wiederholen bei gedrücktem Halten (nach 700 ms alle 250 ms).
 
-Schrittweite und Timing stehen als `BUTTON_SPEED_STEP_RPM` und
-`BUTTON_REPEAT_*` in [lib/ButtonTask/ButtonTask.h](lib/ButtonTask/ButtonTask.h).
+Die Mitteltaste wartet 400 ms ab, ob ein zweiter Druck folgt - erst danach
+schaltet sie den Motor. Diese kleine Verzögerung ist der Preis dafür, dass eine
+Geste genau eine Aktion auslöst; sofort schalten und beim Doppeldruck wieder
+zurücknehmen würde den Motor bei jedem Richtungswechsel kurz anlaufen lassen.
+
+Änderungen laufen über dieselbe Kommando-Queue wie BLE-Befehle, die Web-App
+aktualisiert sich also automatisch mit.
+
+Schrittweite und Timing stehen als `BUTTON_PERIOD_STEP_S`,
+`BUTTON_DOUBLE_PRESS_MS` und `BUTTON_REPEAT_*` in
+[lib/ButtonTask/ButtonTask.h](lib/ButtonTask/ButtonTask.h).
 
 > **Hinweis:** SW1 ist gleichzeitig der OTA-Taster - beim Booten gedrückt
 > gehalten startet das Board in den Update-Modus. Im Normalbetrieb wird der Pin
@@ -237,6 +248,7 @@ PD-Aushandlung und läuft danach auch ohne PD-Netzteil weiter.
 
 - **Emergency Stop** bremst mit maximaler Rampe und überholt dabei wartende Kommandos
 - **Geschwindigkeit und Beschleunigung** werden auf sinnvolle Bereiche begrenzt
+  (Standard-Rampe: 15 s auf Maximaldrehzahl, `DEFAULT_ACCELERATION_TIME_S`)
 - **Übertemperatur** des TMC2209 wird gemeldet (ab 120 °C, kritisch ab 157 °C)
 - **OTA** ist passwortgeschützt
 

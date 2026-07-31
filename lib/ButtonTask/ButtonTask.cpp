@@ -1,7 +1,8 @@
 #include "ButtonTask.h"
 
 ButtonTask::ButtonTask()
-    : Task("Button_Task", 3072, 1, 0) // 3KB stack, priority 1, core 0
+    : Task("Button_Task", 3072, 1, 0), // 3KB stack, priority 1, core 0
+      togglePending(false), togglePendingAtMs(0)
 {
     // Order matches the board silkscreen: SW1 left, SW2 middle, SW3 right.
     // Only the speed buttons auto-repeat - repeating a start/stop toggle would
@@ -42,6 +43,7 @@ void ButtonTask::run()
         {
             updateButton(buttons[i], now);
         }
+        updatePendingToggle(now);
         vTaskDelay(pdMS_TO_TICKS(BUTTON_POLL_INTERVAL_MS));
     }
 }
@@ -72,7 +74,16 @@ void ButtonTask::updateButton(Button &button, unsigned long now)
             button.pressArmed = true;
             button.pressedAtMs = now;
             button.repeating = false;
-            fire(button.action); // Act on press, not release
+            // Act on press, not release. The middle button is the exception:
+            // it has to wait and see whether a second press follows.
+            if (button.action == Action::TOGGLE)
+            {
+                handleTogglePress(now);
+            }
+            else
+            {
+                fire(button.action);
+            }
         }
         else
         {
@@ -103,6 +114,31 @@ void ButtonTask::updateButton(Button &button, unsigned long now)
     }
 }
 
+void ButtonTask::handleTogglePress(unsigned long now)
+{
+    if (togglePending && (now - togglePendingAtMs) <= BUTTON_DOUBLE_PRESS_MS)
+    {
+        // Second press inside the window: this was a double press, so the
+        // held-back toggle is discarded and we reverse instead.
+        togglePending = false;
+        fire(Action::REVERSE);
+        return;
+    }
+
+    togglePending = true;
+    togglePendingAtMs = now;
+}
+
+void ButtonTask::updatePendingToggle(unsigned long now)
+{
+    if (togglePending && (now - togglePendingAtMs) > BUTTON_DOUBLE_PRESS_MS)
+    {
+        // No second press arrived - it really was a single press.
+        togglePending = false;
+        fire(Action::TOGGLE);
+    }
+}
+
 void ButtonTask::fire(Action action)
 {
     SystemCommand &systemCommand = SystemCommand::getInstance();
@@ -110,18 +146,24 @@ void ButtonTask::fire(Action action)
     switch (action)
     {
     case Action::SPEED_UP:
-        systemCommand.sendCommand(StepperCommand::ADJUST_SPEED, BUTTON_SPEED_STEP_RPM);
-        dbg_println("Button: speed up");
+        // Faster means fewer seconds per rotation
+        systemCommand.sendCommand(StepperCommand::ADJUST_ROTATION_PERIOD, -BUTTON_PERIOD_STEP_S);
+        dbg_println("Button: faster");
         break;
 
     case Action::SPEED_DOWN:
-        systemCommand.sendCommand(StepperCommand::ADJUST_SPEED, -BUTTON_SPEED_STEP_RPM);
-        dbg_println("Button: speed down");
+        systemCommand.sendCommand(StepperCommand::ADJUST_ROTATION_PERIOD, BUTTON_PERIOD_STEP_S);
+        dbg_println("Button: slower");
         break;
 
     case Action::TOGGLE:
         systemCommand.sendCommand(StepperCommand::TOGGLE_ENABLED);
         dbg_println("Button: toggle motor");
+        break;
+
+    case Action::REVERSE:
+        systemCommand.sendCommand(StepperCommand::TOGGLE_DIRECTION);
+        dbg_println("Button: reverse direction");
         break;
     }
 }

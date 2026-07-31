@@ -6,9 +6,9 @@
  * @brief On-board push button handling for the PD-Stepper board.
  *
  * The three buttons map to the physical layout on the board:
- *   SW1 (left)   - slower
- *   SW2 (middle) - start/stop
- *   SW3 (right)  - faster
+ *   SW1 (left)   - slower (ten more seconds per rotation)
+ *   SW2 (middle) - start/stop, double press reverses direction
+ *   SW3 (right)  - faster (ten fewer seconds per rotation)
  *
  * All three are active low with external pull-ups. Presses are debounced and
  * turned into commands posted through SystemCommand, exactly like the ones the
@@ -31,9 +31,12 @@
 #define BUTTON_DEBOUNCE_MS        30   // Mechanical bounce settles well inside this
 #define BUTTON_REPEAT_DELAY_MS    700  // Hold this long before auto-repeat kicks in
 #define BUTTON_REPEAT_INTERVAL_MS 250  // Then one step every this often
+#define BUTTON_DOUBLE_PRESS_MS    400  // Two presses within this count as a double
 
-// How much one press of the left/right buttons changes the setpoint
-#define BUTTON_SPEED_STEP_RPM 1.0f
+// How much one press of the left/right buttons changes the rotation time.
+// Stepping in seconds per rotation rather than RPM keeps the step meaningful
+// across the whole range - a fixed RPM step is far too coarse when slow.
+#define BUTTON_PERIOD_STEP_S 10.0f
 
 class ButtonTask : public Task
 {
@@ -49,7 +52,8 @@ private:
     {
         SPEED_DOWN,
         TOGGLE,
-        SPEED_UP
+        SPEED_UP,
+        REVERSE
     };
 
     struct Button
@@ -72,12 +76,24 @@ private:
     static const size_t BUTTON_COUNT = 3;
     Button buttons[BUTTON_COUNT];
 
+    // A press of the middle button cannot be acted on immediately, because a
+    // second press within BUTTON_DOUBLE_PRESS_MS means "reverse" instead of
+    // "start/stop". The toggle is therefore held back until that window has
+    // passed. The resulting delay is imperceptible for a rotisserie, and it
+    // keeps one gesture mapping to exactly one action - the alternative
+    // (toggling at once, then undoing it) would briefly start or stop the
+    // motor on every direction change.
+    bool togglePending;
+    unsigned long togglePendingAtMs;
+
     ButtonTask();
     ~ButtonTask() {}
     ButtonTask(const ButtonTask &) = delete;
     ButtonTask &operator=(const ButtonTask &) = delete;
 
     void updateButton(Button &button, unsigned long now);
+    void handleTogglePress(unsigned long now);
+    void updatePendingToggle(unsigned long now);
     void fire(Action action);
 
 protected:

@@ -333,7 +333,10 @@ StepperController::StepperController()
       speedVariationK(0.0f), speedVariationK0(1.0f), // Initialize with default values
       systemStatus(SystemStatus::getInstance()), systemCommand(SystemCommand::getInstance())
 {
-    setpointAcceleration = rpmToStepsPerSecond(MAX_SPEED_RPM) / 5;
+    // Ramp to full speed over DEFAULT_ACCELERATION_TIME_S. Overwritten by
+    // loadSettings() if a value has already been saved to flash.
+    setpointAcceleration =
+        static_cast<uint32_t>(rpmToStepsPerSecond(MAX_SPEED_RPM) / DEFAULT_ACCELERATION_TIME_S);
 }
 
 StepperController::~StepperController()
@@ -725,12 +728,16 @@ void StepperController::processCommand(const StepperCommandData &cmd)
         setSpeedInternal(cmd.floatValue);
         break;
 
-    case StepperCommand::ADJUST_SPEED:
-        adjustSpeedInternal(cmd.floatValue);
+    case StepperCommand::ADJUST_ROTATION_PERIOD:
+        adjustRotationPeriodInternal(cmd.floatValue);
         break;
 
     case StepperCommand::SET_DIRECTION:
         setDirectionInternal(cmd.boolValue);
+        break;
+
+    case StepperCommand::TOGGLE_DIRECTION:
+        toggleDirectionInternal();
         break;
 
     case StepperCommand::ENABLE:
@@ -912,19 +919,26 @@ void StepperController::setSpeedInternal(float rpm)
     // Success is indicated by the status update - no notification needed for normal success
 }
 
-void StepperController::adjustSpeedInternal(float deltaRpm)
+void StepperController::adjustRotationPeriodInternal(float deltaSeconds)
 {
+    // Step in seconds per rotation rather than RPM. A fixed RPM step is far too
+    // coarse at the slow end (from 0.5 RPM, +1 RPM triples the speed) whereas a
+    // fixed time step stays meaningful across the whole useful range.
+    const float currentPeriod = 60.0f / setpointRPM;
+    const float newPeriod = constrain(currentPeriod + deltaSeconds,
+                                      MIN_ROTATION_PERIOD_S, MAX_ROTATION_PERIOD_S);
+    const float target = 60.0f / newPeriod;
+
     // Clamp here rather than letting setSpeedInternal do it, so that holding a
     // button down at either limit is a silent no-op instead of a stream of
     // "speed auto-adjusted" warnings and repeated flash writes.
-    const float target = constrain(setpointRPM + deltaRpm, MIN_SPEED_RPM, MAX_SPEED_RPM);
-
-    if (fabsf(target - setpointRPM) < 0.001f)
+    if (fabsf(target - setpointRPM) < 0.0001f)
     {
-        dbg_println("Speed adjust ignored - already at the limit");
+        dbg_println("Rotation period adjust ignored - already at the limit");
         return;
     }
 
+    dbg_printf("Rotation period %.1fs -> %.1fs\n", currentPeriod, newPeriod);
     setSpeedInternal(target);
 }
 
@@ -938,6 +952,13 @@ void StepperController::toggleEnabledInternal()
     {
         enableInternal();
     }
+}
+
+void StepperController::toggleDirectionInternal()
+{
+    // setDirectionInternal reverses on the fly when running and only records
+    // the new direction when stopped.
+    setDirectionInternal(!clockwise);
 }
 
 void StepperController::setDirectionInternal(bool runClockwise)

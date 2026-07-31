@@ -4,11 +4,12 @@
 // Command types for inter-task communication
 enum class StepperCommand {
     SET_SPEED,
-    ADJUST_SPEED,       // Relative speed change in RPM (used by the on-board buttons)
+    ADJUST_ROTATION_PERIOD, // Relative change in seconds per rotation (on-board buttons)
     SET_DIRECTION,
+    TOGGLE_DIRECTION,       // Reverse the current direction
     ENABLE,
     DISABLE,
-    TOGGLE_ENABLED,     // Flip between running and stopped
+    TOGGLE_ENABLED,         // Flip between running and stopped
     EMERGENCY_STOP,
     SET_CURRENT,
     SET_ACCELERATION,

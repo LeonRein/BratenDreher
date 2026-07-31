@@ -26,10 +26,19 @@ class PowerDeliveryTask;
 #define MIN_SPEED_RPM 0.1f  // Minimum speed
 #define MAX_SPEED_RPM 30.0f // Maximum speed (0.5 RPS after gear reduction)
 
+// The same limits expressed as seconds per rotation, which is how the buttons
+// and the web slider think about speed (2 s .. 600 s per rotation).
+#define MIN_ROTATION_PERIOD_S (60.0f / MAX_SPEED_RPM)
+#define MAX_ROTATION_PERIOD_S (60.0f / MIN_SPEED_RPM)
+
 // Acceleration limits (steps/s^2)
 #define MIN_ACCELERATION 100
 #define MAX_ACCELERATION 100000
 #define EMERGENCY_STOP_ACCELERATION 16000 // Hard braking ramp for emergency stop
+
+// Seconds to ramp from standstill to MAX_SPEED_RPM, used when nothing has been
+// saved to flash yet. A gentle ramp keeps heavy roasts from slipping.
+#define DEFAULT_ACCELERATION_TIME_S 15.0f
 
 // Timing configuration
 #define FAST_UPDATE_INTERVAL 100
@@ -122,8 +131,9 @@ private:
 
     // Internal methods (called from command processing)
     void setSpeedInternal(float rpm);
-    void adjustSpeedInternal(float deltaRpm);
+    void adjustRotationPeriodInternal(float deltaSeconds);
     void toggleEnabledInternal();
+    void toggleDirectionInternal();
     void setDirectionInternal(bool runClockwise);
     void enableInternal();
     void disableInternal();
