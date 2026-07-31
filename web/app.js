@@ -73,6 +73,8 @@ class BratenDreherApp {
         this.speedValue = document.getElementById('speedValue');
         this.currentSpeedIndicator = document.getElementById('currentSpeedIndicator');
         this.speedSliderFill = document.getElementById('speedSliderFill');
+        this.rotationMinutes = document.getElementById('rotationMinutes');
+        this.rotationSeconds = document.getElementById('rotationSeconds');
         this.clockwiseBtn = document.getElementById('clockwiseBtn');
         this.counterclockwiseBtn = document.getElementById('counterclockwiseBtn');
         this.emergencyStopBtn = document.getElementById('emergencyStopBtn');
@@ -129,6 +131,27 @@ class BratenDreherApp {
 
         // Preset buttons
         this.presetBtns = document.querySelectorAll('.preset');
+
+        this.populateDurationPicker();
+    }
+
+    // Fill the rotation-time selects. Done here rather than in the markup so
+    // the ranges stay defined in one place alongside the rest of the limits.
+    populateDurationPicker() {
+        const fill = (select, maxValue, pad) => {
+            if (!select) return;
+            for (let value = 0; value <= maxValue; value++) {
+                const option = document.createElement('option');
+                option.value = String(value);
+                option.textContent = pad ? String(value).padStart(2, '0') : String(value);
+                select.appendChild(option);
+            }
+        };
+
+        // Minutes go to 10 to match PICKER_MAX_PERIOD_S; combinations beyond
+        // 10:00 are clamped back by the binding.
+        fill(this.rotationMinutes, 10, false);
+        fill(this.rotationSeconds, 59, true);
     }
 
     initializeControls() {
@@ -138,6 +161,10 @@ class BratenDreherApp {
         }));
         this.controls.set('speedSliderFill', new SliderFillControl(this.speedSliderFill));
         this.controls.set('speedValueDisplay', new DisplayControl(this.speedValue));
+
+        // Direct rotation-time entry
+        this.controls.set('rotationMinutes', new SelectControl(this.rotationMinutes));
+        this.controls.set('rotationSeconds', new SelectControl(this.rotationSeconds));
 
         // Speed displays (formatting is applied by SpeedControlBinding)
         this.controls.set('setpointSpeedDisplay', new DisplayControl(this.setpointSpeed));
@@ -278,14 +305,19 @@ class BratenDreherApp {
 
     initializeBindings() {
         // Speed control binding
-        this.bindings.set('speed', new SpeedControlBinding(
+        const speedBinding = new SpeedControlBinding(
             this.controls.get('speedSlider'),
             this.controls.get('speedSliderFill'),
             this.controls.get('setpointSpeedDisplay'),
             this.controls.get('presetButtons'),
             this.controls.get('speedValueDisplay'),
             this.controls.get('currentSpeedDisplay')
-        ));
+        );
+        speedBinding.attachDurationPicker(
+            this.controls.get('rotationMinutes'),
+            this.controls.get('rotationSeconds')
+        );
+        this.bindings.set('speed', speedBinding);
 
         // Direction control binding
         this.bindings.set('direction', new DirectionControlBinding(

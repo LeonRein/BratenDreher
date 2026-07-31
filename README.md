@@ -127,15 +127,28 @@ python3 -m http.server 8000 --directory web
 
 Der Slider ist **linear in Sekunden pro Umdrehung**, nicht in RPM - auf einer
 RPM-Achse läge der praktisch genutzte Bereich von 0.5-5 RPM auf nur ~15% des
-Wegs, hier sind es ~92%. Die Achse ist gespiegelt, rechts bleibt also schneller.
+Wegs, hier sind es ~36%. Die Achse ist gespiegelt, rechts bleibt also schneller.
 Angezeigt werden beide Einheiten (`2.00 rpm · 30 s`), oberhalb einer Minute
 als `m:ss`.
 
-Der Regler deckt 2 s bis 2 min pro Umdrehung ab (30 bis 0.5 RPM); die Firmware
-selbst akzeptiert weiterhin 0.1-30 RPM. Die Grenzen stehen als
-`MIN_PERIOD_S` / `MAX_PERIOD_S` in `SpeedControlBinding`
-([web/control-bindings.js](web/control-bindings.js)) - eine niedrigere
-Obergrenze als 30 RPM würde das obere Ende feiner auflösen.
+Darunter lässt sich die Umdrehungszeit über zwei Auswahlfelder **direkt
+eingeben** (Minuten und Sekunden). Native Selects geben auf dem Handy einen
+großflächigen Picker, ohne eigenes Touch-Handling.
+
+| | Bereich |
+|---|---|
+| Slider | 2 s bis 5 min pro Umdrehung (30 bis 0.2 RPM) |
+| Direkteingabe | 2 s bis 10 min pro Umdrehung (30 bis 0.1 RPM) |
+
+Die Direkteingabe deckt damit den vollen Firmware-Bereich ab, während der
+Slider im häufig genutzten Bereich feiner auflöst. Wird eine Zeit jenseits der
+Sliderskala gewählt, steht der Slider an seinem langsamen Anschlag - die
+Anzeige zeigt weiterhin den echten Wert. Unmögliche Eingaben werden sichtbar
+korrigiert (10:30 springt auf 10:00, 0:00 auf 0:02).
+
+Die Grenzen stehen als `MIN_PERIOD_S` / `MAX_PERIOD_S` und
+`PICKER_MIN_PERIOD_S` / `PICKER_MAX_PERIOD_S` in `SpeedControlBinding`
+([web/control-bindings.js](web/control-bindings.js)).
 
 ### Installation als App (Android)
 

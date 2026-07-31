@@ -342,10 +342,16 @@ class SpeedControlBinding extends ControlBinding {
     // The axis is mirrored (SLIDER = PERIOD_SUM - period) so that moving right
     // still means faster, which is what people expect from a speed control.
     static MIN_PERIOD_S = 2;    // 30 rpm, slider hard right
-    static MAX_PERIOD_S = 120;  // 0.5 rpm, slider hard left
+    static MAX_PERIOD_S = 300;  // 5 min per rotation, slider hard left
     static PERIOD_SUM = SpeedControlBinding.MIN_PERIOD_S + SpeedControlBinding.MAX_PERIOD_S;
     static SLIDER_MIN = SpeedControlBinding.PERIOD_SUM - SpeedControlBinding.MAX_PERIOD_S;
     static SLIDER_MAX = SpeedControlBinding.PERIOD_SUM - SpeedControlBinding.MIN_PERIOD_S;
+
+    // The direct duration picker reaches further than the slider, all the way
+    // to the firmware limits, so exact values outside the slider's range are
+    // still settable without giving up slider resolution in the common range.
+    static PICKER_MIN_PERIOD_S = 2;   // 30 rpm
+    static PICKER_MAX_PERIOD_S = 600; // 10 min per rotation = 0.1 rpm
 
     // Firmware limits, used to clamp what we put on the wire.
     static MIN_RPM = 0.1;
@@ -452,12 +458,97 @@ class SpeedControlBinding extends ControlBinding {
         return Math.max(SpeedControlBinding.MIN_RPM, Math.min(SpeedControlBinding.MAX_RPM, rpm));
     }
 
+    /**
+     * Wire up the minutes/seconds picker for setting the rotation time directly.
+     * Kept out of the constructor because it is optional - the binding works
+     * with just the slider if the markup has no picker.
+     */
+    attachDurationPicker(minutesControl, secondsControl) {
+        if (!minutesControl || !secondsControl) return;
+
+        this.minutesControl = minutesControl;
+        this.secondsControl = secondsControl;
+
+        this.addControl('sp', minutesControl);
+        this.addControl('sp', secondsControl);
+
+        const onPicked = () => this.applyPickedDuration();
+        minutesControl.onChange(onPicked);
+        secondsControl.onChange(onPicked);
+    }
+
+    readPickerSeconds() {
+        if (!this.minutesControl || !this.secondsControl) return null;
+        const minutes = parseInt(this.minutesControl.getValue(), 10) || 0;
+        const seconds = parseInt(this.secondsControl.getValue(), 10) || 0;
+        return minutes * 60 + seconds;
+    }
+
+    writePickerSeconds(totalSeconds) {
+        if (!this.minutesControl || !this.secondsControl) return;
+        const clamped = Math.round(Math.min(
+            Math.max(totalSeconds, SpeedControlBinding.PICKER_MIN_PERIOD_S),
+            SpeedControlBinding.PICKER_MAX_PERIOD_S
+        ));
+        this.minutesControl.setValue(String(Math.floor(clamped / 60)));
+        this.secondsControl.setValue(String(clamped % 60));
+    }
+
+    applyPickedDuration() {
+        const picked = this.readPickerSeconds();
+        if (picked === null) return false;
+
+        const clamped = Math.min(
+            Math.max(picked, SpeedControlBinding.PICKER_MIN_PERIOD_S),
+            SpeedControlBinding.PICKER_MAX_PERIOD_S
+        );
+        // Show the clamp immediately, so picking 10:30 visibly snaps to 10:00
+        // rather than silently doing something other than what is displayed.
+        this.writePickerSeconds(clamped);
+
+        const rpm = 60 / clamped;
+        // The slider covers a narrower range than the picker, so it simply
+        // saturates at its slow end for very long rotation times.
+        if (this.speedSlider) this.speedSlider.setValue(SpeedControlBinding.rpmToSlider(rpm));
+        if (this.speedValueDisplay) this.speedValueDisplay.setValue(rpm);
+        this.updatePresetButtonState(rpm);
+
+        return this.sendRpm(rpm);
+    }
+
+    /**
+     * Send an absolute speed. The slider path cannot be reused here: it maps
+     * through the slider's narrower period range, which would clamp anything
+     * slower than MAX_PERIOD_S back up and quietly ignore the picked value.
+     * No debounce either - a picker change is one discrete edit, not a drag.
+     */
+    async sendRpm(rpm) {
+        if (!this.commandManager) return false;
+
+        const clamped = Math.max(
+            SpeedControlBinding.MIN_RPM,
+            Math.min(SpeedControlBinding.MAX_RPM, rpm)
+        );
+
+        const controls = Object.values(this.statusKeyToControls).flat();
+        controls.forEach((control) => control.setDisplayState(CONTROL_STATES.OUTDATED));
+
+        const success = await this.commandManager.sendCommand('ss', clamped);
+        if (success) {
+            controls.forEach((control) => control.setDisplayState(CONTROL_STATES.RETRY));
+        }
+        return success;
+    }
+
     customStatusHandler(transformedValue, key) {
         if (key === 'sp') {
             this.speedSlider.setValue(SpeedControlBinding.rpmToSlider(transformedValue));
             this.speedDisplay.setValue(transformedValue);
             this.speedValueDisplay.setValue(transformedValue);
             this.updatePresetButtonState(transformedValue);
+            if (transformedValue > 0) {
+                this.writePickerSeconds(60 / transformedValue);
+            }
         }
         if (key === 'cs') {
             if (this.speedSlider && this.speedSlider.slider && this.speedFillControl) {

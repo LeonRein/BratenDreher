@@ -294,3 +294,56 @@ select:disabled,
   color: var(--color-text);
   font-size: var(--font-size-small);
 }
+
+/* Direct rotation-time entry. Sized for thumbs: native selects give a
+   full-size platform picker on touch devices without any custom JS. */
+.duration-picker-group {
+  margin-top: var(--spacing);
+}
+
+.duration-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.duration-field {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.duration-select {
+  min-height: 52px;
+  min-width: 84px;
+  padding: 8px 10px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--color-text);
+  background: var(--color-card-bg);
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.duration-select:focus {
+  outline: none;
+  border-color: var(--color-accent-blue);
+}
+
+.duration-select:disabled {
+  opacity: 0.5;
+}
+
+.duration-unit {
+  font-size: var(--font-size-small);
+  color: var(--color-subtle);
+}
+
+.duration-colon {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-subtle);
+}
