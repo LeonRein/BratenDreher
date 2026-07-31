@@ -65,12 +65,15 @@
             <!-- Speed Control -->
             <div class="control-group">
                 <label class="label" for="speedSlider">
-                    Speed: <span id="speedValue">1.0</span>
+                    Speed: <span id="speedValue">1.00 rpm · 60 s</span>
                 </label>
                 <div class="slider-container">
                     <div class="slider-wrapper">
                         <div class="slider-fill" id="speedSliderFill"></div>
-                        <input type="range" id="speedSlider" class="slider" min="0.1" max="30" step="0.1" value="1.0">
+                        <!-- Linear in seconds per rotation, mirrored so right = faster.
+                             Slider value = 122 - period, i.e. 2 = 2 min/rotation (0.5 rpm)
+                             and 120 = 2 s/rotation (30 rpm). See SpeedControlBinding. -->
+                        <input type="range" id="speedSlider" class="slider" min="2" max="120" step="0.5" value="62">
                     </div>
                 </div>
                 <div class="preset-buttons">
@@ -78,6 +81,10 @@
                     <button class="btn preset" data-value="1.0">Slow</button>
                     <button class="btn preset" data-value="2.0">Medium</button>
                     <button class="btn preset" data-value="5.0">Fast</button>
+                </div>
+                <div class="hint-box">
+                    <small>The slider is scaled by rotation time, so the slow speeds
+                        you actually use get most of the travel.</small>
                 </div>
             </div>
 
@@ -320,12 +327,12 @@
                     <span id="currentDirection" class="status-value">Clockwise</span>
                 </div>
                 <div class="status-item item-box">
-                    <span class="status-label">Setpoint RPM:</span>
-                    <span id="setpointSpeed" class="status-value">0.0</span>
+                    <span class="status-label">Setpoint:</span>
+                    <span id="setpointSpeed" class="status-value">0.00 rpm</span>
                 </div>
                 <div class="status-item item-box">
-                    <span class="status-label">Current RPM:</span>
-                    <span id="currentSpeed" class="status-value">0.0</span>
+                    <span class="status-label">Actual:</span>
+                    <span id="currentSpeed" class="status-value">0.00 rpm</span>
                 </div>
                 <div class="status-item item-box">
                     <span class="status-label">Variable Speed:</span>

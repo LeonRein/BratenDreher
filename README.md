@@ -88,6 +88,20 @@ python3 -m http.server 8000 --directory web
 # http://localhost:8000
 ```
 
+### Geschwindigkeitsregler
+
+Der Slider ist **linear in Sekunden pro Umdrehung**, nicht in RPM - auf einer
+RPM-Achse läge der praktisch genutzte Bereich von 0.5-5 RPM auf nur ~15% des
+Wegs, hier sind es ~92%. Die Achse ist gespiegelt, rechts bleibt also schneller.
+Angezeigt werden beide Einheiten (`2.00 rpm · 30 s`), oberhalb einer Minute
+als `m:ss`.
+
+Der Regler deckt 2 s bis 2 min pro Umdrehung ab (30 bis 0.5 RPM); die Firmware
+selbst akzeptiert weiterhin 0.1-30 RPM. Die Grenzen stehen als
+`MIN_PERIOD_S` / `MAX_PERIOD_S` in `SpeedControlBinding`
+([web/control-bindings.js](web/control-bindings.js)) - eine niedrigere
+Obergrenze als 30 RPM würde das obere Ende feiner auflösen.
+
 ### Installation als App (Android)
 
 Die Seite ist eine Progressive Web App und lässt sich auf Android über Chrome

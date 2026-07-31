@@ -320,11 +320,14 @@ class DisplayControl extends BaseControl {
         const transformed = this.displayTransform(value);
         this.displays.forEach(element => {
             if (element) {
-element.textContent = transformed;
-if (this.options.colorizer) {
-    const color = this.options.colorizer(transformed);
-    if (color) element.style.color = color;
-}
+                element.textContent = transformed;
+                if (this.options.colorizer) {
+                    // The colorizer gets the raw value, not the formatted
+                    // string - every colorizer compares numerically or against
+                    // a boolean, which silently never matched otherwise.
+                    const color = this.options.colorizer(value);
+                    if (color) element.style.color = color;
+                }
             }
         });
     }

@@ -332,6 +332,59 @@ class SpeedControlBinding extends ControlBinding {
      * @param {DisplayControl} speedValueDisplay
      * @param {DisplayControl} currentSpeedDisplay
      */
+    // The slider is linear in *seconds per rotation*, not in RPM. A linear RPM
+    // axis wastes almost all of its travel on speeds nobody uses: the useful
+    // 0.5-5 rpm band is only ~15% of a 0.1-30 rpm slider, whereas on a period
+    // axis it covers ~92%.
+    //
+    // The axis is mirrored (SLIDER = PERIOD_SUM - period) so that moving right
+    // still means faster, which is what people expect from a speed control.
+    static MIN_PERIOD_S = 2;    // 30 rpm, slider hard right
+    static MAX_PERIOD_S = 120;  // 0.5 rpm, slider hard left
+    static PERIOD_SUM = SpeedControlBinding.MIN_PERIOD_S + SpeedControlBinding.MAX_PERIOD_S;
+    static SLIDER_MIN = SpeedControlBinding.PERIOD_SUM - SpeedControlBinding.MAX_PERIOD_S;
+    static SLIDER_MAX = SpeedControlBinding.PERIOD_SUM - SpeedControlBinding.MIN_PERIOD_S;
+
+    // Firmware limits, used to clamp what we put on the wire.
+    static MIN_RPM = 0.1;
+    static MAX_RPM = 30.0;
+
+    static rpmToSlider(rpm) {
+        const value = Number(rpm);
+        if (!Number.isFinite(value) || value <= 0) return SpeedControlBinding.SLIDER_MIN;
+        const period = Math.min(
+            Math.max(60 / value, SpeedControlBinding.MIN_PERIOD_S),
+            SpeedControlBinding.MAX_PERIOD_S
+        );
+        return SpeedControlBinding.PERIOD_SUM - period;
+    }
+
+    static sliderToRpm(sliderValue) {
+        const period = SpeedControlBinding.PERIOD_SUM - Number(sliderValue);
+        return 60 / period;
+    }
+
+    // "8.5 s" / "23 s" / "1:30 min" - the unit switches at one minute, which is
+    // where reading a bare seconds count starts to get awkward.
+    static formatDuration(seconds) {
+        if (!Number.isFinite(seconds) || seconds <= 0) return '–';
+        if (seconds < 59.5) {
+            return seconds < 10 ? `${seconds.toFixed(1)} s` : `${Math.round(seconds)} s`;
+        }
+        const total = Math.round(seconds);
+        const minutes = Math.floor(total / 60);
+        const rest = total % 60;
+        return `${minutes}:${String(rest).padStart(2, '0')} min`;
+    }
+
+    // Speed is shown in both units: rpm is the machine's unit, seconds per
+    // rotation is the one you can actually picture while watching the spit.
+    static formatSpeed(rpm) {
+        const value = Number(rpm);
+        if (!Number.isFinite(value) || value <= 0.005) return '0.00 rpm';
+        return `${value.toFixed(2)} rpm · ${SpeedControlBinding.formatDuration(60 / value)}`;
+    }
+
     constructor(speedSlider, speedFillControl, speedDisplay, presetButtons, speedValueDisplay, currentSpeedDisplay) {
         super({
             debounceTime: 150
@@ -346,7 +399,7 @@ class SpeedControlBinding extends ControlBinding {
 
         // Set displayTransform for speed displays if present
         if (speedDisplay) {
-            speedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+            speedDisplay.displayTransform = SpeedControlBinding.formatSpeed;
             if (speedDisplay.options) {
                 speedDisplay.options.colorizer = (value) => {
                     if (value === 0) return '#1f2937';
@@ -357,10 +410,10 @@ class SpeedControlBinding extends ControlBinding {
             }
         }
         if (currentSpeedDisplay) {
-            currentSpeedDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+            currentSpeedDisplay.displayTransform = SpeedControlBinding.formatSpeed;
         }
         if (speedValueDisplay) {
-            speedValueDisplay.displayTransform = (value) => `${Number(value).toFixed(2)} rpm`;
+            speedValueDisplay.displayTransform = SpeedControlBinding.formatSpeed;
         }
 
         // Register controls if present
@@ -371,33 +424,35 @@ class SpeedControlBinding extends ControlBinding {
         if (speedDisplay) this.addControl('cs', speedDisplay);
         if (currentSpeedDisplay) this.addControl('cs', currentSpeedDisplay);
 
-        // Wire up event handlers if present
+        // Wire up event handlers if present. The slider hands out mirrored
+        // period values, so everything downstream converts to rpm first.
         if (speedSlider && speedValueDisplay) {
-            speedSlider.onChange((value) => {
-                speedValueDisplay.setValue(value);
-                this.handleValueChange(value, 'ss');
+            speedSlider.onChange((sliderValue) => {
+                speedValueDisplay.setValue(SpeedControlBinding.sliderToRpm(sliderValue));
+                this.handleValueChange(sliderValue, 'ss');
             });
         }
         if (presetButtons && speedSlider) {
             presetButtons.onChange((value) => {
-                const speed = parseFloat(value);
-                speedSlider.setValue(speed);
-                this.handleValueChange(speed, 'ss');
+                const rpm = parseFloat(value);
+                const sliderValue = SpeedControlBinding.rpmToSlider(rpm);
+                speedSlider.setValue(sliderValue);
+                if (speedValueDisplay) speedValueDisplay.setValue(rpm);
+                this.handleValueChange(sliderValue, 'ss');
             });
         }
     }
 
-    displayTransform(value) {
-        return Number(value).toFixed(1);
-    }
-
-    inputValueTransform(value) {
-        return Math.max(0.1, Math.min(30.0, value));
+    // Slider position -> rpm for the wire, clamped to what the firmware accepts
+    // so it never has to answer with an "auto-adjusted" warning.
+    inputValueTransform(sliderValue) {
+        const rpm = SpeedControlBinding.sliderToRpm(sliderValue);
+        return Math.max(SpeedControlBinding.MIN_RPM, Math.min(SpeedControlBinding.MAX_RPM, rpm));
     }
 
     customStatusHandler(transformedValue, key) {
         if (key === 'sp') {
-            this.speedSlider.setValue(transformedValue);
+            this.speedSlider.setValue(SpeedControlBinding.rpmToSlider(transformedValue));
             this.speedDisplay.setValue(transformedValue);
             this.speedValueDisplay.setValue(transformedValue);
             this.updatePresetButtonState(transformedValue);
@@ -406,7 +461,9 @@ class SpeedControlBinding extends ControlBinding {
             if (this.speedSlider && this.speedSlider.slider && this.speedFillControl) {
                 const min = parseFloat(this.speedSlider.slider.min);
                 const max = parseFloat(this.speedSlider.slider.max);
-                const clampedValue = Math.max(min, Math.min(max, transformedValue));
+                // A stopped motor maps to the slow end, so the fill empties out.
+                const sliderValue = SpeedControlBinding.rpmToSlider(transformedValue);
+                const clampedValue = Math.max(min, Math.min(max, sliderValue));
                 const percentage = ((clampedValue - min) / (max - min)) * 100;
                 this.speedFillControl.setValue(percentage);
             }
@@ -428,8 +485,12 @@ class SpeedControlBinding extends ControlBinding {
             if (button && button.dataset.value) {
                 const presetSpeed = parseFloat(button.dataset.value);
                 const difference = Math.abs(presetSpeed - currentSpeed);
+                // Relative tolerance: one slider step is a very different
+                // number of rpm at 0.5 rpm than it is at 30 rpm, so a fixed
+                // window would keep the slow presets lit across half the range.
+                const tolerance = Math.max(0.02, presetSpeed * 0.02);
 
-                if (difference < closestDifference && difference < 0.11) { // Within 0.11 RPM tolerance
+                if (difference < closestDifference && difference < tolerance) {
                     closestDifference = difference;
                     closestButton = button;
                 }
