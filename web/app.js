@@ -152,6 +152,11 @@ class BratenDreherApp {
         // 10:00 are clamped back by the binding.
         fill(this.rotationMinutes, 10, false);
         fill(this.rotationSeconds, 59, true);
+
+        // Start at 1:00 so the picker agrees with the markup's default readout
+        // until the first status update arrives.
+        if (this.rotationMinutes) this.rotationMinutes.value = '1';
+        if (this.rotationSeconds) this.rotationSeconds.value = '0';
     }
 
     initializeControls() {

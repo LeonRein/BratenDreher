@@ -385,12 +385,19 @@ class SpeedControlBinding extends ControlBinding {
         return `${minutes}:${String(rest).padStart(2, '0')} min`;
     }
 
-    // Speed is shown in both units: rpm is the machine's unit, seconds per
-    // rotation is the one you can actually picture while watching the spit.
+    // Both units, for places with no duration picker next to them.
     static formatSpeed(rpm) {
         const value = Number(rpm);
         if (!Number.isFinite(value) || value <= 0.005) return '0.00 rpm';
         return `${value.toFixed(2)} rpm · ${SpeedControlBinding.formatDuration(60 / value)}`;
+    }
+
+    // Just the rpm, for the readout beside the picker - the picker itself
+    // already shows the rotation time, so repeating it there is noise.
+    static formatRpm(rpm) {
+        const value = Number(rpm);
+        if (!Number.isFinite(value) || value <= 0.005) return '0.00 rpm';
+        return `${value.toFixed(2)} rpm`;
     }
 
     constructor(speedSlider, speedFillControl, speedDisplay, presetButtons, speedValueDisplay, currentSpeedDisplay) {
@@ -421,7 +428,7 @@ class SpeedControlBinding extends ControlBinding {
             currentSpeedDisplay.displayTransform = SpeedControlBinding.formatSpeed;
         }
         if (speedValueDisplay) {
-            speedValueDisplay.displayTransform = SpeedControlBinding.formatSpeed;
+            speedValueDisplay.displayTransform = SpeedControlBinding.formatRpm;
         }
 
         // Register controls if present
@@ -434,9 +441,9 @@ class SpeedControlBinding extends ControlBinding {
 
         // Wire up event handlers if present. The slider hands out mirrored
         // period values, so everything downstream converts to rpm first.
-        if (speedSlider && speedValueDisplay) {
+        if (speedSlider) {
             speedSlider.onChange((sliderValue) => {
-                speedValueDisplay.setValue(SpeedControlBinding.sliderToRpm(sliderValue));
+                this.previewRpm(SpeedControlBinding.sliderToRpm(sliderValue));
                 this.handleValueChange(sliderValue, 'ss');
             });
         }
@@ -445,10 +452,26 @@ class SpeedControlBinding extends ControlBinding {
                 const rpm = parseFloat(value);
                 const sliderValue = SpeedControlBinding.rpmToSlider(rpm);
                 speedSlider.setValue(sliderValue);
-                if (speedValueDisplay) speedValueDisplay.setValue(rpm);
+                this.previewRpm(rpm);
                 this.handleValueChange(sliderValue, 'ss');
             });
         }
+    }
+
+    /**
+     * Show a speed locally, before the device has confirmed it.
+     *
+     * Every input path goes through here so the readouts can never disagree:
+     * updating only some of them meant the rpm figure tracked the slider live
+     * while the duration picker sat stale until a BLE status update arrived.
+     * Does not touch the slider itself - the slider is an input here, and
+     * writing back to it mid-drag would fight the user's finger.
+     */
+    previewRpm(rpm) {
+        if (!Number.isFinite(rpm) || rpm <= 0) return;
+        if (this.speedValueDisplay) this.speedValueDisplay.setValue(rpm);
+        this.writePickerSeconds(60 / rpm);
+        this.updatePresetButtonState(rpm);
     }
 
     // Slider position -> rpm for the wire, clamped to what the firmware accepts
@@ -510,8 +533,7 @@ class SpeedControlBinding extends ControlBinding {
         // The slider covers a narrower range than the picker, so it simply
         // saturates at its slow end for very long rotation times.
         if (this.speedSlider) this.speedSlider.setValue(SpeedControlBinding.rpmToSlider(rpm));
-        if (this.speedValueDisplay) this.speedValueDisplay.setValue(rpm);
-        this.updatePresetButtonState(rpm);
+        this.previewRpm(rpm);
 
         return this.sendRpm(rpm);
     }
@@ -542,13 +564,10 @@ class SpeedControlBinding extends ControlBinding {
 
     customStatusHandler(transformedValue, key) {
         if (key === 'sp') {
+            // Confirmed by the device, so the slider is moved too.
             this.speedSlider.setValue(SpeedControlBinding.rpmToSlider(transformedValue));
             this.speedDisplay.setValue(transformedValue);
-            this.speedValueDisplay.setValue(transformedValue);
-            this.updatePresetButtonState(transformedValue);
-            if (transformedValue > 0) {
-                this.writePickerSeconds(60 / transformedValue);
-            }
+            this.previewRpm(transformedValue);
         }
         if (key === 'cs') {
             if (this.speedSlider && this.speedSlider.slider && this.speedFillControl) {

@@ -64,9 +64,21 @@
 
             <!-- Speed Control -->
             <div class="control-group">
-                <label class="label" for="speedSlider">
-                    Speed: <span id="speedValue">1.00 rpm · 60 s</span>
-                </label>
+                <label class="label" for="speedSlider">Speed</label>
+
+                <!-- The picker doubles as the readout: it shows the current
+                     rotation time and is also how you set it directly.
+                     Options are filled in by app.js. -->
+                <div class="speed-readout">
+                    <div class="duration-picker">
+                        <select id="rotationMinutes" class="duration-select" aria-label="Minutes per rotation"></select>
+                        <span class="duration-colon">:</span>
+                        <select id="rotationSeconds" class="duration-select" aria-label="Seconds per rotation"></select>
+                        <span class="duration-unit">per rotation</span>
+                    </div>
+                    <span class="speed-rpm" id="speedValue">1.00 rpm</span>
+                </div>
+
                 <div class="slider-container">
                     <div class="slider-wrapper">
                         <div class="slider-fill" id="speedSliderFill"></div>
@@ -77,34 +89,12 @@
                     </div>
                 </div>
                 <div class="preset-buttons">
-                    <button class="btn preset" data-value="0.5">Very Slow</button>
-                    <button class="btn preset" data-value="1.0">Slow</button>
-                    <button class="btn preset" data-value="2.0">Medium</button>
-                    <button class="btn preset" data-value="5.0">Fast</button>
+                    <button class="btn preset" data-value="0.2">Very Slow</button>
+                    <button class="btn preset" data-value="0.4">Slow</button>
+                    <button class="btn preset" data-value="1">Medium</button>
+                    <button class="btn preset" data-value="2">Fast</button>
                 </div>
 
-                <!-- Direct entry of the rotation time. Options are filled in by
-                     app.js so the markup stays short. -->
-                <div class="duration-picker-group">
-                    <label class="label" for="rotationMinutes">Rotation time</label>
-                    <div class="duration-picker">
-                        <div class="duration-field">
-                            <select id="rotationMinutes" class="duration-select" aria-label="Minutes per rotation"></select>
-                            <span class="duration-unit">min</span>
-                        </div>
-                        <span class="duration-colon">:</span>
-                        <div class="duration-field">
-                            <select id="rotationSeconds" class="duration-select" aria-label="Seconds per rotation"></select>
-                            <span class="duration-unit">sec</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="hint-box">
-                    <small>The slider is scaled by rotation time, so the slow speeds
-                        you actually use get most of the travel. It spans 2 s to 5 min;
-                        use the picker for exact values, or for anything up to 10 min.</small>
-                </div>
             </div>
 
             <!-- Direction Control -->
@@ -133,8 +123,8 @@
             <div class="control-group variable-speed-settings">
                 <h3>Variable Speed</h3>
                 <p class="info">
-                    🔄 For uneven cooking compensation - create a slow zone to give pale areas more time to brown while
-                    maintaining the same average cooking time
+                    Slows the spit over part of each turn, so pale areas get more time to brown
+                    without changing the overall cooking time.
                 </p>
 
                 <div class="toggle-switch">
@@ -157,9 +147,6 @@
                                     value="20">
                             </div>
                         </div>
-                        <div class="hint-box">
-                            <small>How much speed varies from fastest to slowest point</small>
-                        </div>
                     </div>
                     <div class="setting-item">
                         <label for="phaseSlider" class="label">Phase Offset: <span id="phaseValue">0</span></label>
@@ -171,9 +158,9 @@
                             </div>
                         </div>
                     </div>
-                    <div class="variable-speed-info hint-box">
-                        <small>💡 Position your rotisserie so the pale side is at the current position, then enable
-                            variable speed. This position will become the slowest point in the rotation cycle.</small>
+                    <div class="hint-box">
+                        <small>Turn the pale side to face the heat before switching this on -
+                            that position becomes the slowest point of the turn.</small>
                     </div>
                     <canvas class="variable-speed-graph" id="variableSpeedGraph"></canvas>
                 </div>
@@ -195,7 +182,7 @@
                             </div>
                         </div>
                         <div class="hint-box">
-                            <small>Set to lowest value that does not stall the motor the reduce heat</small>
+                            <small>The lowest setting that does not stall runs coolest.</small>
                         </div>
                     </div>
                     <div class="setting-item">
@@ -207,9 +194,6 @@
                                 <input type="range" id="accelerationTimeSlider" class="slider" min="1" max="30" step="1"
                                     value="15">
                             </div>
-                        </div>
-                        <div class="hint-box">
-                            <small>Time to reach maximum speed (30 RPM) from stop</small>
                         </div>
                     </div>
                 </div>
@@ -289,7 +273,6 @@
             <div class="stall-content">
 
                 <div class="group-box">
-                    <h3>StallGuard Threshold & Load Monitor</h3>
                     <div class="control-group">
                         <label for="stallguardThresholdSlider" class="label">
                             Sensitivity: <span id="stallguardThresholdValue">50.2</span>
@@ -302,15 +285,10 @@
                                     step="1" value="50">
                             </div>
                         </div>
-                        <div class="hint-box">
-                            <small>Green fill shows current motor load percentage (0-100%). Adjust slider to set stall
-                                sensitivity.</small>
-                        </div>
                     </div>
                 </div>
 
                 <div class="group-box">
-                    <h3>Status</h3>
                     <div class="grid cols-2">
                         <div class="item-box">
                             <span class="status-label">Stall Status:</span>
@@ -326,9 +304,9 @@
                     </button>
                 </div>
 
-                <div class="hint-box" style="margin-top:16px;">
-                    <small><em>💡 If stalls occur frequently, try reducing speed, increasing threshold, or checking for
-                            mechanical obstructions.</em></small>
+                <div class="hint-box">
+                    <small>Frequent stalls usually mean too little current, too much speed,
+                        or something mechanically binding.</small>
                 </div>
             </div>
         </div>
@@ -346,24 +324,8 @@
                     <span id="currentDirection" class="status-value">Clockwise</span>
                 </div>
                 <div class="status-item item-box">
-                    <span class="status-label">Setpoint:</span>
-                    <span id="setpointSpeed" class="status-value">0.00 rpm</span>
-                </div>
-                <div class="status-item item-box">
-                    <span class="status-label">Actual:</span>
+                    <span class="status-label">Speed:</span>
                     <span id="currentSpeed" class="status-value">0.00 rpm</span>
-                </div>
-                <div class="status-item item-box">
-                    <span class="status-label">Variable Speed:</span>
-                    <span id="variableSpeedStatus" class="status-value">OFF</span>
-                </div>
-                <div class="status-item item-box">
-                    <span class="status-label">Acceleration:</span>
-                    <span id="currentAcceleration" class="status-value">5.0</span>
-                </div>
-                <div class="status-item item-box">
-                    <span class="status-label">Current:</span>
-                    <span id="currentCurrent" class="status-value">30</span>
                 </div>
                 <div class="status-item item-box">
                     <span class="status-label">TMC2209:</span>
@@ -383,14 +345,23 @@
         <!-- Info Card -->
         <div class="card accent-dark">
             <h2>Info</h2>
-            <div class="info-content">
-                <p><strong>Motor:</strong> NEMA 17 Stepper (FastAccelStepper + TMC2209)</p>
-                <p><strong>Gear Ratio:</strong> 1:10</p>
-                <p><strong>Speed Range:</strong> 0.1 - 30.0 RPM (0.5 RPS max)</p>
-                <p><strong>Steps per Revolution:</strong> 2000 (200 * 10)</p>
-                <p><strong>Max Torque:</strong> High due to gear reduction</p>
-                <p><strong>Stall Detection:</strong> TMC2209 StallGuard monitors motor load</p>
-                <p><em>Note: If stalls occur, reduce speed or check load</em></p>
+            <div class="grid cols-2">
+                <div class="item-box">
+                    <span class="status-label">Motor:</span>
+                    <span class="status-value">NEMA 17 · TMC2209</span>
+                </div>
+                <div class="item-box">
+                    <span class="status-label">Gearing:</span>
+                    <span class="status-value">1:10</span>
+                </div>
+                <div class="item-box">
+                    <span class="status-label">Speed range:</span>
+                    <span class="status-value">2 s – 10 min / turn</span>
+                </div>
+                <div class="item-box">
+                    <span class="status-label">Resolution:</span>
+                    <span class="status-value">32000 steps / turn</span>
+                </div>
             </div>
         </div>
     </div>

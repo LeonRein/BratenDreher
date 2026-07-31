@@ -295,31 +295,29 @@ select:disabled,
   font-size: var(--font-size-small);
 }
 
-/* Direct rotation-time entry. Sized for thumbs: native selects give a
-   full-size platform picker on touch devices without any custom JS. */
-.duration-picker-group {
-  margin-top: var(--spacing);
+/* Speed readout: the duration picker doubles as the current-value display,
+   with the rpm equivalent alongside it. Sized for thumbs - native selects
+   give a full-size platform picker on touch devices with no custom JS. */
+.speed-readout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .duration-picker {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 8px;
-}
-
-.duration-field {
-  display: flex;
-  align-items: baseline;
   gap: 6px;
 }
 
 .duration-select {
-  min-height: 52px;
-  min-width: 84px;
-  padding: 8px 10px;
-  font-size: 1.4rem;
+  min-height: 48px;
+  min-width: 72px;
+  padding: 6px 8px;
+  font-size: 1.3rem;
   font-weight: 700;
   text-align: center;
   color: var(--color-text);
@@ -337,13 +335,21 @@ select:disabled,
   opacity: 0.5;
 }
 
+.duration-colon {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-subtle);
+}
+
 .duration-unit {
+  margin-left: 4px;
   font-size: var(--font-size-small);
   color: var(--color-subtle);
 }
 
-.duration-colon {
-  font-size: 1.4rem;
+.speed-rpm {
+  font-size: var(--font-size-medium);
   font-weight: 700;
   color: var(--color-subtle);
+  white-space: nowrap;
 }

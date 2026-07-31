@@ -128,12 +128,12 @@ python3 -m http.server 8000 --directory web
 Der Slider ist **linear in Sekunden pro Umdrehung**, nicht in RPM - auf einer
 RPM-Achse läge der praktisch genutzte Bereich von 0.5-5 RPM auf nur ~15% des
 Wegs, hier sind es ~36%. Die Achse ist gespiegelt, rechts bleibt also schneller.
-Angezeigt werden beide Einheiten (`2.00 rpm · 30 s`), oberhalb einer Minute
-als `m:ss`.
+Zeiten über einer Minute werden als `m:ss` dargestellt.
 
-Darunter lässt sich die Umdrehungszeit über zwei Auswahlfelder **direkt
-eingeben** (Minuten und Sekunden). Native Selects geben auf dem Handy einen
-großflächigen Picker, ohne eigenes Touch-Handling.
+Über dem Slider steht die Umdrehungszeit als Minuten/Sekunden-Auswahl - sie
+ist zugleich Anzeige und **Direkteingabe**, daneben der RPM-Wert. Native
+Selects geben auf dem Handy einen großflächigen Picker, ohne eigenes
+Touch-Handling.
 
 | | Bereich |
 |---|---|
