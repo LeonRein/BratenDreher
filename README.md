@@ -12,6 +12,7 @@ und eine Web-App.
 - **USB-C Power Delivery**: Aushandlung von 5/9/12/15/20 V über den CH224K, inkl. Auto-Negotiation
 - **Bluetooth LE**: Steuerung über die Web Bluetooth API, MsgPack als Protokoll
 - **StallGuard**: Lastüberwachung und Stall-Erkennung über den TMC2209
+- **Tasten am Gerät**: Start/Stopp und Geschwindigkeit direkt am Board, ohne Handy
 - **Installierbare Web-App**: PWA mit Offline-Support, auf Android per Chrome installierbar
 - **Persistente Einstellungen**: Geschwindigkeit, Richtung, Strom, Beschleunigung und StallGuard-Schwelle im Flash
 - **Statistik**: Umdrehungen und reine Motorlaufzeit (Standzeiten zählen nicht mit), daraus die Durchschnittsgeschwindigkeit
@@ -76,6 +77,29 @@ SW1 (GPIO 35) beim Booten gedrückt halten. Das Board verbindet sich dann mit de
 WLAN, meldet sich als `BratenDreher.local` und wartet auf ein Update - die
 Motorsteuerung startet in diesem Modus nicht.
 
+## 🎛️ Tasten am Gerät
+
+Die drei Taster auf dem Board entsprechen ihrer Anordnung:
+
+| Taste | Funktion |
+|---|---|
+| SW1 (links) | langsamer, −1 RPM |
+| SW2 (mitte) | Motor an/aus |
+| SW3 (rechts) | schneller, +1 RPM |
+
+Die Geschwindigkeitstasten wiederholen bei gedrücktem Halten (nach 700 ms alle
+250 ms), damit man nicht 30-mal drücken muss. Die Mitteltaste wiederholt
+bewusst nicht. Änderungen laufen über dieselbe Kommando-Queue wie BLE-Befehle,
+die Web-App aktualisiert sich also automatisch mit.
+
+Schrittweite und Timing stehen als `BUTTON_SPEED_STEP_RPM` und
+`BUTTON_REPEAT_*` in [lib/ButtonTask/ButtonTask.h](lib/ButtonTask/ButtonTask.h).
+
+> **Hinweis:** SW1 ist gleichzeitig der OTA-Taster - beim Booten gedrückt
+> gehalten startet das Board in den Update-Modus. Im Normalbetrieb wird der Pin
+> nur noch als „langsamer" ausgewertet. Ein beim Start gedrückter Taster löst
+> keine Aktion aus, er muss erst einmal losgelassen werden.
+
 ## 📱 Web Interface
 
 Das Interface liegt in [web/](web/) und wird per GitHub Actions nach GitHub Pages
@@ -114,12 +138,15 @@ praktisch am Grill, wo die Verbindung zum Gerät ohnehin über BLE läuft.
 > installieren, könnte sich aber nicht mit dem BratenDreher verbinden. Fehlt
 > Web Bluetooth, zeigt die Seite darum einen entsprechenden Hinweis an.
 
-Der Service Worker ([web/sw.js](web/sw.js)) cached die komplette App und wird
-über einen Cache-Namen versioniert. Beim Deploy ersetzt der Workflow den
-Platzhalter `__CACHE_VERSION__` durch den Commit-SHA, sodass jede neue Version
-sauber übernommen wird - lokal bleibt der Platzhalter stehen, was für Tests
-genügt. Eine neue Version wird erst aktiv, wenn die App vollständig geschlossen
-und neu geöffnet wurde; damit reißt ein Update nie eine laufende BLE-Verbindung ab.
+Der Service Worker ([web/sw.js](web/sw.js)) arbeitet **network-first mit
+Cache-Fallback**: Bei bestehender Verbindung kommt immer die aktuelle Version
+(ein normales Neuladen genügt für ein Update), ohne Verbindung übernimmt der
+vorab gecachte Stand. Cache-first würde Nutzer dagegen dauerhaft auf der zuerst
+geladenen Version festhalten.
+
+Beim Deploy ersetzt der Workflow den Platzhalter `__CACHE_VERSION__` durch den
+Commit-SHA, damit alte Caches sauber aufgeräumt werden; lokal bleibt der
+Platzhalter stehen, was für Tests genügt.
 
 ## 🔗 Bluetooth LE Protokoll
 
@@ -181,13 +208,18 @@ Drei FreeRTOS-Tasks kommunizieren ausschließlich über Queues - kein Task greif
 direkt auf den Zustand eines anderen zu.
 
 ```
-  BLEManager  ──sendCommand()──►  SystemCommand  ──getCommand()──►  StepperController
-   (Core 0)                                                            (Core 1)
-                                                     └──────────►  PowerDeliveryTask
-                                                                      (Core 1)
+  BLEManager  ──┐
+   (Core 0)     ├─sendCommand()─►  SystemCommand  ──getCommand()──►  StepperController
+  ButtonTask  ──┘                                                       (Core 1)
+   (Core 0)                                            └──────────►  PowerDeliveryTask
+                                                                        (Core 1)
        ▲                                                                  │
        └────────getStatusUpdate()──  SystemStatus  ◄──publishStatusUpdate()┘
 ```
+
+Weil die Tasten dieselbe Queue benutzen wie die BLE-Befehle, ist keine
+Sonderbehandlung nötig: Eine Änderung am Gerät erzeugt ganz normale
+Status-Updates, die in der Web-App ankommen.
 
 - [lib/Task/](lib/Task/) - schlanke Basisklasse für FreeRTOS-Tasks
 - [lib/BoardPins/](lib/BoardPins/) - zentrale Pinbelegung
@@ -196,6 +228,7 @@ direkt auf den Zustand eines anderen zu.
 - [lib/StepperController/](lib/StepperController/) - Motorsteuerung, StallGuard, Speed-Modulation
 - [lib/PowerDeliveryTask/](lib/PowerDeliveryTask/) - PD-Aushandlung und Spannungsüberwachung
 - [lib/BLEManager/](lib/BLEManager/) - GATT-Server und MsgPack-Protokoll
+- [lib/ButtonTask/](lib/ButtonTask/) - Entprellung der Taster und Auto-Repeat
 
 Der Stepper-Task wartet beim Start bis zu 10 s auf eine abgeschlossene
 PD-Aushandlung und läuft danach auch ohne PD-Netzteil weiter.

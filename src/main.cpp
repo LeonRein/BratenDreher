@@ -5,6 +5,7 @@
 #include "SystemStatus.h"
 #include "SystemCommand.h"
 #include "PowerDeliveryTask.h"
+#include "ButtonTask.h"
 #include "dbg_print.h"
 #include "OTA.h"
 
@@ -12,6 +13,7 @@
 StepperController& stepperController = StepperController::getInstance();
 BLEManager& bleManager = BLEManager::getInstance();
 PowerDeliveryTask& powerDeliveryTask = PowerDeliveryTask::getInstance();
+ButtonTask& buttonTask = ButtonTask::getInstance();
 
 // Status LED (LED1 on the PD-Stepper board - NOT LED_BUILTIN, which would be
 // GPIO 48 == CFG2 of the PD trigger).
@@ -73,6 +75,10 @@ void setup() {
 
     if (!bleManager.start()) {
         fatalError("Failed to start BLE Task!", 200);
+    }
+
+    if (!buttonTask.start()) {
+        fatalError("Failed to start Button Task!", 150);
     }
 
     dbg_println("All tasks started successfully!");

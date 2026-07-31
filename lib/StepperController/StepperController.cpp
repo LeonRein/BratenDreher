@@ -725,6 +725,10 @@ void StepperController::processCommand(const StepperCommandData &cmd)
         setSpeedInternal(cmd.floatValue);
         break;
 
+    case StepperCommand::ADJUST_SPEED:
+        adjustSpeedInternal(cmd.floatValue);
+        break;
+
     case StepperCommand::SET_DIRECTION:
         setDirectionInternal(cmd.boolValue);
         break;
@@ -735,6 +739,10 @@ void StepperController::processCommand(const StepperCommandData &cmd)
 
     case StepperCommand::DISABLE:
         disableInternal();
+        break;
+
+    case StepperCommand::TOGGLE_ENABLED:
+        toggleEnabledInternal();
         break;
 
     case StepperCommand::EMERGENCY_STOP:
@@ -902,6 +910,34 @@ void StepperController::setSpeedInternal(float rpm)
         systemStatus.sendNotification(NotificationType::WARNING, warningMsg);
     }
     // Success is indicated by the status update - no notification needed for normal success
+}
+
+void StepperController::adjustSpeedInternal(float deltaRpm)
+{
+    // Clamp here rather than letting setSpeedInternal do it, so that holding a
+    // button down at either limit is a silent no-op instead of a stream of
+    // "speed auto-adjusted" warnings and repeated flash writes.
+    const float target = constrain(setpointRPM + deltaRpm, MIN_SPEED_RPM, MAX_SPEED_RPM);
+
+    if (fabsf(target - setpointRPM) < 0.001f)
+    {
+        dbg_println("Speed adjust ignored - already at the limit");
+        return;
+    }
+
+    setSpeedInternal(target);
+}
+
+void StepperController::toggleEnabledInternal()
+{
+    if (motorEnabled)
+    {
+        disableInternal();
+    }
+    else
+    {
+        enableInternal();
+    }
 }
 
 void StepperController::setDirectionInternal(bool runClockwise)

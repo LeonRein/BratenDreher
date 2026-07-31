@@ -122,6 +122,8 @@ private:
 
     // Internal methods (called from command processing)
     void setSpeedInternal(float rpm);
+    void adjustSpeedInternal(float deltaRpm);
+    void toggleEnabledInternal();
     void setDirectionInternal(bool runClockwise);
     void enableInternal();
     void disableInternal();

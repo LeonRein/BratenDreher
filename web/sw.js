@@ -1,17 +1,29 @@
 /**
  * Service worker for the BratenDreher control app.
  *
- * The whole app is ~190 KB of static files with no backend, so the entire
- * shell is precached and served cache-first. That makes the app start
- * instantly and work with no network at all - which matters, because it talks
- * to the controller over Bluetooth and is typically used standing at a grill.
+ * Strategy: network-first with a cache fallback.
+ *
+ * The app is ~190 KB of static files served from a CDN, so caching buys very
+ * little speed - the reason this service worker exists is *offline* use, since
+ * the app talks to the controller over Bluetooth and is typically used standing
+ * at a grill with poor signal.
+ *
+ * Network-first therefore fits better than cache-first: when there is a
+ * connection you always get the current version (a plain reload is enough to
+ * pick up a new deployment), and when there is not, the precached copy takes
+ * over. A cache-first worker would instead pin users to whatever version they
+ * first loaded, which is both surprising and hard to escape.
  *
  * CACHE_VERSION is replaced with the commit SHA by the GitHub Pages workflow.
- * When running from a plain file server it stays as the literal placeholder,
- * which is fine - it just means the cache name never changes locally.
+ * Running from a plain file server it stays as the literal placeholder, which
+ * is fine - with network-first the cache name no longer gates updates.
  */
 const CACHE_VERSION = '__CACHE_VERSION__';
 const CACHE_NAME = `bratendreher-${CACHE_VERSION}`;
+
+// How long to wait for the network before falling back to the cache. Long
+// enough for a slow connection, short enough that a dead one is not a hang.
+const NETWORK_TIMEOUT_MS = 3000;
 
 const APP_SHELL = [
     './',
@@ -30,14 +42,17 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-    // Precache the complete shell so a version swap is atomic: the page never
-    // ends up running new HTML against stale JS.
-    event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
-    );
-    // Deliberately no skipWaiting(): a new version takes over only once the app
-    // has been fully closed. Swapping assets under a running page would drop
-    // the live Bluetooth connection mid-session.
+    event.waitUntil((async () => {
+        const cache = await caches.open(CACHE_NAME);
+        // Precache so the very first offline launch works even for files the
+        // user has not happened to request yet.
+        await cache.addAll(APP_SHELL);
+        // Take over straight away. Safe here because the page loads all of its
+        // assets up front and fetches nothing afterwards, so an activation
+        // mid-session cannot swap code underneath a running page - and it does
+        // not touch the Bluetooth connection either.
+        await self.skipWaiting();
+    })());
 });
 
 self.addEventListener('activate', (event) => {
@@ -52,6 +67,16 @@ self.addEventListener('activate', (event) => {
     })());
 });
 
+function fetchWithTimeout(request, timeoutMs) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('network timeout')), timeoutMs);
+        fetch(request).then(
+            (response) => { clearTimeout(timer); resolve(response); },
+            (error) => { clearTimeout(timer); reject(error); }
+        );
+    });
+}
+
 self.addEventListener('fetch', (event) => {
     const request = event.request;
 
@@ -59,16 +84,22 @@ self.addEventListener('fetch', (event) => {
     if (new URL(request.url).origin !== self.location.origin) return;
 
     event.respondWith((async () => {
-        const cached = await caches.match(request, { ignoreSearch: true });
-        if (cached) return cached;
+        const cache = await caches.open(CACHE_NAME);
 
         try {
-            return await fetch(request);
+            const response = await fetchWithTimeout(request, NETWORK_TIMEOUT_MS);
+            if (response && response.ok && response.type === 'basic') {
+                cache.put(request, response.clone());
+            }
+            return response;
         } catch (error) {
-            // Offline and not in the cache. For a navigation, fall back to the
-            // app shell so the UI still comes up.
+            const cached = await cache.match(request, { ignoreSearch: true });
+            if (cached) return cached;
+
+            // Offline and never cached. For a navigation the shell is still
+            // the most useful thing to hand back.
             if (request.mode === 'navigate') {
-                const shell = await caches.match('./index.html');
+                const shell = await cache.match('./index.html');
                 if (shell) return shell;
             }
             throw error;
