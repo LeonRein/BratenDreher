@@ -1,279 +1,201 @@
 # 🔄 BratenDreher - Smart Rotisserie Controller
 
-Ein intelligenter Spießbraten-Dreher mit ESP32, NEMA 17 Stepper Motor und Bluetooth-Steuerung über eine moderne Web-App.
+Ein intelligenter Spießbraten-Dreher auf Basis des [PD-Stepper](https://github.com/Thingsbyjosh/PD-Stepper)
+Boards (ESP32-S3 + TMC2209 + USB-C Power Delivery), gesteuert über Bluetooth LE
+und eine Web-App.
 
 ## 🎯 Features
 
-- **FastAccelStepper + TMC2209**: Beste Kombination für flüssige Rotation mit Hardware-Beschleunigung
-- **Realistische Geschwindigkeit**: 0.1 - 30 RPM (bis 0.5 RPS) für perfekte Bratenrotation
-- **Bluetooth LE**: Drahtlose Steuerung über Web Bluetooth API
-- **Web Interface**: Modernes, responsives UI für Smartphones und Tablets
-- **Erweiterte Einstellungen**: Microsteps (8-256) und Motorstrom (10-100%) konfigurierbar
-- **Statistiken**: Gesamtumdrehungen, Laufzeit und Durchschnittsgeschwindigkeit
-- **Einstellungen speichern**: Preferences werden im Flash-Speicher gesichert
-- **Emergency Stop**: Sofortige Notabschaltung mit Bluetooth-Verbindungsüberwachung
+- **FastAccelStepper + TMC2209**: Hardware-Timer-basierte Step-Erzeugung, flüssig auch unter BLE-Last
+- **Geschwindigkeit**: 0.1 - 30 RPM an der Abtriebswelle
+- **Variable Geschwindigkeit**: Positionsabhängige Modulation, um ungleichmäßiges Bräunen auszugleichen
+- **USB-C Power Delivery**: Aushandlung von 5/9/12/15/20 V über den CH224K, inkl. Auto-Negotiation
+- **Bluetooth LE**: Steuerung über die Web Bluetooth API, MsgPack als Protokoll
+- **StallGuard**: Lastüberwachung und Stall-Erkennung über den TMC2209
+- **Persistente Einstellungen**: Geschwindigkeit, Richtung, Strom, Beschleunigung und StallGuard-Schwelle im Flash
+- **Statistik**: Umdrehungen und reine Motorlaufzeit (Standzeiten zählen nicht mit), daraus die Durchschnittsgeschwindigkeit
+- **OTA-Update**: WLAN-Update per Tastendruck beim Booten
 
 ## 🛠️ Hardware
 
-- **ESP32-S3**: Mikrocontroller mit Bluetooth LE
-- **NEMA 17 Stepper**: 200 Schritte pro Umdrehung
-- **1:10 Getriebe**: Untersetzung für präzise, langsame Drehung
-- **FastAccelStepper**: Hardware-basierte Step-Generierung (ESP32 Timer)
-- **TMC2209 Driver**: Professioneller Stepper-Treiber mit UART-Kommunikation
-- **PD-Stepper Board**: Stepper-Treiber-Board mit ESP32
+Dieses Projekt läuft auf dem **PD-Stepper V1.1** Board - nicht auf einem
+ESP32-S3-Devkit. Die vollständige Pinbelegung steht in
+[lib/BoardPins/BoardPins.h](lib/BoardPins/BoardPins.h); dort ist auch
+dokumentiert, warum `LED_BUILTIN` hier nicht verwendet werden darf (GPIO 48 ist
+auf diesem Board CFG2 des PD-Triggers).
 
-### Pin-Konfiguration (PD-Stepper Board)
+| Funktion | GPIO |
+|---|---|
+| TMC_EN / STEP / DIR | 21 / 5 / 6 |
+| MS1 / MS2 | 1 / 2 |
+| SPREAD (LOW = StealthChop) | 7 |
+| TMC UART TX / RX | 17 / 18 |
+| DIAG (StallGuard) | 16 |
+| PD: PG / CFG1 / CFG2 / CFG3 | 15 / 38 / 48 / 47 |
+| VBUS Messung | 4 |
+| LED1 / LED2 | 10 / 12 |
+| Taster SW1 / SW2 / SW3 | 35 / 36 / 37 |
 
-```cpp
-TMC_EN    = 21  // TMC2209 Enable
-STEP_PIN  = 5   // Step-Signal  
-DIR_PIN   = 6   // Richtung
-TMC_TX    = 17  // UART TX zu TMC2209
-TMC_RX    = 18  // UART RX von TMC2209
-MS1       = 1   // Microstep 1
-MS2       = 2   // Microstep 2
-DIAG      = 16  // Diagnostic/Stall Pin
-STATUS_LED = 2  // Status-LED
-```
+### Motorkonfiguration
 
-## 📁 Projektstruktur
-
-```
-BratenDreher/
-├── src/
-│   └── main.cpp                    # Hauptprogramm
-├── lib/
-│   ├── StepperController/          # Stepper Motor Klasse
-│   │   ├── StepperController.h
-│   │   └── StepperController.cpp
-│   └── BLEManager/                 # Bluetooth LE Manager
-│       ├── BLEManager.h
-│       └── BLEManager.cpp
-├── web/                            # Web Interface (für GitHub Pages)
-│   ├── index.html
-│   ├── style.css
-│   └── script.js
-├── examples/                       # Original Beispiele
-└── platformio.ini                 # PlatformIO Konfiguration
-```
+- **NEMA 17**: 200 Schritte/Umdrehung
+- **Getriebe**: 1:10 Untersetzung
+- **Microsteps**: fest auf 16 eingestellt (`MICRO_STEPS` in `StepperController.h`)
+- **Gesamt**: 32000 Microsteps pro Abtriebsumdrehung
 
 ## 🔧 Setup
 
-### 1. PlatformIO Installation
+### 1. Zugangsdaten anlegen
 
 ```bash
-# PlatformIO CLI installieren
-curl -fsSL https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py -o get-platformio.py
-python3 get-platformio.py
+cp include/secrets.h.example include/secrets.h
+# WIFI_SSID, WIFI_PASSWORD und OTA_PASSWORD eintragen
 ```
 
-### 2. Projekt kompilieren
+`include/secrets.h` ist gitignored und darf nicht eingecheckt werden. Die Daten
+werden ausschließlich für den OTA-Modus benötigt - im Normalbetrieb läuft kein WLAN.
+
+### 2. Bauen und flashen
 
 ```bash
-cd BratenDreher
-pio run
+pio run                                    # Normaler Build
+pio run -t upload                          # Über USB flashen
+pio device monitor                         # Serieller Monitor
+
+pio run -e esp32-s3-devkitm-1-debug        # Build mit ausführlichem dbg_* Logging
+pio run -e esp32-s3-devkitm-1-ota -t upload  # Update über WLAN
 ```
 
-### 3. Auf ESP32 flashen
+Es gibt zwei Log-Ebenen (siehe [lib/dbg_print/dbg_print.h](lib/dbg_print/dbg_print.h)):
+`info_*` ist immer aktiv, `dbg_*` nur im `-debug` Environment.
 
-```bash
-pio run -t upload
-```
+### 3. OTA-Update
 
-### 4. Serial Monitor
-
-```bash
-pio device monitor
-```
+SW1 (GPIO 35) beim Booten gedrückt halten. Das Board verbindet sich dann mit dem
+WLAN, meldet sich als `BratenDreher.local` und wartet auf ein Update - die
+Motorsteuerung startet in diesem Modus nicht.
 
 ## 📱 Web Interface
 
-Das Web-Interface befindet sich im `web/` Ordner und kann über GitHub Pages gehostet werden.
+Das Interface liegt in [web/](web/) und wird per GitHub Actions nach GitHub Pages
+deployed (siehe [.github/workflows/static.yml](.github/workflows/static.yml)).
 
-### GitHub Pages Setup
-
-1. Repository auf GitHub erstellen
-2. Web-Dateien in `docs/` Ordner verschieben oder direkt aus `main` Branch deployen
-3. GitHub Pages in Repository-Einstellungen aktivieren
-4. URL: `https://[username].github.io/BratenDreher/`
-
-### Lokaler Test
+Web Bluetooth benötigt HTTPS (oder `localhost`) sowie einen Chromium-basierten Browser.
 
 ```bash
-cd web
-python3 -m http.server 8000
-# Dann öffne http://localhost:8000
+python3 -m http.server 8000 --directory web
+# http://localhost:8000
 ```
 
-## 🔗 Bluetooth LE GATT Profile
+## 🔗 Bluetooth LE Protokoll
 
-### Service UUID
+Es gibt **eine** Characteristic, über die in beide Richtungen kommuniziert wird.
+Die Nutzdaten sind MsgPack-kodiert.
+
+| | UUID |
+|---|---|
+| Service | `12345678-1234-1234-1234-123456789abc` |
+| Command Characteristic (R/W/Notify) | `12345678-1234-1234-1234-123456789ab1` |
+
+### Kommandos (App → Gerät)
+
+Format: `{ "type": <kürzel>, "value": <wert> }`
+
+| Kürzel | Wert | Bedeutung |
+|---|---|---|
+| `ss` | float | Sollgeschwindigkeit in RPM (0.1-30) |
+| `sd` | bool | Richtung (true = im Uhrzeigersinn) |
+| `en` | bool | Motor ein/aus |
+| `es` | - | Emergency Stop (wird bevorzugt behandelt) |
+| `sc` | int | Motorstrom in % (10-100) |
+| `sa` | int | Beschleunigung in steps/s² (100-100000) |
+| `svs` | float | Stärke der Geschwindigkeitsmodulation (0.0-1.0) |
+| `svp` | float | Phasenversatz in Radiant |
+| `sve` | bool | Modulation ein/aus |
+| `st` | int | StallGuard-Schwelle (0-255) |
+| `stv` | int | PD-Zielspannung (5, 9, 12, 15 oder 20) |
+| `anh` | - | Höchste verfügbare PD-Spannung automatisch aushandeln |
+| `rc` | - | Statistik zurücksetzen |
+| `rs` | - | Stall-Zähler zurücksetzen |
+| `ras` | - | Alle aktuellen Statuswerte anfordern |
+
+### Statusmeldungen (Gerät → App)
+
+Format: `{ "type": "status_update", <kürzel>: <wert>, ... }`. Mehrere Werte
+werden zu einer Nachricht zusammengefasst, begrenzt durch die ausgehandelte MTU.
+
+| Kürzel | Bedeutung |
+|---|---|
+| `sp` / `cs` | Soll- / Istgeschwindigkeit (RPM) |
+| `dir` | Richtung (`"cw"` / `"ccw"`) |
+| `en` | Motor aktiv |
+| `cur` | Motorstrom (%) |
+| `acc` | Beschleunigung (steps/s²) |
+| `sve` / `svs` / `svp` | Modulation aktiv / Stärke / Phase |
+| `ca` | Aktueller Drehwinkel (Radiant) |
+| `tr` / `rt` | Umdrehungen gesamt / reine Laufzeit des Motors (ms) |
+| `sd` / `sc` | Stall erkannt / Stall-Zähler |
+| `sgt` / `sgr` | StallGuard-Schwelle / -Messwert |
+| `tmcst` / `tmct` | TMC2209 Kommunikation / Temperaturstufe (0-4) |
+| `pdns` / `pdnv` / `pdcv` / `pdpg` | PD Status / ausgehandelte / gemessene Spannung / Power Good |
+
+Warnungen und Fehler kommen als `{ "type": "notification", "level": ..., "message": ... }`.
+
+## 🏗️ Architektur
+
+Drei FreeRTOS-Tasks kommunizieren ausschließlich über Queues - kein Task greift
+direkt auf den Zustand eines anderen zu.
+
 ```
-12345678-1234-1234-1234-123456789abc
+  BLEManager  ──sendCommand()──►  SystemCommand  ──getCommand()──►  StepperController
+   (Core 0)                                                            (Core 1)
+                                                     └──────────►  PowerDeliveryTask
+                                                                      (Core 1)
+       ▲                                                                  │
+       └────────getStatusUpdate()──  SystemStatus  ◄──publishStatusUpdate()┘
 ```
 
-### Characteristics
+- [lib/Task/](lib/Task/) - schlanke Basisklasse für FreeRTOS-Tasks
+- [lib/BoardPins/](lib/BoardPins/) - zentrale Pinbelegung
+- [lib/SystemCommand/](lib/SystemCommand/) - Kommando-Queues (App → Hardware)
+- [lib/SystemStatus/](lib/SystemStatus/) - Status- und Notification-Queues (Hardware → App)
+- [lib/StepperController/](lib/StepperController/) - Motorsteuerung, StallGuard, Speed-Modulation
+- [lib/PowerDeliveryTask/](lib/PowerDeliveryTask/) - PD-Aushandlung und Spannungsüberwachung
+- [lib/BLEManager/](lib/BLEManager/) - GATT-Server und MsgPack-Protokoll
 
-| Characteristic | UUID | Typ | Beschreibung |
-|---|---|---|---|
-| Speed | ...ab1 | R/W | Geschwindigkeit (0.1-30 RPM) |
-| Direction | ...ab2 | R/W | Richtung (1=CW, 0=CCW) |
-| Enable | ...ab3 | R/W | Motor Ein/Aus (1=Ein, 0=Aus) |
-| Status | ...ab4 | R/N | MsgPack Status-Updates |
-| Microsteps | ...ab5 | R/W | Microsteps (8, 16, 32, 64, 128, 256) |
-| Current | ...ab6 | R/W | Motorstrom (10-100%) |
-| Reset | ...ab7 | W | Statistiken zurücksetzen (1=Reset) |
-
-### Status MsgPack Format
-
-Status updates and commands are now exchanged as MsgPack binary objects.
-The structure remains the same as the previous JSON example, but is encoded/decoded using MsgPack on both the ESP32 and Web frontend.
-
-Example structure:
-- enabled: boolean
-- speed: float
-- direction: string ("cw" or "ccw")
-- running: boolean
-- connected: boolean
-- totalRevolutions: float
-- runtime: integer
-- microsteps: integer
-- current: integer
-- tmc2209Status: boolean
-- stallDetected: boolean
-- stallCount: integer
-- timestamp: integer
-
-Refer to the code for exact field names and types.
-
-## 🎮 Bedienung
-
-### Web App
-
-1. **Verbinden**: "Connect" Button drücken, "BratenDreher" auswählen
-2. **Motor starten**: Toggle-Switch auf "ON"
-3. **Geschwindigkeit**: Slider (0.1-30 RPM) oder Preset-Buttons
-4. **Richtung**: Clockwise/Counter-clockwise Buttons
-5. **Erweiterte Einstellungen**: 
-   - Microsteps: 8, 16, 32, 64, 128, 256
-   - Motorstrom: 10-100%
-6. **Statistiken**: Gesamtumdrehungen, Laufzeit, Durchschnittsgeschwindigkeit
-7. **Reset**: Statistiken zurücksetzen
-8. **Stop**: Toggle auf "OFF" oder Emergency Stop
-
-### Status-LED (Pin 2)
-
-- **Blinkt langsam**: Wartet auf Verbindung
-- **Leuchtet konstant**: Verbunden
-- **Blinkt schnell**: Fehler beim Initialisieren
-
-## 🔄 Motorspezifikationen
-
-- **NEMA 17**: 200 Schritte/Umdrehung
-- **FastAccelStepper**: Hardware-Timer basierte Step-Generierung (interrupt-sicher)
-- **TMC2209 Driver**: Professioneller Treiber mit bis zu 256 Microsteps
-- **Getriebe**: 1:10 Untersetzung
-- **Gesamt**: 2000 Schritte/Umdrehung (bei 1 Microstep)
-- **Endgeschwindigkeit**: 0.1 - 30 RPM (bis 0.5 RPS) - realistisch für Grillgut
-- **Drehmoment**: Sehr hoch durch Untersetzung (ideal für schwere Braten bis 10kg)
-
-### Warum FastAccelStepper + TMC2209?
-
-- **Hardware-Timer**: ESP32 Timer generiert Steps - läuft auch bei WiFi/BLE-Unterbrechungen flüssig
-- **Beschleunigungsrampen**: Sanftes Anfahren und Bremsen, kein Stepverlust
-- **TMC2209 Integration**: Perfekte Kombination für leisen, präzisen Betrieb
-- **Interrupt-sicher**: Keine Geschwindigkeitsschwankungen durch andere Tasks
-
-### Geschwindigkeitsberechnung
-
-```cpp
-// Für 15 RPM Ausgangswelle (realistische Grillgeschwindigkeit):
-// Motorgeschwindigkeit = 15 * 10 = 150 RPM
-// Bei 32 Microsteps:
-motor_steps_per_second = (150 * 200 * 32) / 60 = 16000 steps/s
-// FastAccelStepper: stepper->setSpeedInHz(16000)
-
-// Resultat: Perfekt flüssige Rotation auch bei ESP32-Last
-```
+Der Stepper-Task wartet beim Start bis zu 10 s auf eine abgeschlossene
+PD-Aushandlung und läuft danach auch ohne PD-Netzteil weiter.
 
 ## 🛡️ Sicherheit
 
-- **Automatische Abschaltung** bei Bluetooth-Verbindungsabbruch
-- **Emergency Stop** Button für sofortige Abschaltung
-- **Geschwindigkeitsbegrenzung** auf sinnvolle Werte
-- **Auto-Enable** mit konfigurierbaren Delays
+- **Emergency Stop** bremst mit maximaler Rampe und überholt dabei wartende Kommandos
+- **Geschwindigkeit und Beschleunigung** werden auf sinnvolle Bereiche begrenzt
+- **Übertemperatur** des TMC2209 wird gemeldet (ab 120 °C, kritisch ab 157 °C)
+- **OTA** ist passwortgeschützt
 
-## 🧪 Testing
+> **Hinweis:** Beim Trennen der BLE-Verbindung läuft der Motor bewusst weiter,
+> damit ein kurzer Verbindungsabbruch den Bratvorgang nicht unterbricht. Zum
+> Stoppen muss der Motor explizit ausgeschaltet werden.
 
-### Hardware Test
-
-```cpp
-// FastAccelStepper Test
-stepper->setSpeedInHz(1000);    // 1000 steps/s
-stepper->setAcceleration(500);  // Smooth acceleration  
-stepper->runForward();          // Start continuous rotation
-delay(60000);                   // 1 Minute
-stepper->stopMove();            // Smooth stop
-```
-
-### BLE Test
-
-```javascript
-// Web Console Test
-await navigator.bluetooth.requestDevice({
-  filters: [{ name: 'BratenDreher' }]
-});
-```
-
-## 📚 Abhängigkeiten
-
-- **FastAccelStepper**: Hardware-Timer basierte Step-Generierung für ESP32
-- **TMC2209**: Stepper Driver Library von Janelia für UART-Kommunikation
-- **ArduinoJson**: MsgPack Parsing/Serialization für BLE-Kommunikation
-- **@msgpack/msgpack**: MsgPack JS library for Web frontend
-- **ESP32 BLE**: Bluetooth Low Energy Stack
-- **Preferences**: ESP32 Flash-Speicher für Einstellungen
-- **Web Bluetooth API**: Browser-seitige BLE-Unterstützung
-
-## 🔮 Zukünftige Erweiterungen
+## 🔮 Mögliche Erweiterungen
 
 - [ ] Timer-Funktion (automatisches Stoppen nach Zeit)
-- [ ] Temperatur-Sensor Integration (PT100/PT1000)
-- [ ] Programmierbare Drehmuster (Pendel-Bewegung)
-- [ ] WiFi-Backup Kommunikation
-- [ ] Mobile App (React Native/Flutter)
-- [ ] Mehrere Motoren gleichzeitig (Hauptgrill + Beilagen)
-- [ ] Cloud-Logging und Rezept-Management
-- [ ] Lastüberwachung via TMC2209 Stall Detection
+- [ ] Temperatur-Sensor (der NTC-Eingang teilt sich GPIO 7 mit SPREAD und ist derzeit ungenutzt)
+- [ ] AS5600-Encoder für echte Positionsrückmeldung
 
 ## ⚠️ Troubleshooting
 
-### Motor dreht nicht
-- Stromversorgung prüfen
-- Kabelverbindungen prüfen
-- Serial Monitor für Fehler checken
+**Motor dreht nicht** - Stromversorgung und PD-Status in der App prüfen; ist
+`tmcst` auf "Error", antwortet der TMC2209 nicht über UART.
 
-### BLE verbindet nicht
-- Browser-Kompatibilität (Chrome/Edge erforderlich)
-- Bluetooth am Gerät aktiviert?
-- ESP32 in Reichweite?
+**BLE verbindet nicht** - Chromium-basierter Browser nötig, Seite muss über
+HTTPS oder localhost laufen.
 
-### Web Interface lädt nicht
-- HTTPS erforderlich für Web Bluetooth
-- Lokaler Server für Tests nutzen
+**Board bootet immer in den OTA-Modus** - SW1 klemmt oder wird beim Start gedrückt.
 
 ## 📄 Lizenz
 
-MIT License - Siehe LICENSE Datei für Details
-
-## 👨‍💻 Entwicklung
-
-Entwickelt für PlatformIO mit ESP32. Nutzt moderne C++ Klassen-Architektur für einfache Erweiterbarkeit.
-
-**Hauptklassen:**
-- `StepperController`: Hardware-Abstraktion
-- `BLEManager`: Kommunikation
-- `main.cpp`: Koordination
+MIT License - siehe LICENSE.
 
 ---
 

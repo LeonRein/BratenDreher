@@ -1,74 +1,19 @@
-#include <ArduinoOTA.h>
-#include "../../secrets.h"
-#include "StepperController.h"
+#ifndef OTA_H
+#define OTA_H
 
-#define OTA_UPDATE_BUTTON_PIN 35 // GPIO pin for OTA update button
+#include "BoardPins.h"
 
-void setupOTA()
-{
-  WiFi.mode(WIFI_STA);
-  WiFi.setHostname("BratenDreher");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  WiFi.onEvent([](WiFiEvent_t event)
-               {
-        if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
-          dbg_print("IP address: ");
-          Serial.println(WiFi.localIP());
-        } });
+// OTA update mode is entered by holding SW1 (active low) during boot.
+#define OTA_UPDATE_BUTTON_PIN SW1_PIN
 
-  ArduinoOTA
-      .onStart([]()
-               {
-      String type;
-      if (ArduinoOTA.getCommand() == U_FLASH) {
-        type = "sketch";
-      } else {  // U_SPIFFS
-        type = "filesystem";
-      }
+/**
+ * Sample the OTA button. If it is held, bring up WiFi + ArduinoOTA and block
+ * forever servicing update requests (this function then never returns).
+ * If the button is not held, returns immediately and normal boot continues.
+ *
+ * The caller must have configured OTA_UPDATE_BUTTON_PIN as an input and allowed
+ * the level to settle before calling this.
+ */
+void handleOTAButton();
 
-      SystemCommand::getInstance().sendCommand(StepperCommand::DISABLE);
-      bleManager.stop();
-      powerDeliveryTask.stop();
-      delay(100); // Allow time for stepper to stop
-      StepperController::getInstance().stop();
-
-      // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-      Serial.println("Start updating " + type); })
-      .onEnd([]()
-             { Serial.println("\nEnd"); })
-      .onProgress([](unsigned int progress, unsigned int total)
-                  { dbg_printf("Progress: %u%%\r", (progress / (total / 100))); })
-      .onError([](ota_error_t error)
-               {
-      dbg_printf("Error[%u]: ", error);
-      if (error == OTA_AUTH_ERROR) {
-        Serial.println("Auth Failed");
-      } else if (error == OTA_BEGIN_ERROR) {
-        Serial.println("Begin Failed");
-      } else if (error == OTA_CONNECT_ERROR) {
-        Serial.println("Connect Failed");
-      } else if (error == OTA_RECEIVE_ERROR) {
-        Serial.println("Receive Failed");
-      } else if (error == OTA_END_ERROR) {
-        Serial.println("End Failed");
-      } });
-
-  ArduinoOTA.setHostname("BratenDreher");
-  ArduinoOTA.begin();
-}
-
-void loopOTA()
-{
-  ArduinoOTA.handle();
-}
-
-void handleOTAButton() {
-  if (digitalRead(OTA_UPDATE_BUTTON_PIN) == LOW) {
-    dbg_println("OTA update button pressed, starting OTA...");
-    setupOTA();
-    while (true) {
-      loopOTA();
-      delay(100); // Allow some time for OTA handling
-    }   
-  }
-}
+#endif // OTA_H

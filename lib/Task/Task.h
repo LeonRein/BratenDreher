@@ -19,6 +19,12 @@ protected:
     static void taskWrapper(void* parameter) {
         Task* taskInstance = static_cast<Task*>(parameter);
         taskInstance->run();
+
+        // run() returned, so the task is about to be destroyed. Clear the
+        // bookkeeping first - otherwise a later stop() would call
+        // vTaskDelete() on a freed handle.
+        taskInstance->isRunning = false;
+        taskInstance->taskHandle = NULL;
         vTaskDelete(NULL);
     }
     

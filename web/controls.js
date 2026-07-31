@@ -104,6 +104,10 @@ class SliderFillControl extends BaseControl {
 
     hideFill() {
         if (this.fillElement) {
+            // Collapse the width rather than relying on opacity alone: the
+            // shared display-state styling also writes opacity and would
+            // otherwise make the fill reappear on the next state change.
+            this.fillElement.style.width = '0%';
             this.fillElement.style.opacity = '0';
         }
     }
@@ -389,10 +393,16 @@ class CompositeControl extends BaseControl {
  * GraphControl for plotting speed vs. rotation remainder.
  */
 class GraphControl extends BaseControl {
+    // Largest plausible angle change between two samples. Status updates arrive
+    // every 100ms and the motor tops out at 30 RPM, i.e. ~0.31 rad per sample -
+    // so anything beyond this is a jump in the angle origin, not rotation.
+    static MAX_ANGLE_STEP = 1.0;
+
     constructor(canvasElement, options = {}) {
         super(canvasElement, options);
         this.canvas = canvasElement;
         this.samples = [];
+        this.lastAngle = null;
         this.setSpeed = 1.0;
         this.bgColor = '#3b82f60d';
         this.lineColor = '#10b981';
@@ -402,7 +412,30 @@ class GraphControl extends BaseControl {
         this.canvas.style.borderRadius = '8px';
     }
 
+    // Discard the collected trace. Required whenever the angle origin moves,
+    // because older samples are measured against a different zero point.
+    reset() {
+        this.samples = [];
+        this.lastAngle = null;
+        this.drawGraph();
+    }
+
     addSample(angle, speed, setSpeed) {
+        // The firmware re-bases the angle origin when speed variation is
+        // enabled, which makes the buffered samples meaningless: they would
+        // stay in the array out of angle order and be drawn as a tangle until
+        // a full revolution had scrolled them out. Detect the jump and start
+        // a fresh trace. Wrapping past 2*PI is normal and must not trigger it.
+        if (this.lastAngle !== null) {
+            let delta = angle - this.lastAngle;
+            while (delta > Math.PI) delta -= 2 * Math.PI;
+            while (delta <= -Math.PI) delta += 2 * Math.PI;
+            if (Math.abs(delta) > GraphControl.MAX_ANGLE_STEP) {
+                this.samples = [];
+            }
+        }
+        this.lastAngle = angle;
+
         if (Math.abs(angle - this.samples[this.samples.length - 2]?.angle) < 0.01) {
             this.samples.pop();
         }

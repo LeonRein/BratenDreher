@@ -37,8 +37,9 @@ private:
     ServerCallbacks* serverCallbacks;
     CommandCharacteristicCallbacks* commandCallbacks;
     
-    // State
-    bool deviceConnected;
+    // State. deviceConnected is written from the BLE stack's callback context
+    // and read from the BLE task, so it must not be cached in a register.
+    volatile bool deviceConnected;
     bool oldDeviceConnected;
     
     // Cached reference to SystemStatus singleton
@@ -48,7 +49,14 @@ private:
     SystemCommand& systemCommand;
     
     // Status update batching configuration
-    static constexpr uint16_t BLE_MTU = 517; // Use highest possible MTU for BLE
+    static constexpr uint16_t BLE_MTU = 517;              // Largest MTU we ask for
+    static constexpr size_t STATUS_BATCH_HEADROOM = 32;   // Stop batching this far from the limit
+    static constexpr size_t ATT_NOTIFY_OVERHEAD = 3;      // ATT opcode + handle
+
+    // Largest notification payload the current connection can actually carry
+    size_t maxNotifyPayload() const;
+    // Serialized MsgPack size of a document, without writing it anywhere
+    static size_t measureMsgPackSize(const JsonDocument& doc);
 
     BLEManager();
     ~BLEManager();
@@ -63,8 +71,7 @@ private:
     bool isConnected() const { return deviceConnected; }
     void addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate); // Helper to add status to JSON
     void sendStatusUpdate(uint8_t* buffer, size_t len); // Send a status update
-    void sendNotification(const String& level, const String& message = "");
-    void sendAllCurrentStatus(); // Send all current status information to newly connected client
+    void sendNotification(const char* level, const char* message = "");
     void handleCommand(const std::string& command);
 
     friend class ServerCallbacks;

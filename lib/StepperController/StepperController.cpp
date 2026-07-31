@@ -30,42 +30,7 @@ void StepperController::applyStepperAcceleration(uint32_t accelerationStepsPerSe
     systemStatus.publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, accelerationStepsPerSec2);
 }
 
-void StepperController::applyRunClockwise()
-{
-    if (!stepper)
-    {
-        dbg_println("WARNING: Cannot set direction - stepper not initialized");
-        return;
-    }
-
-    // Check power delivery and warn if not optimal, but still allow operation
-    PowerDeliveryTask &pdTask = PowerDeliveryTask::getInstance();
-    if (pdTask.isNegotiationComplete() && pdTask.getNegotiationState() == PDNegotiationState::SUCCESS && !pdTask.isPowerGood())
-    {
-        dbg_println("WARNING: Power delivery indicates power not good, but enabling motor anyway");
-    }
-    else if (!pdTask.isNegotiationComplete())
-    {
-        dbg_println("INFO: Motor enabled without power delivery negotiation (no PD adapter or still negotiating)");
-    }
-
-    if (!motorEnabled)
-    {
-        publishTMC2209Communication();
-        stepperDriver.enable();
-        motorEnabled = true;
-        systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, true);
-    }
-
-
-    applyStepperAcceleration(setpointAcceleration); // Ensure acceleration is set before running
-    stepper->runForward(); // In FastAccelStepper, backward means clockwise
-    clockwise = true;
-
-    systemStatus.publishStatusUpdate(StatusUpdateType::DIRECTION_CHANGED, clockwise);
-}
-
-void StepperController::applyRunCounterClockwise()
+void StepperController::applyRun(bool runClockwise)
 {
     if (!stepper)
     {
@@ -89,12 +54,21 @@ void StepperController::applyRunCounterClockwise()
         stepperDriver.enable();
         publishTMC2209Communication();
         motorEnabled = true;
+        startRuntimeAccounting();
         systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, true);
     }
 
     applyStepperAcceleration(setpointAcceleration); // Ensure acceleration is set before running
-    stepper->runBackward(); // In FastAccelStepper, backward means counter-clockwise
-    clockwise = false;
+
+    if (runClockwise)
+    {
+        stepper->runForward();
+    }
+    else
+    {
+        stepper->runBackward();
+    }
+    clockwise = runClockwise;
 
     systemStatus.publishStatusUpdate(StatusUpdateType::DIRECTION_CHANGED, clockwise);
 }
@@ -109,9 +83,11 @@ void StepperController::applyStop()
 
     stepper->stopMove();
     motorEnabled = false;
+    stopRuntimeAccounting();
     publishTMC2209Communication();
 
     systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
+    publishRuntime(); // Push the final runtime so the UI settles on the exact value
 }
 
 void StepperController::applyCurrent(uint8_t current)
@@ -187,10 +163,6 @@ void StepperController::publishTMC2209Temperature()
     // Publish temperature status update
     systemStatus.publishStatusUpdate(StatusUpdateType::TMC2209_TEMPERATURE_UPDATE, temperatureStatus);
 
-    // Track last temperature status to avoid duplicate notifications
-    static int lastTemperatureStatus = -1;
-    static bool lastOverTemperatureShutdown = false;
-    
     // Handle over-temperature shutdown notifications (separate from temperature warnings)
     if (status.over_temperature_shutdown && !lastOverTemperatureShutdown)
     {
@@ -227,13 +199,12 @@ void StepperController::publishTMC2209Temperature()
         }
     }
 
-    // Log temperature status for debugging
+    // An over-temperature driver is worth reporting even in a release build.
     if (temperatureStatus > 0)
     {
-#ifdef DEBUG
-        const char *tempLabels[] = {"Normal", "Warm (>120°C)", "Elevated (>143°C)", "High (>150°C)", "Critical (>157°C)"};
-#endif
-        dbg_printf("TMC2209 Temperature: %s\n", tempLabels[temperatureStatus]);
+        static const char *const tempLabels[] = {
+            "Normal", "Warm (>120°C)", "Elevated (>143°C)", "High (>150°C)", "Critical (>157°C)"};
+        info_printf("TMC2209 Temperature: %s\n", tempLabels[temperatureStatus]);
     }
 }
 
@@ -257,13 +228,16 @@ void StepperController::publishStallDetection()
             // New stall detected
             stallDetected = true;
             stallCount++;
-            static uint32_t lastStallTime = millis();
-            if (millis() - lastStallTime > 1000)
-            { // Only notify once per second
-                lastStallTime = millis();
+
+            // Rate limit the user-facing notification to at most one per second.
+            // Initialized so that the very first stall always notifies.
+            const unsigned long nowMs = millis();
+            if (lastStallNotifyTime == 0 || (nowMs - lastStallNotifyTime) > 1000)
+            {
+                lastStallNotifyTime = nowMs;
                 systemStatus.sendNotification(NotificationType::WARNING, "Stall detected! Check motor load or settings.");
             }
-            dbg_printf("STALL DETECTED! Count: %d, Time: %lu\n", stallCount, millis());
+            dbg_printf("STALL DETECTED! Count: %u, Time: %lu\n", stallCount, nowMs);
             dbg_println("Consider: reducing speed, increasing current, or checking load");
         }
         else if (!diagPinHigh && stallDetected)
@@ -348,8 +322,11 @@ StepperController::StepperController()
       isInitializing(true),             // Start in initialization mode
       stepper(nullptr), serialStream(Serial2), setpointRPM(1.0f),
       runCurrent(30), motorEnabled(false), clockwise(true),
-      startTime(0), totalMicroSteps(0), currentAngle(0.0f), isFirstStart(true), tmc2209Initialized(false), powerDeliveryReady(false),
-      stallDetected(false), stallCount(0),
+      totalMicroSteps(0), currentAngle(0.0f),
+      runtimeAccumulatedMs(0), runSegmentStartMs(0), runtimeSegmentActive(false),
+      tmc2209Initialized(false), powerDeliveryReady(false),
+      stallDetected(false), stallCount(0), lastStallNotifyTime(0),
+      lastTemperatureStatus(-1), lastOverTemperatureShutdown(false), lastRevolutionPosition(0),
       stallGuardThreshold(128), // Initialize StallGuard with default threshold (middle of 0-255 range)
       setpointAcceleration(0), // Will be set during initialization
       speedVariationEnabled(false), speedVariationStrength(0.0f), speedVariationPhase(0.0f), speedVariationStartPosition(0),
@@ -373,10 +350,16 @@ bool StepperController::begin()
     pinMode(MS1_PIN, OUTPUT);
     pinMode(MS2_PIN, OUTPUT);
     pinMode(DIAG_PIN, INPUT);
+    pinMode(SPREAD_PIN, OUTPUT);
 
     // Set serial address pins
     digitalWrite(MS1_PIN, LOW);
     digitalWrite(MS2_PIN, LOW);
+
+    // The SPREAD pin selects the chopper mode in hardware and overrides the
+    // UART setting. It must be driven LOW (StealthChop) for StallGuard to work;
+    // leaving it floating gives unpredictable stall detection.
+    digitalWrite(SPREAD_PIN, LOW);
 
     // Initialize TMC2209
     stepperDriver.setup(serialStream, 115200, TMC2209::SERIAL_ADDRESS_0, TMC_RX_PIN, TMC_TX_PIN);
@@ -566,18 +549,19 @@ void StepperController::run()
 
     dbg_println("Stepper Controller initialized successfully!");
 
-    // Initialize timing variables with cached millis() value
+    // Initialize the update schedule. Each deadline is advanced from the time
+    // the update actually fires - never from a value captured before the loop,
+    // which would leave every deadline permanently in the past and turn this
+    // into a busy loop that hammers the TMC2209 over UART.
     StepperCommandData cmd;
-    uint32_t currentTime = millis();
-    unsigned long nextMotorSpeedUpdate = currentTime + MOTOR_SPEED_UPDATE_INTERVAL; 
-    unsigned long nextFastStatusUpdate = currentTime + FAST_UPDATE_INTERVAL;
-    unsigned long nextStallUpdate = currentTime + STALL_UPDATE_INTERVAL;
-    unsigned long nextTMCUpdate = currentTime + TMC_UPDATE_INTERVAL;
+    unsigned long nextMotorSpeedUpdate = millis() + MOTOR_SPEED_UPDATE_INTERVAL;
+    unsigned long nextFastStatusUpdate = millis() + FAST_UPDATE_INTERVAL;
+    unsigned long nextStallUpdate = millis() + STALL_UPDATE_INTERVAL;
+    unsigned long nextTMCUpdate = millis() + TMC_UPDATE_INTERVAL;
 
     while (true)
     {
-
-        // Find the next event to wait for
+        // Block on the command queue until the next scheduled update is due.
         unsigned long nextEvent = min(nextMotorSpeedUpdate, min(nextFastStatusUpdate, min(nextStallUpdate, nextTMCUpdate)));
         TickType_t timeout = calculateQueueTimeout(nextEvent);
 
@@ -586,33 +570,34 @@ void StepperController::run()
             processCommand(cmd);
         }
 
-        // Motor speed updates (every 10ms for smooth variation)
+        const unsigned long now = millis();
+
+        // Motor speed updates (for smooth speed variation)
         if (isUpdateDue(nextMotorSpeedUpdate))
         {
             updateMotorSpeed();
-            nextMotorSpeedUpdate = currentTime + MOTOR_SPEED_UPDATE_INTERVAL;
+            nextMotorSpeedUpdate = now + MOTOR_SPEED_UPDATE_INTERVAL;
         }
 
         // Fast status updates (every 100ms)
         if (isUpdateDue(nextFastStatusUpdate))
         {
             publishFastStatusUpdates();
-            nextFastStatusUpdate = currentTime + FAST_UPDATE_INTERVAL;
+            nextFastStatusUpdate = now + FAST_UPDATE_INTERVAL;
         }
 
         // Stall status updates (every 1s)
         if (isUpdateDue(nextStallUpdate))
         {
             publishStallStatusUpdates();
-
-            nextStallUpdate = currentTime + STALL_UPDATE_INTERVAL;
+            nextStallUpdate = now + STALL_UPDATE_INTERVAL;
         }
 
         // TMC2209 status/temperature updates (every 2s)
         if (isUpdateDue(nextTMCUpdate))
         {
             publishTMCStatusUpdates();
-            nextTMCUpdate = currentTime + TMC_UPDATE_INTERVAL;
+            nextTMCUpdate = now + TMC_UPDATE_INTERVAL;
         }
     }
 }
@@ -656,46 +641,56 @@ void StepperController::publishTotalRevolutions()
         return;
     }
 
-    static int32_t lastPosition = 0;
-
     const int32_t currentPosition = stepper->getCurrentPosition();
-    int32_t diffMicrosteps = abs(currentPosition - lastPosition);
-    lastPosition = currentPosition;
 
-    totalMicroSteps += diffMicrosteps;
+    // Use unsigned arithmetic for the delta so a position counter wrap produces
+    // the correct small step count instead of a huge bogus jump.
+    const uint32_t diffMicrosteps =
+        (uint32_t)currentPosition - (uint32_t)lastRevolutionPosition;
+    lastRevolutionPosition = currentPosition;
+
+    // Only forward motion is expected between samples; a delta larger than half
+    // the counter range means the motor ran backwards.
+    totalMicroSteps += (diffMicrosteps > 0x80000000UL)
+                           ? (uint32_t)(0 - diffMicrosteps)
+                           : diffMicrosteps;
 
     float totalRevolutions = static_cast<float>(totalMicroSteps) / TOTAL_MICRO_STEPS_PER_REVOLUTION;
     systemStatus.publishStatusUpdate(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, totalRevolutions);
 }
 
-void StepperController::publishRuntime()
+void StepperController::startRuntimeAccounting()
 {
-    if (!stepper)
+    if (!runtimeSegmentActive)
     {
-        dbg_println("WARNING: Cannot check runtime - stepper not initialized");
-        return;
+        runtimeSegmentActive = true;
+        runSegmentStartMs = millis();
     }
-
-    // Calculate runtime only if the motor has been started at least once
-    if (isFirstStart || startTime == 0)
-    {
-        return; // No runtime to report yet
-    }
-
-    const unsigned long currentTime = millis();
-    unsigned long runtime = currentTime - startTime; // Keep in milliseconds
-
-    systemStatus.publishStatusUpdate(StatusUpdateType::RUNTIME_UPDATE, runtime);
 }
 
-void StepperController::publishPeriodicStatusUpdates()
+void StepperController::stopRuntimeAccounting()
 {
-    // Deprecated: now split into separate functions for each timing group
-    // See publishFastStatusUpdates, publishStallStatusUpdates, publishTMCStatusUpdates
-    // This function can be removed if not used elsewhere
-    return;
+    if (runtimeSegmentActive)
+    {
+        // Unsigned arithmetic gives the correct elapsed time across a millis() wrap
+        runtimeAccumulatedMs += millis() - runSegmentStartMs;
+        runtimeSegmentActive = false;
+    }
+}
 
-    // New functions for split status updates
+unsigned long StepperController::currentRuntimeMs() const
+{
+    unsigned long total = runtimeAccumulatedMs;
+    if (runtimeSegmentActive)
+    {
+        total += millis() - runSegmentStartMs; // Include the segment in progress
+    }
+    return total;
+}
+
+void StepperController::publishRuntime()
+{
+    systemStatus.publishStatusUpdate(StatusUpdateType::RUNTIME_UPDATE, currentRuntimeMs());
 }
 
 void StepperController::publishFastStatusUpdates()
@@ -791,8 +786,14 @@ void StepperController::processCommand(const StepperCommandData &cmd)
 void StepperController::resetCountersInternal()
 {
     totalMicroSteps = 0;
-    startTime = millis();
-    isFirstStart = false;
+
+    // Drop the accumulated runtime. If the motor is currently running, restart
+    // its segment from now so the in-progress run is not counted twice.
+    runtimeAccumulatedMs = 0;
+    if (runtimeSegmentActive)
+    {
+        runSegmentStartMs = millis();
+    }
 
     // Publish status updates for reset statistics
     systemStatus.publishStatusUpdate(StatusUpdateType::TOTAL_REVOLUTIONS_UPDATE, 0.0f);
@@ -867,10 +868,7 @@ void StepperController::setSpeedInternal(float rpm)
         saveSettings();
     }
 
-#ifdef DEBUG
-    const uint32_t stepsPerSecond = rpmToStepsPerSecond(rpm); // For logging only
-#endif
-    dbg_printf("Speed setpoint set to %.2f RPM (%u steps/sec)\n", rpm, stepsPerSecond);
+    dbg_printf("Speed setpoint set to %.2f RPM (%u steps/sec)\n", rpm, rpmToStepsPerSecond(rpm));
 
     // Report warning if speed was adjusted (use efficient string building)
     if (speedWasAdjusted && !isInitializing)
@@ -901,12 +899,12 @@ void StepperController::setSpeedInternal(float rpm)
                      "Speed auto-adjusted from %.2f to %.2f RPM (allowed range: %.1f-%.1f RPM)",
                      originalRequestedSpeed, rpm, MIN_SPEED_RPM, MAX_SPEED_RPM);
         }
-        systemStatus.sendNotification(NotificationType::WARNING, String(warningMsg));
+        systemStatus.sendNotification(NotificationType::WARNING, warningMsg);
     }
     // Success is indicated by the status update - no notification needed for normal success
 }
 
-void StepperController::setDirectionInternal(bool clockwise)
+void StepperController::setDirectionInternal(bool runClockwise)
 {
     if (!stepper)
     {
@@ -915,13 +913,17 @@ void StepperController::setDirectionInternal(bool clockwise)
         return;
     }
 
-    if (clockwise)
+    if (motorEnabled)
     {
-        applyRunClockwise();
+        // Reverse while running
+        applyRun(runClockwise);
     }
     else
     {
-        applyRunCounterClockwise();
+        // Only record the direction - changing direction must not start the
+        // motor, that is what the enable command is for.
+        clockwise = runClockwise;
+        systemStatus.publishStatusUpdate(StatusUpdateType::DIRECTION_CHANGED, clockwise);
     }
 
     if (!isInitializing)
@@ -939,20 +941,8 @@ void StepperController::enableInternal()
         return;
     }
 
-    if (clockwise)
-    {
-        applyRunClockwise();
-    }
-    else
-    {
-        applyRunCounterClockwise();
-    }
-
-    if (isFirstStart)
-    {
-        startTime = millis();
-        isFirstStart = false;
-    }
+    // applyRun() starts the runtime accounting
+    applyRun(clockwise);
 
     dbg_println("Motor enabled and started");
 }
@@ -971,25 +961,16 @@ void StepperController::emergencyStopInternal()
         return;
     }
 
-    // Save current acceleration
-    uint32_t prevAcceleration = setpointAcceleration;
+    // Brake as hard as the driver allows, then restore the configured ramp.
+    stepperSetAcceleration(EMERGENCY_STOP_ACCELERATION);
 
-    // Set acceleration to 16000
-    stepper->setAcceleration(16000);
-    stepper->applySpeedAcceleration();
+    applyStop();
 
-    // Call disable
-    disableInternal();
+    vTaskDelay(pdMS_TO_TICKS(100)); // Allow the deceleration ramp to run out
 
-    delay(100); // Allow time for disable to take effect
+    stepperSetAcceleration(setpointAcceleration);
 
-    // Restore previous acceleration
-    stepper->setAcceleration(prevAcceleration);
-
-
-    dbg_println("EMERGENCY STOP executed");
-
-    systemStatus.publishStatusUpdate(StatusUpdateType::ENABLED_CHANGED, false);
+    info_println("EMERGENCY STOP executed");
 }
 
 void StepperController::setRunCurrentInternal(int current)
@@ -1026,14 +1007,14 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
     }
 
     // Clamp acceleration to allowed range
-    if (accelerationStepsPerSec2 < 100)
+    if (accelerationStepsPerSec2 < MIN_ACCELERATION)
     {
-        accelerationStepsPerSec2 = 100;
+        accelerationStepsPerSec2 = MIN_ACCELERATION;
         accelWasAdjusted = true;
     }
-    else if (accelerationStepsPerSec2 > 100000)
+    else if (accelerationStepsPerSec2 > MAX_ACCELERATION)
     {
-        accelerationStepsPerSec2 = 100000;
+        accelerationStepsPerSec2 = MAX_ACCELERATION;
         accelWasAdjusted = true;
     }
 
@@ -1054,44 +1035,36 @@ void StepperController::setAccelerationInternal(uint32_t accelerationStepsPerSec
     dbg_printf("Acceleration set to %u steps/s²\n", accelerationStepsPerSec2);
 
     // Save settings only if not during initialization
+    // (applyStepperAcceleration already published ACCELERATION_CHANGED)
     if (!isInitializing)
     {
         saveSettings();
     }
 
-    // Publish status update for acceleration change
-    systemStatus.publishStatusUpdate(StatusUpdateType::ACCELERATION_CHANGED, accelerationStepsPerSec2);
-
-    // Report warning if acceleration was adjusted (use efficient string building)
+    // Report warning if acceleration was adjusted
     if (accelWasAdjusted && !isInitializing)
     {
         char warningMsg[150];
-        if (speedVariationEnabled && speedVariationStrength > 0.0f)
+        const uint32_t minRequiredAcceleration =
+            (speedVariationEnabled && speedVariationStrength > 0.0f)
+                ? calculateRequiredAccelerationForVariableSpeed()
+                : 0;
+
+        if (minRequiredAcceleration > 0 && accelerationStepsPerSec2 >= minRequiredAcceleration)
         {
-            const uint32_t minRequiredAcceleration = calculateRequiredAccelerationForVariableSpeed();
-            if (minRequiredAcceleration > 0 && accelerationStepsPerSec2 >= minRequiredAcceleration)
-            {
-                // Adjusted due to variable speed requirements
-                snprintf(warningMsg, sizeof(warningMsg),
-                         "Acceleration auto-adjusted from %u to %u steps/s² due to variable speed modulation requirements",
-                         originalRequestedAccel, accelerationStepsPerSec2);
-            }
-            else
-            {
-                // Adjusted due to range limits
-                snprintf(warningMsg, sizeof(warningMsg),
-                         "Acceleration auto-adjusted from %u to %u steps/s² (allowed range: 100-100000)",
-                         originalRequestedAccel, accelerationStepsPerSec2);
-            }
+            // Adjusted due to variable speed requirements
+            snprintf(warningMsg, sizeof(warningMsg),
+                     "Acceleration auto-adjusted from %u to %u steps/s² due to variable speed modulation requirements",
+                     originalRequestedAccel, accelerationStepsPerSec2);
         }
         else
         {
             // Adjusted due to range limits
             snprintf(warningMsg, sizeof(warningMsg),
-                     "Acceleration auto-adjusted from %u to %u steps/s² (allowed range: 100-100000)",
-                     originalRequestedAccel, accelerationStepsPerSec2);
+                     "Acceleration auto-adjusted from %u to %u steps/s² (allowed range: %d-%d)",
+                     originalRequestedAccel, accelerationStepsPerSec2, MIN_ACCELERATION, MAX_ACCELERATION);
         }
-        systemStatus.sendNotification(NotificationType::WARNING, String(warningMsg));
+        systemStatus.sendNotification(NotificationType::WARNING, warningMsg);
     }
     // Success is indicated by the status update - no notification needed for normal success
 }
@@ -1273,7 +1246,6 @@ void StepperController::requestAllStatusInternal()
     publishTMC2209Communication();
     publishTMC2209Temperature(); // Add temperature status to full status request
     publishStallDetection();
-    publishStallGuardResult();
 }
 
 void StepperController::publishStallGuardResult()
@@ -1428,12 +1400,10 @@ void StepperController::updateSpeedForVariableSpeed()
     // Only update if current speed exceeds the maximum allowed
     if (setpointRPM > maxAllowedBaseSpeed)
     {
-#ifdef DEBUG
-        float oldSpeed = setpointRPM;
-#endif
+        dbg_printf("Base speed reduced from %.2f to %.2f RPM to prevent exceeding max speed with modulation\n",
+                   setpointRPM, maxAllowedBaseSpeed);
         setpointRPM = maxAllowedBaseSpeed;
         applyStepperSetpointSpeed(maxAllowedBaseSpeed);
-        dbg_printf("Base speed reduced from %.2f to %.2f RPM to prevent exceeding max speed with modulation\n", oldSpeed, setpointRPM);
     }
 }
 

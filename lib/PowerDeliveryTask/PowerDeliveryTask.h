@@ -13,18 +13,11 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "Task.h"
+#include "BoardPins.h"
 #include "SystemStatus.h"
 #include <Preferences.h>
 #include "SystemCommand.h"
 #include "dbg_print.h"
-
-// Hardware pin definitions (from PD-Stepper example)
-#define PG_PIN              15  // Power good signal (don't enable stepper until this is good)
-#define CFG1_PIN            38  // PD configuration pin 1
-#define CFG2_PIN            48  // PD configuration pin 2  
-#define CFG3_PIN            47  // PD configuration pin 3
-#define VBUS_PIN            4   // Voltage measurement pin
-#define NTC_PIN             7   // Temperature sensor pin
 
 // Voltage measurement configuration
 #define VREF                3.3f
@@ -37,6 +30,7 @@
 #define PD_VOLTAGE_12V      12
 #define PD_VOLTAGE_15V      15
 #define PD_VOLTAGE_20V      20
+#define PD_VOLTAGE_COUNT    5   // Number of entries in autoNegotiationVoltages
 
 // Timing configuration
 #define PD_STATUS_UPDATE_INTERVAL       500     // Update every 500ms
@@ -65,17 +59,18 @@ private:
     unsigned long negotiationStartTime;
     
     // Auto-negotiation state variables
-    bool isAutoNegotiating;
     int autoNegotiationVoltageIndex;
-    static const int autoNegotiationVoltages[5]; // Available voltages in descending order
+    static const int autoNegotiationVoltages[PD_VOLTAGE_COUNT]; // Available voltages in descending order
     int autoNegotiationHighestVoltage;
-    
+
     // Timing variables
     unsigned long lastStatusUpdate;
-    unsigned long lastVoltageUpdate;
-    
+
     // Initialization flag
     bool isInitialized;
+
+    // True only for the five USB-PD levels the CH224K can request
+    static bool isSupportedVoltage(int voltage);
 
     // Singleton implementation
     PowerDeliveryTask();
@@ -118,18 +113,13 @@ private:
 protected:
     void run() override;
 public:
-    // Public interface
-    bool startNegotiation(int voltage);
+    // Public interface (read-only accessors, safe to call from other tasks).
+    // To change the voltage, post a PowerDeliveryCommand via SystemCommand.
     bool isNegotiationComplete() const;
     bool isPowerGood() const;
     float getCurrentVoltage() const;
     int getNegotiatedVoltage() const;
     PDNegotiationState getNegotiationState() const;
-    
-    // Command interface (thread-safe)
-    bool setTargetVoltage(int voltage);
-    bool autoNegotiateHighestVoltage();
-    bool requestStatus();
 
     static PowerDeliveryTask& getInstance() {
         static PowerDeliveryTask instance;

@@ -17,6 +17,11 @@ class CommandManager {
         // Connection state
         this.connected = false;
         this.intentionalDisconnect = false;
+
+        // Automatic reconnection with exponential backoff
+        this.reconnectTimer = null;
+        this.reconnectAttempt = 0;
+        this.maxReconnectDelay = 30000;
         
         // Timeout and retry handling
         this.pendingCommands = new Map(); // Track pending commands for timeout/retry
@@ -28,10 +33,15 @@ class CommandManager {
         this.onStatusUpdate = null;
         this.onNotification = null;
         
-        // Bind the disconnect handler
+        // Bind the event handlers once so they can be added and removed by
+        // identity - re-creating them would make removeEventListener a no-op
+        // and stack up duplicate handlers on every reconnect.
         this.onDisconnectedHandler = () => {
             console.log('GATT server disconnected event received');
             this.onDisconnected();
+        };
+        this.onCharacteristicValueChangedHandler = (event) => {
+            this.handleMessage(event);
         };
         
         // Check Web Bluetooth support
@@ -81,23 +91,13 @@ class CommandManager {
             this.service = await this.server.getPrimaryService(this.serviceUUID);
             console.log('Service found');
             
-            // Get command characteristic
+            // Get command characteristic and subscribe
             console.log('Getting command characteristic...');
-            this.commandCharacteristic = await this.service.getCharacteristic(this.commandCharacteristicUUID);
-            console.log('✓ Command characteristic found');
-            
-            // Subscribe to notifications
-            console.log('Setting up command notifications...');
-            await this.commandCharacteristic.startNotifications();
-            this.commandCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
-                this.handleMessage(event);
-            });
-            console.log('Command notifications enabled');
-            
-            // Handle disconnection
-            this.device.addEventListener('gattserverdisconnected', this.onDisconnectedHandler);
-            
+            await this.subscribeToCharacteristic();
+            console.log('✓ Command characteristic found, notifications enabled');
+
             this.connected = true;
+            this.reconnectAttempt = 0;
             this.updateConnectionStatus('Connected');
             
             // Request all current status to synchronize
@@ -125,10 +125,34 @@ class CommandManager {
         }
     }
 
+    // Resolve the command characteristic and (re)attach listeners exactly once.
+    // Listeners are removed before being added so repeated connects cannot
+    // accumulate duplicate handlers, which would process every message twice.
+    async subscribeToCharacteristic() {
+        this.commandCharacteristic = await this.service.getCharacteristic(this.commandCharacteristicUUID);
+
+        this.commandCharacteristic.removeEventListener(
+            'characteristicvaluechanged', this.onCharacteristicValueChangedHandler);
+        this.commandCharacteristic.addEventListener(
+            'characteristicvaluechanged', this.onCharacteristicValueChangedHandler);
+
+        await this.commandCharacteristic.startNotifications();
+
+        this.device.removeEventListener('gattserverdisconnected', this.onDisconnectedHandler);
+        this.device.addEventListener('gattserverdisconnected', this.onDisconnectedHandler);
+    }
+
     async disconnect() {
         console.log('User initiated disconnect');
         this.intentionalDisconnect = true;
-        
+
+        // Cancel any pending automatic reconnect
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        this.reconnectAttempt = 0;
+
         // Remove the disconnect event listener temporarily
         if (this.device) {
             this.device.removeEventListener('gattserverdisconnected', this.onDisconnectedHandler);
@@ -160,17 +184,36 @@ class CommandManager {
             if (this.device) {
                 this.device.addEventListener('gattserverdisconnected', this.onDisconnectedHandler);
             }
-            
-            setTimeout(() => {
-                if (!this.connected && this.device) {
-                    console.log('Attempting automatic reconnection...');
-                    this.handleReconnect(true);
-                }
-            }, 3000);
+            this.scheduleReconnect();
         } else {
             console.log('Intentional disconnect - no automatic reconnection');
             this.intentionalDisconnect = false;
+            this.reconnectAttempt = 0;
         }
+    }
+
+    // Keep retrying in the background with a backoff, rather than giving up
+    // after a single attempt. Cancelled by a successful connect or an
+    // intentional disconnect.
+    scheduleReconnect() {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+        }
+
+        const delay = Math.min(3000 * Math.pow(2, this.reconnectAttempt), this.maxReconnectDelay);
+        this.reconnectAttempt += 1;
+
+        console.log(`Scheduling automatic reconnection in ${delay}ms (attempt ${this.reconnectAttempt})`);
+        this.reconnectTimer = setTimeout(async () => {
+            this.reconnectTimer = null;
+            if (this.connected || this.intentionalDisconnect || !this.device) {
+                return;
+            }
+            await this.handleReconnect(true);
+            if (!this.connected && !this.intentionalDisconnect) {
+                this.scheduleReconnect();
+            }
+        }, delay);
     }
 
     async reconnect() {
@@ -184,27 +227,16 @@ class CommandManager {
         // Reconnect to GATT server
         this.server = await this.device.gatt.connect();
         console.log('Reconnected to GATT server');
-        
+
         // Get service
         this.service = await this.server.getPrimaryService(this.serviceUUID);
         console.log('Service found');
-        
-        // Get command characteristic
-        this.commandCharacteristic = await this.service.getCharacteristic(this.commandCharacteristicUUID);
-        console.log('Command characteristic found');
-        
-        // Subscribe to notifications
-        await this.commandCharacteristic.startNotifications();
-        this.commandCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
-            this.handleMessage(event);
-        });
+
+        await this.subscribeToCharacteristic();
         console.log('Notifications re-enabled');
-        
-        // Re-add disconnect event listener
-        this.device.removeEventListener('gattserverdisconnected', this.onDisconnectedHandler);
-        this.device.addEventListener('gattserverdisconnected', this.onDisconnectedHandler);
-        
+
         this.connected = true;
+        this.reconnectAttempt = 0;
         this.updateConnectionStatus('Connected');
 
         await this.sendCommand('ras', null);
@@ -419,19 +451,37 @@ class CommandManager {
         }
     }
 
-    showError(message) {
-        console.error(message);
-        
-        // Create a toast notification
+    // Inject the toast keyframes once. Called by every toast, so a warning
+    // shown before any error still animates.
+    ensureToastStyles() {
+        if (document.getElementById('toast-styles')) return;
+
+        const style = document.createElement('style');
+        style.id = 'toast-styles';
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    showToast(message, { className, background, durationMs }) {
+        this.ensureToastStyles();
+
         const toast = document.createElement('div');
-        toast.className = 'error-toast';
+        toast.className = className;
         toast.textContent = message;
-        
         toast.style.cssText = `
             position: fixed;
             top: 20px;
             right: 20px;
-            background: #ef4444;
+            background: ${background};
             color: white;
             padding: 16px 20px;
             border-radius: 8px;
@@ -441,27 +491,9 @@ class CommandManager {
             font-size: 0.9rem;
             animation: slideIn 0.3s ease;
         `;
-        
-        // Add animation keyframes if not already present
-        if (!document.getElementById('toast-styles')) {
-            const style = document.createElement('style');
-            style.id = 'toast-styles';
-            style.textContent = `
-                @keyframes slideIn {
-                    from { transform: translateX(100%); opacity: 0; }
-                    to { transform: translateX(0); opacity: 1; }
-                }
-                @keyframes slideOut {
-                    from { transform: translateX(0); opacity: 1; }
-                    to { transform: translateX(100%); opacity: 0; }
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        
+
         document.body.appendChild(toast);
-        
-        // Remove toast after 5 seconds
+
         setTimeout(() => {
             toast.style.animation = 'slideOut 0.3s ease';
             setTimeout(() => {
@@ -469,41 +501,25 @@ class CommandManager {
                     toast.parentNode.removeChild(toast);
                 }
             }, 300);
-        }, 5000);
+        }, durationMs);
+    }
+
+    showError(message) {
+        console.error(message);
+        this.showToast(message, {
+            className: 'error-toast',
+            background: '#ef4444',
+            durationMs: 5000
+        });
     }
 
     showWarning(message) {
         console.warn(message);
-        
-        const toast = document.createElement('div');
-        toast.className = 'warning-toast';
-        toast.textContent = message;
-        
-        toast.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #f59e0b;
-            color: white;
-            padding: 16px 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 1000;
-            max-width: 350px;
-            font-size: 0.9rem;
-            animation: slideIn 0.3s ease;
-        `;
-        
-        document.body.appendChild(toast);
-        
-        setTimeout(() => {
-            toast.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
-                }
-            }, 300);
-        }, 4000);
+        this.showToast(message, {
+            className: 'warning-toast',
+            background: '#f59e0b',
+            durationMs: 4000
+        });
     }
 
     // Getters

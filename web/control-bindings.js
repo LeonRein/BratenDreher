@@ -322,20 +322,6 @@ class TmcStatusControlBinding extends ControlBinding {
 
 
 
-// Timestamp control binding
-class TimestampControlBinding extends ControlBinding {
-    constructor(lastUpdateDisplay, config = {}) {
-        const defaults = {
-            customStatusHandler: () => {
-                lastUpdateDisplay.setValue(new Date().toLocaleTimeString());
-            }
-        };
-        super({ ...defaults, ...config });
-
-        this.addControl('timestamp', lastUpdateDisplay);
-    }
-}
-
 // Speed control binding with preset buttons and fill indicator
 class SpeedControlBinding extends ControlBinding {
     /**
@@ -552,26 +538,30 @@ class VariableSpeedGraphControlBinding extends ControlBinding {
         this.lastCa = null;
         this.lastCs = null;
         this.lastSp = null;
+        this.lastSve = null;
 
-        // Register graphControl for relevant status keys
+        // 'sve' is registered first on purpose: keys of a batched status
+        // message are handled in registration order, so the graph is cleared
+        // before any sample from the new angle origin is added.
+        this.addControl('sve', graphControl);
         this.addControl('ca', graphControl);
         this.addControl('cs', graphControl);
         this.addControl('sp', graphControl);
     }
 
-    statusValueTransform(value, key) {
-        if (key === 'svs') return Math.round(value * 100);
-        if (key === 'svp') {
-            let phaseDegrees = Math.round((value * 180) / Math.PI);
-            if (phaseDegrees > 180) {
-                phaseDegrees -= 360;
-            }
-            return phaseDegrees;
-        }
-        return value;
-    }
-
     customStatusHandler(transformedValue, key) {
+        if (key === 'sve') {
+            // Enabling speed variation re-bases the angle origin in the
+            // firmware, so the existing trace no longer lines up with incoming
+            // samples. Drop it, and the buffered angle along with it.
+            if (this.lastSve !== null && transformedValue !== this.lastSve) {
+                this.graphControl.reset();
+                this.lastCa = null;
+            }
+            this.lastSve = transformedValue;
+            return;
+        }
+
         // Buffer latest values for each key
         if (key === 'ca') this.lastCa = transformedValue;
         if (key === 'cs') this.lastCs = transformedValue;
@@ -967,23 +957,19 @@ class CurrentControlBinding extends ControlBinding {
  * Strength control binding
  */
 class StrengthControlBinding extends ControlBinding {
-    constructor(strengthSlider, strengthValueDisplay, variableSpeedActive = false) {
+    constructor(strengthSlider, strengthValueDisplay) {
         super({ debounceTime: 150 });
-        if (!variableSpeedActive) {
-            if (strengthSlider) this.addControl('svs', strengthSlider);
-            if (strengthValueDisplay) this.addControl('svs', strengthValueDisplay);
-        }
 
+        if (strengthSlider) this.addControl('svs', strengthSlider);
         if (strengthValueDisplay) {
+            this.addControl('svs', strengthValueDisplay);
             strengthValueDisplay.displayTransform = (value) => `${Number(value).toFixed(1)} %`;
         }
 
-        if (!variableSpeedActive) {
-            strengthSlider.onChange((value) => {
-                strengthValueDisplay.setValue(value);
-                this.handleValueChange(value, 'svs');
-            });
-        }
+        strengthSlider.onChange((value) => {
+            strengthValueDisplay.setValue(value);
+            this.handleValueChange(value, 'svs');
+        });
     }
     inputValueTransform(value) { return parseInt(value) / 100.0; }
     statusValueTransform(value) { return Math.round(value * 100); }
@@ -994,23 +980,19 @@ class StrengthControlBinding extends ControlBinding {
  * Phase control binding
  */
 class PhaseControlBinding extends ControlBinding {
-    constructor(phaseSlider, phaseValueDisplay, variableSpeedActive = false) {
+    constructor(phaseSlider, phaseValueDisplay) {
         super({ debounceTime: 150 });
-        if (!variableSpeedActive) {
-            if (phaseSlider) this.addControl('svp', phaseSlider);
-            if (phaseValueDisplay) this.addControl('svp', phaseValueDisplay);
-        }
 
+        if (phaseSlider) this.addControl('svp', phaseSlider);
         if (phaseValueDisplay) {
+            this.addControl('svp', phaseValueDisplay);
             phaseValueDisplay.displayTransform = (value) => `${Number(-value).toFixed(1)}°`;
         }
 
-        if (!variableSpeedActive) {
-            phaseSlider.onChange((value) => {
-                phaseValueDisplay.setValue(value);
-                this.handleValueChange(value, 'svp');
-            });
-        }
+        phaseSlider.onChange((value) => {
+            phaseValueDisplay.setValue(value);
+            this.handleValueChange(value, 'svp');
+        });
     }
     inputValueTransform(value) {
         let phase = -parseInt(value);

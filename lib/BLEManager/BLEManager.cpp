@@ -166,8 +166,9 @@ void BLEManager::handleCommand(const std::string& command) {
         dbg_printf("Speed command queued: %.2f RPM\n", speed);
     }
     else if (strcmp(type, "es") == 0) {
-        systemCommand.sendCommand(StepperCommand::EMERGENCY_STOP);
-        dbg_printf("Emergency stop command queued\n");
+        // Use the priority path so the stop is not queued behind pending commands
+        systemCommand.emergencyStop();
+        info_println("Emergency stop command queued");
     }
     else if (strcmp(type, "sd") == 0) {
         bool clockwise = doc["value"];
@@ -321,7 +322,7 @@ void BLEManager::processNotifications() {
     NotificationData notification;
     // Process all available notifications (warnings and errors only)
     while (systemStatus.getNotification(notification)) {
-        String level;
+        const char* level;
         switch (notification.type) {
             case NotificationType::WARNING:
                 level = "warning";
@@ -333,44 +334,63 @@ void BLEManager::processNotifications() {
                 level = "unknown";
                 break;
         }
-        
-        dbg_printf("Notification: %s", level.c_str());
-        if (strlen(notification.message) > 0) {
-            dbg_printf(" - %s", notification.message);
-        }
-        dbg_println();
-        
+
+        dbg_printf("Notification: %s - %s\n", level, notification.message);
+
         // Send notification to client
-        sendNotification(level, String(notification.message));
+        sendNotification(level, notification.message);
     }
+}
+
+size_t BLEManager::maxNotifyPayload() const {
+    // BLEDevice::getMTU() reports the negotiated ATT MTU (23 until the peer
+    // upgrades it). A notification can carry MTU - 3 bytes.
+    uint16_t mtu = BLEDevice::getMTU();
+    if (mtu < ATT_NOTIFY_OVERHEAD + 1) {
+        mtu = 23; // Fall back to the BLE minimum
+    }
+    size_t payload = mtu - ATT_NOTIFY_OVERHEAD;
+    if (payload > BLE_MTU) {
+        payload = BLE_MTU;
+    }
+    return payload;
+}
+
+size_t BLEManager::measureMsgPackSize(const JsonDocument& doc) {
+    return measureMsgPack(doc);
 }
 
 void BLEManager::processStatusUpdates() {
     if (!commandCharacteristic || !deviceConnected) return;
 
     StatusUpdateData statusUpdate;
-
-    // Use constant MTU for buffer size
-    constexpr uint16_t bufferSize = BLEManager::BLE_MTU;
-
-    if (systemStatus.getStatusUpdate(statusUpdate)) {
-        JsonDocument statusDoc;
-        statusDoc["type"] = "status_update";
-        addStatusToJson(statusDoc, statusUpdate);
-
-        uint8_t tempBuffer[bufferSize];
-        size_t tempSize = 0;
-        while (systemStatus.getStatusUpdate(statusUpdate)) {
-            addStatusToJson(statusDoc, statusUpdate);
-            tempSize = serializeMsgPack(statusDoc, tempBuffer, bufferSize);
-            if (tempSize >= bufferSize - 32) {
-                dbg_printf("Warning: Status update approaching size limit (%d bytes), sending now\n", tempSize);
-                break;
-            }
-        }
-
-        sendStatusUpdate(tempBuffer, tempSize);
+    if (!systemStatus.getStatusUpdate(statusUpdate)) {
+        return; // Nothing pending
     }
+
+    // Never write more than the peer actually negotiated, otherwise the
+    // notification is silently truncated on the air.
+    const size_t bufferSize = maxNotifyPayload();
+
+    JsonDocument statusDoc;
+    statusDoc["type"] = "status_update";
+    addStatusToJson(statusDoc, statusUpdate);
+
+    // Coalesce whatever else is already queued into the same notification,
+    // stopping before the payload would no longer fit.
+    while (measureMsgPackSize(statusDoc) < bufferSize - STATUS_BATCH_HEADROOM &&
+           systemStatus.getStatusUpdate(statusUpdate)) {
+        addStatusToJson(statusDoc, statusUpdate);
+    }
+
+    uint8_t buffer[BLEManager::BLE_MTU];
+    const size_t len = serializeMsgPack(statusDoc, buffer, bufferSize);
+    if (len == 0) {
+        dbg_println("ERROR: Failed to serialize status update");
+        return;
+    }
+
+    sendStatusUpdate(buffer, len);
 }
 
 void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& statusUpdate) {
@@ -445,59 +465,33 @@ void BLEManager::addStatusToJson(JsonDocument& doc, const StatusUpdateData& stat
 }
 
 void BLEManager::sendStatusUpdate(uint8_t* buffer, size_t len) {
-    try {
-        commandCharacteristic->setValue(buffer, len);
-        commandCharacteristic->notify();
-        vTaskDelay(pdMS_TO_TICKS(10));
-    } catch (...) {
-        dbg_println("Failed to send status update notification");
-    }
+    if (!commandCharacteristic || !deviceConnected || len == 0) return;
+
+    commandCharacteristic->setValue(buffer, len);
+    commandCharacteristic->notify();
+    // Give the controller time to drain the notification queue.
+    vTaskDelay(pdMS_TO_TICKS(10));
 }
 
-void BLEManager::sendNotification(const String& level, const String& message) {
+void BLEManager::sendNotification(const char* level, const char* message) {
     if (!commandCharacteristic || !deviceConnected) return;
-    
-    // Use fixed-size JSON document to prevent heap corruption (compatible with ArduinoJson v6)
+
     JsonDocument doc;
     doc["type"] = "notification";
     doc["level"] = level;
-    if (message.length() > 0 && message.length() < 128) { // Prevent buffer overflow
+    if (message != nullptr && message[0] != '\0') {
         doc["message"] = message;
     }
-    
-    // MsgPack serialization for notification using ArduinoJson
-        uint8_t buffer[BLEManager::BLE_MTU];
-        size_t len = serializeMsgPack(doc, buffer, BLEManager::BLE_MTU);
 
-    // Truncate if too long
-    if (len > 512) {
-        dbg_printf("WARNING: Notification too long (%d bytes), truncating\n", len);
-        len = 512;
-    }
-
-    try {
-        commandCharacteristic->setValue(buffer, len);
-        commandCharacteristic->notify();
-        vTaskDelay(pdMS_TO_TICKS(5));
-    } catch (...) {
-        dbg_println("ERROR: Failed to send notification");
-    }
-}
-
-void BLEManager::sendAllCurrentStatus() {
-    if (!deviceConnected) {
+    uint8_t buffer[BLEManager::BLE_MTU];
+    const size_t len = serializeMsgPack(doc, buffer, maxNotifyPayload());
+    if (len == 0) {
+        // Truncating a MsgPack payload produces an undecodable message, so
+        // drop it rather than sending garbage.
+        dbg_println("WARNING: Notification does not fit in one packet, dropped");
         return;
     }
-    
-    dbg_println("Requesting all current status from StepperController and PowerDeliveryTask...");
-    
-    // Use the thread-safe SystemCommand to request all status information
-    StepperCommandData stepperCmd(StepperCommand::REQUEST_ALL_STATUS);
-    systemCommand.sendCommand(stepperCmd);
-    
-    // Also request power delivery status
-    PowerDeliveryCommandData pdCmd(PowerDeliveryCommand::REQUEST_ALL_STATUS);
-    systemCommand.sendPowerDeliveryCommand(pdCmd);
-    
-    dbg_println("Status requests sent");
+
+    sendStatusUpdate(buffer, len);
 }
+

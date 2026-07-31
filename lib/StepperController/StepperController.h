@@ -7,6 +7,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "Task.h"
+#include "BoardPins.h"
 #include "SystemStatus.h"
 #include "SystemCommand.h"
 #include "PowerDeliveryTask.h"
@@ -14,16 +15,6 @@
 
 // Forward declarations
 class PowerDeliveryTask;
-
-// Hardware pin definitions (from PD-Stepper example)
-#define TMC_EN_PIN 21
-#define STEP_PIN 5
-#define DIR_PIN 6
-#define MS1_PIN 1
-#define MS2_PIN 2
-#define TMC_TX_PIN 17
-#define TMC_RX_PIN 18
-#define DIAG_PIN 16
 
 // Motor specifications
 #define STEPS_PER_REVOLUTION 200                                                           // NEMA 17
@@ -34,6 +25,11 @@ class PowerDeliveryTask;
 // Speed settings (in RPM)
 #define MIN_SPEED_RPM 0.1f  // Minimum speed
 #define MAX_SPEED_RPM 30.0f // Maximum speed (0.5 RPS after gear reduction)
+
+// Acceleration limits (steps/s^2)
+#define MIN_ACCELERATION 100
+#define MAX_ACCELERATION 100000
+#define EMERGENCY_STOP_ACCELERATION 16000 // Hard braking ramp for emergency stop
 
 // Timing configuration
 #define FAST_UPDATE_INTERVAL 100
@@ -61,16 +57,33 @@ private:
     // State tracking
     bool motorEnabled;
     bool clockwise;
-    unsigned long startTime;
     unsigned long totalMicroSteps;
     float currentAngle;
-    bool isFirstStart;
+
+    // Runtime accounting. Only time during which the motor is actually turning
+    // counts, so the reported runtime (and the average speed derived from it)
+    // is not inflated by idle periods between runs.
+    unsigned long runtimeAccumulatedMs; // Completed running segments
+    unsigned long runSegmentStartMs;    // Start of the segment in progress
+    bool runtimeSegmentActive;          // Whether a segment is in progress.
+                                        // An explicit flag, not a 0 sentinel on
+                                        // runSegmentStartMs - millis() really is
+                                        // 0 at boot and again at every wrap.
     bool tmc2209Initialized; // Track TMC2209 driver initialization status
     bool powerDeliveryReady; // Track if power delivery negotiation is complete
 
     // Stall detection
     bool stallDetected;
     uint16_t stallCount;
+    unsigned long lastStallNotifyTime; // 0 = never notified; rate limits stall notifications
+
+    // Tracks the last reported temperature state so notifications are only sent
+    // on change rather than on every poll.
+    int lastTemperatureStatus;
+    bool lastOverTemperatureShutdown;
+
+    // Last stepper position sampled by publishTotalRevolutions()
+    int32_t lastRevolutionPosition;
 
     // StallGuard settings
     uint8_t stallGuardThreshold; // StallGuard threshold (0-255, 0=least sensitive, 255=most sensitive)
@@ -96,17 +109,20 @@ private:
     StepperController &operator=(const StepperController &) = delete;
 
     // Helper methods
-    bool initPreferences();
     void saveSettings();
     void loadSettings();
     void configureDriver();
-    void configureStallDetection(bool enableStealthChop = true);
     bool checkPowerDeliveryReady();                       // Check if power delivery is ready for stepper initialization
     inline uint32_t rpmToStepsPerSecond(float rpm) const; // Inline hint for frequent calls
 
+    // Runtime accounting helpers
+    void startRuntimeAccounting();          // Begin a running segment (no-op if already running)
+    void stopRuntimeAccounting();           // Close the current segment (no-op if already stopped)
+    unsigned long currentRuntimeMs() const; // Total running time, including the open segment
+
     // Internal methods (called from command processing)
     void setSpeedInternal(float rpm);
-    void setDirectionInternal(bool clockwise);
+    void setDirectionInternal(bool runClockwise);
     void enableInternal();
     void disableInternal();
     void emergencyStopInternal();
@@ -133,8 +149,7 @@ private:
     // Centralized stepper hardware control methods (always publish status when hardware is changed)
     void applyStepperSetpointSpeed(float rpm);                        // Set target speed in RPM and publish setpoint update
     void applyStepperAcceleration(uint32_t accelerationStepsPerSec2); // Set target acceleration
-    void applyRunClockwise();                                         // Set direction to clockwise
-    void applyRunCounterClockwise();                                  // Set direction to counter-clockwise
+    void applyRun(bool runClockwise);                                 // Enable the driver and run in the given direction
     void applyStop();
     void applyCurrent(uint8_t current); // Set run current in mA
 
@@ -168,9 +183,6 @@ protected:
     // Helper methods for run() timing
     TickType_t calculateQueueTimeout(unsigned long nextUpdate);
     bool isUpdateDue(unsigned long nextUpdate);
-
-    // Periodic status updates
-    void publishPeriodicStatusUpdates();
 
 public:
     // Initialization

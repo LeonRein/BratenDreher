@@ -41,25 +41,13 @@ bool SystemStatus::begin() {
 }
 
 // Notification management methods
-void SystemStatus::sendNotification(NotificationType type, const String& message) {
+void SystemStatus::sendNotification(NotificationType type, const char* message) {
     if (notificationQueue == nullptr) return;
-    
+
     NotificationData notificationData;
     notificationData.type = type;
-    
-    // Use efficient string copying without temporary String objects
-    const char* msgPtr = message.c_str();
-    const size_t msgLen = message.length();
-    const size_t maxLen = sizeof(notificationData.message) - 1;
-    
-    if (msgLen <= maxLen) {
-        memcpy(notificationData.message, msgPtr, msgLen);
-        notificationData.message[msgLen] = '\0';
-    } else {
-        memcpy(notificationData.message, msgPtr, maxLen);
-        notificationData.message[maxLen] = '\0';
-    }
-    
+    notificationData.setMessage(message);
+
     // Non-blocking send to avoid task delays
     xQueueSend(notificationQueue, &notificationData, 0);
 }

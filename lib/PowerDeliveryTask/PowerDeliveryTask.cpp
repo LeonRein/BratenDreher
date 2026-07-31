@@ -1,7 +1,16 @@
 #include "PowerDeliveryTask.h"
 
 // Static voltage array for auto-negotiation (highest to lowest)
-const int PowerDeliveryTask::autoNegotiationVoltages[5] = {PD_VOLTAGE_20V, PD_VOLTAGE_15V, PD_VOLTAGE_12V, PD_VOLTAGE_9V, PD_VOLTAGE_5V};
+const int PowerDeliveryTask::autoNegotiationVoltages[PD_VOLTAGE_COUNT] = {PD_VOLTAGE_20V, PD_VOLTAGE_15V, PD_VOLTAGE_12V, PD_VOLTAGE_9V, PD_VOLTAGE_5V};
+
+bool PowerDeliveryTask::isSupportedVoltage(int voltage) {
+    for (int i = 0; i < PD_VOLTAGE_COUNT; i++) {
+        if (autoNegotiationVoltages[i] == voltage) {
+            return true;
+        }
+    }
+    return false;
+}
 
 PowerDeliveryTask::PowerDeliveryTask() 
     : Task("PowerDeliveryTask", 4096, 2, 1), // Stack: 4KB, Priority: 2, Core: 1
@@ -12,11 +21,9 @@ PowerDeliveryTask::PowerDeliveryTask()
       powerGoodDebounceTime(0),
       negotiationState(PDNegotiationState::IDLE),
       negotiationStartTime(0),
-      isAutoNegotiating(false),
       autoNegotiationVoltageIndex(0),
       autoNegotiationHighestVoltage(0),
       lastStatusUpdate(0),
-      lastVoltageUpdate(0),
       isInitialized(false) {
 }
 
@@ -230,7 +237,6 @@ void PowerDeliveryTask::handleSingleVoltageNegotiation(unsigned long currentTime
         negotiationState = PDNegotiationState::SUCCESS;
         negotiatedVoltage = targetVoltage;
         saveSettings();
-        saveSettings();
         dbg_printf("PowerDeliveryTask: Single voltage negotiation successful at %dV\n", negotiatedVoltage);
         
         // Publish immediate status updates
@@ -262,7 +268,6 @@ void PowerDeliveryTask::handleAutoNegotiation(unsigned long currentTime) {
         negotiatedVoltage = autoNegotiationHighestVoltage;
         targetVoltage = autoNegotiationHighestVoltage; // Update target to match
         saveSettings();
-        isAutoNegotiating = false;
         
         dbg_printf("PowerDeliveryTask: Auto-negotiation successful! Highest voltage: %dV\n", autoNegotiationHighestVoltage);
         
@@ -277,11 +282,10 @@ void PowerDeliveryTask::handleAutoNegotiation(unsigned long currentTime) {
         // This voltage failed, try next lower voltage
         autoNegotiationVoltageIndex++;
         
-        if (autoNegotiationVoltageIndex >= 5) {
+        if (autoNegotiationVoltageIndex >= PD_VOLTAGE_COUNT) {
             // All voltages failed
             negotiationState = PDNegotiationState::FAILED;
             negotiatedVoltage = 0;
-            isAutoNegotiating = false;
             dbg_println("PowerDeliveryTask: Auto-negotiation failed - no voltages work");
             
             // Publish immediate status updates
@@ -292,8 +296,8 @@ void PowerDeliveryTask::handleAutoNegotiation(unsigned long currentTime) {
         
         // Try next voltage
         int nextVoltage = autoNegotiationVoltages[autoNegotiationVoltageIndex];
-        dbg_printf("PowerDeliveryTask: Auto-negotiation - trying next voltage: %dV (attempt %d/5)\n", 
-                     nextVoltage, autoNegotiationVoltageIndex + 1);
+        dbg_printf("PowerDeliveryTask: Auto-negotiation - trying next voltage: %dV (attempt %d/%d)\n", 
+                     nextVoltage, autoNegotiationVoltageIndex + 1, PD_VOLTAGE_COUNT);
         
         // Configure hardware for next voltage
         pdConfigureVoltage(nextVoltage);
@@ -334,18 +338,22 @@ void PowerDeliveryTask::processCommands() {
 }
 
 void PowerDeliveryTask::setTargetVoltageInternal(int voltage) {
-    // Validate voltage range
-    if (voltage < PD_VOLTAGE_5V || voltage > PD_VOLTAGE_20V) {
+    // Only the five USB-PD levels the CH224K can request are valid. A plain
+    // range check would let e.g. 7V through, which would silently fall back to
+    // the 12V pin configuration while reporting 7V as negotiated.
+    if (!isSupportedVoltage(voltage)) {
         dbg_printf("PowerDeliveryTask: Invalid target voltage %dV (allowed: 5V, 9V, 12V, 15V, 20V)\n", voltage);
-        
+
         // Publish current status to indicate no change
         publishNegotiationStatus();
         publishVoltageStatus();
-        SystemStatus::getInstance().sendNotification(NotificationType::ERROR, 
-            "Invalid target voltage requested: " + String(voltage) + "V");
+
+        char msg[80];
+        snprintf(msg, sizeof(msg), "Invalid target voltage requested: %dV (allowed: 5, 9, 12, 15, 20)", voltage);
+        SystemStatus::getInstance().sendNotification(NotificationType::ERROR, msg);
         return;
     }
-    
+
     // Apply voltage negotiation
     applyNegotiationVoltage(voltage);
     
@@ -361,7 +369,6 @@ void PowerDeliveryTask::autoNegotiateHighestVoltageInternal() {
     dbg_println("PowerDeliveryTask: Starting auto-negotiation for highest available voltage");
     
     // Reset auto-negotiation state
-    isAutoNegotiating = true;
     autoNegotiationVoltageIndex = 0; // Start with highest voltage (20V)
     autoNegotiationHighestVoltage = 0;
     negotiationState = PDNegotiationState::AUTO_NEGOTIATING;
@@ -372,7 +379,7 @@ void PowerDeliveryTask::autoNegotiateHighestVoltageInternal() {
     int startVoltage = autoNegotiationVoltages[0]; // 20V
     targetVoltage = startVoltage; // Set target for status reporting
     
-    dbg_printf("PowerDeliveryTask: Auto-negotiation starting with %dV (attempt 1/5)\n", startVoltage);
+    dbg_printf("PowerDeliveryTask: Auto-negotiation starting with %dV (attempt 1/%d)\n", startVoltage, PD_VOLTAGE_COUNT);
     
     // Configure hardware for first voltage
     pdConfigureVoltage(startVoltage);
@@ -403,9 +410,10 @@ void PowerDeliveryTask::initializeHardware() {
     pinMode(CFG2_PIN, OUTPUT);
     pinMode(CFG3_PIN, OUTPUT);
     
-    // Initialize analog pins
+    // Initialize analog pins.
+    // The NTC shares GPIO 7 with the TMC2209 SPREAD pin, which StepperController
+    // drives low for StealthChop. It is therefore not configured or read here.
     pinMode(VBUS_PIN, INPUT);
-    pinMode(NTC_PIN, INPUT);
     
     dbg_println("PowerDeliveryTask: Hardware initialization complete");
 }
@@ -414,17 +422,10 @@ void PowerDeliveryTask::initializeHardware() {
 // PUBLIC INTERFACE (Thread-safe accessors)
 // ============================================================================
 
-bool PowerDeliveryTask::startNegotiation(int voltage) {
-    // This method is kept for compatibility but delegates to command system
-    SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
-    return true;
-}
-
 bool PowerDeliveryTask::isNegotiationComplete() const {
-    // Check if negotiation is complete (either success or failure)
-    // Using integer comparison to avoid enum issues
-    int state = static_cast<int>(negotiationState);
-    return (state == 2 || state == 3); // SUCCESS=2, FAILED=3
+    // Complete means settled, either way
+    return negotiationState == PDNegotiationState::SUCCESS ||
+           negotiationState == PDNegotiationState::FAILED;
 }
 
 bool PowerDeliveryTask::isPowerGood() const {
@@ -444,21 +445,6 @@ int PowerDeliveryTask::getNegotiatedVoltage() const {
 
 PDNegotiationState PowerDeliveryTask::getNegotiationState() const {
     return negotiationState;
-}
-
-bool PowerDeliveryTask::setTargetVoltage(int voltage) {
-    SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::SET_TARGET_VOLTAGE, voltage);
-    return true;
-}
-
-bool PowerDeliveryTask::autoNegotiateHighestVoltage() {
-    SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::AUTO_NEGOTIATE_HIGHEST, 0);
-    return true;
-}
-
-bool PowerDeliveryTask::requestStatus() {
-    SystemCommand::getInstance().sendPowerDeliveryCommand(PowerDeliveryCommand::REQUEST_ALL_STATUS, 0);
-    return true;
 }
 
 // ============================================================================

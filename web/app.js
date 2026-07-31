@@ -110,14 +110,9 @@ class BratenDreherApp {
         this.controls.set('speedSliderFill', new SliderFillControl(this.speedSliderFill));
         this.controls.set('speedValueDisplay', new DisplayControl(this.speedValue));
 
-        // Speed displays
-        this.controls.set('setpointSpeedDisplay', new DisplayControl(this.setpointSpeed, {
-            formatter: (value) => `${value.toFixed(1)} RPM`
-        }));
-
-        this.controls.set('currentSpeedDisplay', new DisplayControl(this.currentSpeed, {
-            formatter: (value) => `${value.toFixed(1)} RPM`
-        }));
+        // Speed displays (formatting is applied by SpeedControlBinding)
+        this.controls.set('setpointSpeedDisplay', new DisplayControl(this.setpointSpeed));
+        this.controls.set('currentSpeedDisplay', new DisplayControl(this.currentSpeed));
 
         // Preset buttons
         this.controls.set('presetButtons', new RadioGroupControl(Array.from(this.presetBtns), {
@@ -144,7 +139,7 @@ class BratenDreherApp {
         // Motor toggle
         this.controls.set('motorToggle', new ToggleControl(this.motorToggle));
         this.controls.set('motorStatusDisplay', new DisplayControl(this.motorStatus, {
-            formatter: (enabled) => enabled ? 'Enabled' : 'Stopped'
+            displayTransform: (enabled) => enabled ? 'Enabled' : 'Stopped'
         }));
 
         // Current control
@@ -153,9 +148,7 @@ class BratenDreherApp {
         }));
         this.controls.set('currentValueDisplay', new DisplayControl(this.currentValue));
 
-        this.controls.set('currentDisplay', new DisplayControl(this.currentCurrent, {
-            formatter: (value) => `${value}%`
-        }));
+        this.controls.set('currentDisplay', new DisplayControl(this.currentCurrent));
 
         // Acceleration control
         this.controls.set('accelerationSlider', new SliderControl(this.accelerationTimeSlider, {
@@ -163,9 +156,7 @@ class BratenDreherApp {
         }));
         this.controls.set('accelerationTimeValueDisplay', new DisplayControl(this.accelerationTimeValue));
 
-        this.controls.set('accelerationDisplay', new DisplayControl(this.currentAcceleration, {
-            formatter: (timeSeconds) => `${timeSeconds.toFixed(1)}s to max`
-        }));
+        this.controls.set('accelerationDisplay', new DisplayControl(this.currentAcceleration));
 
         // Variable speed controls - using CompositeControl for coordinated management
         const variableSpeedToggle = new ToggleControl(this.variableSpeedToggle);
@@ -235,18 +226,11 @@ class BratenDreherApp {
         this.controls.set('pdNegotiatedVoltageDisplay', new DisplayControl(this.pdNegotiatedVoltage));
         this.controls.set('pdCurrentVoltageDisplay', new DisplayControl(this.pdCurrentVoltage));
 
-        // Statistics displays - using CompositeControl for coordinated management
-        const totalRevolutionsDisplay = new DisplayControl(this.totalRevolutions, {
-            formatter: (value) => value.toFixed(3)
-        });
-
-        const runTimeDisplay = new DisplayControl(this.runTime, {
-            formatter: (milliseconds) => this.formatTime(milliseconds)
-        });
-
-        const avgSpeedDisplay = new DisplayControl(this.avgSpeed, {
-            formatter: (value) => value.toFixed(1)
-        });
+        // Statistics displays - using CompositeControl for coordinated management.
+        // Formatting is applied by StatisticsControlBinding.
+        const totalRevolutionsDisplay = new DisplayControl(this.totalRevolutions);
+        const runTimeDisplay = new DisplayControl(this.runTime);
+        const avgSpeedDisplay = new DisplayControl(this.avgSpeed);
 
         // Create composite control for statistics
         const statisticsComposite = new CompositeControl();
@@ -279,10 +263,11 @@ class BratenDreherApp {
             this.controls.get('directionButtons'),
             this.controls.get('directionDisplay')
         ));
-        // Emergency stop binding
+        // Emergency stop binding. Takes the slider *fill* control - that is the
+        // one with hideFill(), used to blank the speed indicator on stop.
         this.bindings.set('emergencyStop', new EmergencyStopControlBinding(
             this.controls.get('emergencyStopBtn'),
-            this.controls.get('speedSlider')
+            this.controls.get('speedSliderFill')
         ));
         /* Removed redundant addControl for emergencyStop; handled in EmergencyStopControlBinding */
 
@@ -317,11 +302,12 @@ class BratenDreherApp {
             this.controls.get('accelerationTimeValueDisplay')
         ));
 
-        // Variable speed binding
+        // Variable speed binding. The third argument is the DOM container that
+        // gets dimmed when variation is off, not a registered control.
         this.bindings.set('variableSpeed', new VariableSpeedControlBinding(
             this.controls.get('variableSpeedToggle'),
             this.controls.get('variableSpeedStatusDisplay'),
-            this.controls.get('variableSpeedControlsContainer')
+            this.variableSpeedControls
         ));
 
         // Variable speed graph binding
@@ -374,11 +360,8 @@ class BratenDreherApp {
         ));
 
         /* currentSpeed binding merged into speed binding */
-
-        this.bindings.set('timestamp', new TimestampControlBinding(
-            this.controls.get('lastUpdateDisplay')
-        ));
-
+        /* The "last update" display is driven directly from onStatusUpdate,
+           since the firmware sends no dedicated timestamp field. */
 
         // Set command manager for all bindings
         this.bindings.forEach(binding => {

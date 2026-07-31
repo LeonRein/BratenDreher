@@ -89,10 +89,20 @@ bool SystemCommand::sendCommand(StepperCommand cmd, uint32_t value, TickType_t t
 
 bool SystemCommand::emergencyStop() {
     if (commandQueue == nullptr) return false;
-    
+
     StepperCommandData emergencyCmd(StepperCommand::EMERGENCY_STOP);
-    // Emergency stop has no timeout - must be processed immediately
-    return xQueueSend(commandQueue, &emergencyCmd, 0) == pdTRUE;
+
+    // Jump the queue: an emergency stop must not wait behind up to
+    // COMMAND_QUEUE_SIZE pending speed/current changes. Never blocks.
+    if (xQueueSendToFront(commandQueue, &emergencyCmd, 0) == pdTRUE) {
+        return true;
+    }
+
+    // Queue is completely full. Drop everything pending - none of it matters
+    // any more - and retry so the stop still gets through.
+    dbg_println("WARNING: Command queue full on emergency stop, clearing it");
+    xQueueReset(commandQueue);
+    return xQueueSendToFront(commandQueue, &emergencyCmd, 0) == pdTRUE;
 }
 
 bool SystemCommand::getCommand(StepperCommandData& command, TickType_t timeout) {

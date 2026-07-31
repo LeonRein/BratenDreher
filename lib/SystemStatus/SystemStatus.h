@@ -1,5 +1,5 @@
-#ifndef COMMUNICATION_MANAGER_H
-#define COMMUNICATION_MANAGER_H
+#ifndef SYSTEM_STATUS_H
+#define SYSTEM_STATUS_H
 
 /**
  * @file SystemStatus.h
@@ -40,8 +40,10 @@ public:
     // Initialization
     bool begin();
     
-    // Notification management (thread-safe)
-    void sendNotification(NotificationType type, const String& message = "");
+    // Notification management (thread-safe).
+    // Takes a plain C string so callers do not have to build a temporary
+    // String on the heap just to fill a fixed-size queue slot.
+    void sendNotification(NotificationType type, const char* message = "");
     bool getNotification(NotificationData& notification);
     bool hasNotifications() const;
     UBaseType_t getPendingNotificationCount() const;
@@ -61,4 +63,4 @@ public:
     void clearStatusUpdates();
 };
 
-#endif // COMMUNICATION_MANAGER_H
+#endif // SYSTEM_STATUS_H
