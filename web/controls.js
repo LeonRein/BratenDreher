@@ -401,11 +401,21 @@ class GraphControl extends BaseControl {
     // so anything beyond this is a jump in the angle origin, not rotation.
     static MAX_ANGLE_STEP = 1.0;
 
+    // Minimum angular spacing between stored points (~0.5 deg). Caps the trace
+    // at roughly 720 points per revolution however slowly the spit turns -
+    // without it, 100ms samples at 10 min per rotation would pile up thousands.
+    static MIN_SAMPLE_SPACING = (2 * Math.PI) / 720;
+
+    // Hard ceiling, so an unusual motion pattern can never grow the array
+    // without bound.
+    static MAX_SAMPLES = 800;
+
     constructor(canvasElement, options = {}) {
         super(canvasElement, options);
         this.canvas = canvasElement;
         this.samples = [];
         this.lastAngle = null;
+        this.travel = 0;
         this.setSpeed = 1.0;
         this.bgColor = '#3b82f60d';
         this.lineColor = '#10b981';
@@ -420,32 +430,68 @@ class GraphControl extends BaseControl {
     reset() {
         this.samples = [];
         this.lastAngle = null;
+        this.travel = 0;
         this.drawGraph();
     }
 
     addSample(angle, speed, setSpeed) {
-        // The firmware re-bases the angle origin when speed variation is
-        // enabled, which makes the buffered samples meaningless: they would
-        // stay in the array out of angle order and be drawn as a tangle until
-        // a full revolution had scrolled them out. Detect the jump and start
-        // a fresh trace. Wrapping past 2*PI is normal and must not trigger it.
+        this.setSpeed = setSpeed;
+
+        // Signed step since the previous sample, normalised so that wrapping
+        // past 2*PI reads as a small move rather than a full turn. Negative
+        // simply means the spit is running counter-clockwise.
+        let delta = 0;
         if (this.lastAngle !== null) {
-            let delta = angle - this.lastAngle;
+            delta = angle - this.lastAngle;
             while (delta > Math.PI) delta -= 2 * Math.PI;
             while (delta <= -Math.PI) delta += 2 * Math.PI;
+
+            // The firmware re-bases the angle origin when speed variation is
+            // enabled, which makes the buffered samples meaningless - they are
+            // measured against a different zero. A jump far larger than the
+            // motor could physically turn in one sample period means exactly
+            // that, so start a fresh trace.
             if (Math.abs(delta) > GraphControl.MAX_ANGLE_STEP) {
                 this.samples = [];
+                this.travel = 0;
+                delta = 0;
             }
         }
         this.lastAngle = angle;
 
-        if (Math.abs(angle - this.samples[this.samples.length - 2]?.angle) < 0.01) {
-            this.samples.pop();
+        if (this.samples.length === 0) {
+            this.travel = 0;
+            this.samples.push({ angle, speed, travel: 0 });
+            this.drawGraph();
+            return;
         }
-        this.samples.push({ angle, speed });
-        const firstIdx = this.samples.findIndex(s => s.angle > angle && s.angle < angle + Math.PI);
-        if (firstIdx >= 0) this.samples = this.samples.slice(firstIdx);
-        this.setSpeed = setSpeed;
+
+        this.travel += delta;
+
+        // While the spit is barely moving (or stopped), refine the newest point
+        // in place instead of stacking points on top of each other.
+        const last = this.samples[this.samples.length - 1];
+        if (Math.abs(this.travel - last.travel) < GraphControl.MIN_SAMPLE_SPACING) {
+            last.speed = speed;
+            last.angle = angle;
+            this.drawGraph();
+            return;
+        }
+
+        this.samples.push({ angle, speed, travel: this.travel });
+
+        // Keep about one revolution of history. Comparing accumulated travel
+        // rather than raw angles makes this work in both directions; the old
+        // angle-window test silently discarded most of the trace when running
+        // counter-clockwise.
+        while (this.samples.length > 2 &&
+               Math.abs(this.travel - this.samples[0].travel) > 2 * Math.PI) {
+            this.samples.shift();
+        }
+        while (this.samples.length > GraphControl.MAX_SAMPLES) {
+            this.samples.shift();
+        }
+
         this.drawGraph();
     }
 
@@ -479,18 +525,22 @@ class GraphControl extends BaseControl {
         ctx.strokeStyle = this.lineColor;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        let prevXFrac = null;
         for (let i = 0; i < this.samples.length; i++) {
             const s = this.samples[i];
-            const xFrac = s.angle / (2 * Math.PI);
-            const x = xFrac * width;
+            const x = (s.angle / (2 * Math.PI)) * width;
             const y = height - ((s.speed - minY) / (maxY - minY)) * height;
-            if (i === 0 || (prevXFrac !== null && xFrac < prevXFrac)) {
+
+            // Only lift the pen where the trace actually wraps around the 0/2*PI
+            // seam. Breaking whenever x decreases would lift it at every single
+            // point when turning counter-clockwise, drawing nothing at all.
+            const wrapped = i > 0 &&
+                Math.abs(s.angle - this.samples[i - 1].angle) > Math.PI;
+
+            if (i === 0 || wrapped) {
                 ctx.moveTo(x, y);
             } else {
                 ctx.lineTo(x, y);
             }
-            prevXFrac = xFrac;
         }
         ctx.stroke();
         if (this.samples.length > 0) {
